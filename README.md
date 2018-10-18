@@ -1,8 +1,12 @@
-# python-bitcoinlib
+# python-bitcoindata
 
 This Python2/3 library provides an easy interface to the bitcoin data
-structures and protocol. The approach is low-level and "ground up", with a
-focus on providing tools to manipulate the internals of how Bitcoin works.
+structures. This is a fork of https://github.com/petertodd/python-bitcoinlib
+which is focused only on providing the tools to build and manipulate data
+structures related to bitcoin transactions and addresses.
+
+Network-related code that deals with sending and receiving data from and to
+bitcoin nodes will be striped from this fork.
 
 "The Swiss Army Knife of the Bitcoin protocol." - Wladimir J. van der Laan
 
