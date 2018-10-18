@@ -1,6 +1,6 @@
 # python-bitcoindata
 
-This Python2/3 library provides an easy interface to the bitcoin data
+This Python3 library provides an easy interface to the bitcoin data
 structures. This is a fork of https://github.com/petertodd/python-bitcoinlib
 which is focused only on providing the tools to build and manipulate data
 structures related to bitcoin transactions and addresses.
@@ -37,10 +37,7 @@ library. Non-consensus critical modules include the following:
 
     bitcoin          - Chain selection
     bitcoin.base58   - Base58 encoding
-    bitcoin.bloom    - Bloom filters (incomplete)
-    bitcoin.net      - Network communication (in flux)
-    bitcoin.messages - Network messages (in flux)
-    bitcoin.rpc      - Bitcoin Core RPC interface support
+    bitcoin.rpc      - Bitcoin Core RPC interface support (may also be stripped later)
     bitcoin.wallet   - Wallet-related code, currently Bitcoin address and
                        private key support
 
