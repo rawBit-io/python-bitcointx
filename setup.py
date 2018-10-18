@@ -11,7 +11,7 @@ with open(os.path.join(here, 'README.md')) as f:
 
 requires = []
 
-setup(name='python-bitcoinlib',
+setup(name='python-bitcoindata',
       version=__version__,
       description='The Swiss Army Knife of the Bitcoin protocol.',
       long_description=README,
@@ -20,7 +20,7 @@ setup(name='python-bitcoinlib',
           "Programming Language :: Python",
           "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
       ],
-      url='https://github.com/petertodd/python-bitcoinlib',
+      url='https://github.com/Simplexum/python-bitcoindata',
       keywords='bitcoin',
       packages=find_packages(),
       zip_safe=False,

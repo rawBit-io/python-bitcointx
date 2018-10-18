@@ -1,4 +1,4 @@
-# python-bitcoinlib release notes
+# python-bitcoindata release notes
 
 ## v0.10.1
 

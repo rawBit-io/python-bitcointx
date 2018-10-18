@@ -11,9 +11,9 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-PROJECT = 'python-bitcoinlib'
+PROJECT = 'python-bitcoindata'
 DESCRIPTION = 'The Swiss Army Knife of the Bitcoin protocol.'
-AUTHORS = 'The python-bitcoinlib developers'
+AUTHORS = 'The python-bitcoinlib and python-bitcoindata developers'
 
 import sphinx
 import sys
