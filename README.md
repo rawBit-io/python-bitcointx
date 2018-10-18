@@ -3,10 +3,8 @@
 This Python3 library provides an easy interface to the bitcoin data
 structures. This is based on https://github.com/petertodd/python-bitcoinlib,
 but is focused only on providing the tools to build, manipulate and sign
-bitcoin transactions, and related data structures.
-
-Network-related code that deals with sending and receiving data from and to
-bitcoin nodes will be striped from this fork.
+bitcoin transactions, and related data structures. Network-related code
+that deals with sending and receiving data from and to bitcoin nodes is removed.
 
 "The Swiss Army Knife of the Bitcoin protocol." - Wladimir J. van der Laan
 
