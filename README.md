@@ -89,6 +89,14 @@ Where NAME is one of 'testnet', 'mainnet', or 'regtest'. The chain currently
 selected is a global variable that changes behavior everywhere, just like in
 the Satoshi codebase.
 
+## Using libsecp256k1 for signing
+
+It is possible to use libsecp256k1 for signing, but it have to be enabled manually, at this time.
+
+The relevant functions are is_libsec256k1_available() and use_libsecp256k1_for_signing(do_use)
+
+refer to Test_RFC6979() in bitcoin/tests/test_wallet.py for example of usage.
+
 
 ## Unit tests
 
