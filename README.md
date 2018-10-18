@@ -2,8 +2,8 @@
 
 This Python3 library provides an easy interface to the bitcoin data
 structures. This is based on https://github.com/petertodd/python-bitcoinlib,
-but is focused only on providing the tools to build and manipulate data
-structures related to bitcoin transactions and addresses.
+but is focused only on providing the tools to build and manipulate bitcoin
+transactions, and related data structures.
 
 Network-related code that deals with sending and receiving data from and to
 bitcoin nodes will be striped from this fork.
