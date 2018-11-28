@@ -764,7 +764,7 @@ coreparams = CoreMainParams()
 def _SelectCoreParams(name):
     """Select the core chain parameters to use
 
-    Don't use this directly, use bitcoin.SelectParams() instead so both
+    Don't use this directly, use bitcointx.SelectParams() instead so both
     consensus-critical and general parameters are set properly.
     """
     global coreparams

@@ -21,9 +21,9 @@ if sys.version > '3':
 
 from binascii import unhexlify
 
-from bitcoin.core import *
-from bitcoin.core.script import *
-from bitcoin.core.scripteval import *
+from bitcointx.core import *
+from bitcointx.core.script import *
+from bitcointx.core.scripteval import *
 
 def parse_script(s):
     def ishex(s):

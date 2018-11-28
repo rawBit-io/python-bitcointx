@@ -27,9 +27,9 @@ if sys.version > '3':
 
 from binascii import unhexlify
 
-from bitcoin.core.script import CScript, OP_0, OP_1, OP_16
-from bitcoin.bech32 import *
-from bitcoin.segwit_addr import encode, decode
+from bitcointx.core.script import CScript, OP_0, OP_1, OP_16
+from bitcointx.bech32 import *
+from bitcointx.segwit_addr import encode, decode
 
 
 def load_test_vectors(name):

@@ -16,8 +16,8 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   bitcoin
-   bitcoin.core
+   bitcointx
+   bitcointx.core
 
 
 Indices and tables

@@ -16,8 +16,8 @@ By default this uses the standard library ``json`` module. By monkey patching,
 a different implementation can be used instead, at your own risk:
 
 >>> import simplejson
->>> import bitcoin.rpc
->>> bitcoin.rpc.json = simplejson
+>>> import bitcointx.rpc
+>>> bitcointx.rpc.json = simplejson
 
 (``simplejson`` is the externally maintained version of the same module and
 thus better optimized but perhaps less stable.)
@@ -42,10 +42,10 @@ try:
 except ImportError:
     import urlparse
 
-import bitcoin
-from bitcoin.core import COIN, x, lx, b2lx, CBlock, CBlockHeader, CTransaction, COutPoint, CTxOut
-from bitcoin.core.script import CScript
-from bitcoin.wallet import CBitcoinAddress, CBitcoinSecret
+import bitcointx
+from bitcointx.core import COIN, x, lx, b2lx, CBlock, CBlockHeader, CTransaction, COutPoint, CTxOut
+from bitcointx.core.script import CScript
+from bitcointx.wallet import CBitcoinAddress, CBitcoinSecret
 
 DEFAULT_USER_AGENT = "AuthServiceProxy/0.1"
 
@@ -162,7 +162,7 @@ class BaseProxy(object):
                 pass
 
             if service_port is None:
-                service_port = bitcoin.params.RPC_PORT
+                service_port = bitcointx.params.RPC_PORT
             conf['rpcport'] = int(conf.get('rpcport', service_port))
             conf['rpchost'] = conf.get('rpcconnect', 'localhost')
 
@@ -170,8 +170,8 @@ class BaseProxy(object):
                 ('http', conf['rpchost'], conf['rpcport']))
 
             cookie_dir = conf.get('datadir', os.path.dirname(btc_conf_file))
-            if bitcoin.params.NAME != "mainnet":
-                cookie_dir = os.path.join(cookie_dir, bitcoin.params.NAME)
+            if bitcointx.params.NAME != "mainnet":
+                cookie_dir = os.path.join(cookie_dir, bitcointx.params.NAME)
             cookie_file = os.path.join(cookie_dir, ".cookie")
             try:
                 with open(cookie_file, 'r') as fd:
@@ -311,8 +311,8 @@ class RawProxy(BaseProxy):
         # Create a callable to do the actual call
         f = lambda *args: self._call(name, *args)
 
-        # Make debuggers show <function bitcoin.rpc.name> rather than <function
-        # bitcoin.rpc.<lambda>>
+        # Make debuggers show <function bitcointx.rpc.name> rather than <function
+        # bitcointx.rpc.<lambda>>
         f.__name__ = name
         return f
 
@@ -320,7 +320,7 @@ class RawProxy(BaseProxy):
 class Proxy(BaseProxy):
     """Proxy to a bitcoin RPC service
 
-    Unlike ``RawProxy``, data is passed as ``bitcoin.core`` objects or packed
+    Unlike ``RawProxy``, data is passed as ``bitcointx.core`` objects or packed
     bytes, rather than JSON or hex strings. Not all methods are implemented
     yet; you can use ``call`` to access missing ones in a forward-compatible
     way. Assumes Bitcoin Core version >= v0.16.0; older versions mostly work,

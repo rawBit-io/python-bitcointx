@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-import socket, time, bitcoin
-from bitcoin.messages import msg_version, msg_verack, msg_addr
-from bitcoin.net import CAddress
+import socket, time, bitcointx
+from bitcointx.messages import msg_version, msg_verack, msg_addr
+from bitcointx.net import CAddress
 
 
 PORT = 18333
 
-bitcoin.SelectParams('testnet') 
+bitcointx.SelectParams('testnet')
 
 def version_pkt(client_ip, server_ip):
     msg = msg_version()
@@ -53,7 +53,7 @@ print(s.recv(1024))
 # Send Addrs
 s.send( addr_pkt(["252.11.1.2", "EEEE:7777:8888:AAAA::1"]).to_bytes() )
 
-time.sleep(1) 
+time.sleep(1)
 s.close()
 
 # debug log on the server should look like:

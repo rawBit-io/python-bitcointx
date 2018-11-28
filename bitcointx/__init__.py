@@ -11,14 +11,14 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import bitcoin.core
+import bitcointx.core
 
 # Note that setup.py can break if __init__.py imports any external
 # dependencies, as these might not be installed when setup.py runs. In this
 # case __version__ could be moved to a separate version.py and imported here.
 __version__ = '0.10.2dev'
 
-class MainParams(bitcoin.core.CoreMainParams):
+class MainParams(bitcointx.core.CoreMainParams):
     MESSAGE_START = b'\xf9\xbe\xb4\xd9'
     RPC_PORT = 8332
     BASE58_PREFIXES = {'PUBKEY_ADDR':0,
@@ -26,7 +26,7 @@ class MainParams(bitcoin.core.CoreMainParams):
                        'SECRET_KEY' :128}
     BECH32_HRP = 'bc'
 
-class TestNetParams(bitcoin.core.CoreTestNetParams):
+class TestNetParams(bitcointx.core.CoreTestNetParams):
     MESSAGE_START = b'\x0b\x11\x09\x07'
     RPC_PORT = 18332
     BASE58_PREFIXES = {'PUBKEY_ADDR':111,
@@ -34,7 +34,7 @@ class TestNetParams(bitcoin.core.CoreTestNetParams):
                        'SECRET_KEY' :239}
     BECH32_HRP = 'tb'
 
-class RegTestParams(bitcoin.core.CoreRegTestParams):
+class RegTestParams(bitcointx.core.CoreRegTestParams):
     MESSAGE_START = b'\xfa\xbf\xb5\xda'
     RPC_PORT = 18443
     BASE58_PREFIXES = {'PUBKEY_ADDR':111,
@@ -45,9 +45,9 @@ class RegTestParams(bitcoin.core.CoreRegTestParams):
 """Master global setting for what chain params we're using.
 
 However, don't set this directly, use SelectParams() instead so as to set the
-bitcoin.core.params correctly too.
+bitcointx.core.params correctly too.
 """
-#params = bitcoin.core.coreparams = MainParams()
+#params = bitcointx.core.coreparams = MainParams()
 params = MainParams()
 
 def SelectParams(name):
@@ -58,12 +58,12 @@ def SelectParams(name):
     Default chain is 'mainnet'
     """
     global params
-    bitcoin.core._SelectCoreParams(name)
+    bitcointx.core._SelectCoreParams(name)
     if name == 'mainnet':
-        params = bitcoin.core.coreparams = MainParams()
+        params = bitcointx.core.coreparams = MainParams()
     elif name == 'testnet':
-        params = bitcoin.core.coreparams = TestNetParams()
+        params = bitcointx.core.coreparams = TestNetParams()
     elif name == 'regtest':
-        params = bitcoin.core.coreparams = RegTestParams()
+        params = bitcointx.core.coreparams = RegTestParams()
     else:
         raise ValueError('Unknown chain %r' % name)

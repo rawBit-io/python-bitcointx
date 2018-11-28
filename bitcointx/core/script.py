@@ -12,7 +12,7 @@
 """Scripts
 
 Functionality to build scripts, as well as SignatureHash(). Script evaluation
-is in bitcoin.core.scripteval
+is in bitcointx.core.scripteval
 """
 
 from __future__ import absolute_import, division, print_function
@@ -30,8 +30,8 @@ else:
 
 import struct
 
-import bitcoin.core
-import bitcoin.core._bignum
+import bitcointx.core
+import bitcointx.core._bignum
 
 from .serialize import *
 
@@ -528,7 +528,7 @@ class CScript(bytes):
             elif other == -1:
                 other = bytes(_bchr(OP_1NEGATE))
             else:
-                other = CScriptOp.encode_op_pushdata(bitcoin.core._bignum.bn2vch(other))
+                other = CScriptOp.encode_op_pushdata(bitcointx.core._bignum.bn2vch(other))
         elif isinstance(other, (bytes, bytearray)):
             other = CScriptOp.encode_op_pushdata(other)
         return other
@@ -643,7 +643,7 @@ class CScript(bytes):
         # need to change
         def _repr(o):
             if isinstance(o, bytes):
-                return "x('%s')" % bitcoin.core.b2x(o)
+                return "x('%s')" % bitcointx.core.b2x(o)
             else:
                 return repr(o)
 
@@ -795,7 +795,7 @@ class CScript(bytes):
         """
         if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
-        return CScript([OP_HASH160, bitcoin.core.Hash160(self), OP_EQUAL])
+        return CScript([OP_HASH160, bitcointx.core.Hash160(self), OP_EQUAL])
 
     def GetSigOpCount(self, fAccurate):
         """Get the SigOp count.
@@ -833,7 +833,7 @@ class CScriptWitness(ImmutableSerializable):
         return iter(self.stack)
 
     def __repr__(self):
-        return 'CScriptWitness(' + ','.join("x('%s')" % bitcoin.core.b2x(s) for s in self.stack) + ')'
+        return 'CScriptWitness(' + ','.join("x('%s')" % bitcointx.core.b2x(s) for s in self.stack) + ')'
 
     def is_null(self):
         return len(self.stack) == 0
@@ -937,7 +937,7 @@ def RawSignatureHash(script, txTo, inIdx, hashtype):
 
     if inIdx >= len(txTo.vin):
         return (HASH_ONE, "inIdx %d out of range (%d)" % (inIdx, len(txTo.vin)))
-    txtmp = bitcoin.core.CMutableTransaction.from_tx(txTo)
+    txtmp = bitcointx.core.CMutableTransaction.from_tx(txTo)
 
     for txin in txtmp.vin:
         txin.scriptSig = b''
@@ -958,7 +958,7 @@ def RawSignatureHash(script, txTo, inIdx, hashtype):
         tmp = txtmp.vout[outIdx]
         txtmp.vout = []
         for i in range(outIdx):
-            txtmp.vout.append(bitcoin.core.CTxOut())
+            txtmp.vout.append(bitcointx.core.CTxOut())
         txtmp.vout.append(tmp)
 
         for i in range(len(txtmp.vin)):
@@ -970,11 +970,11 @@ def RawSignatureHash(script, txTo, inIdx, hashtype):
         txtmp.vin = []
         txtmp.vin.append(tmp)
 
-    txtmp.wit = bitcoin.core.CTxWitness()
+    txtmp.wit = bitcointx.core.CTxWitness()
     s = txtmp.serialize()
     s += struct.pack(b"<i", hashtype)
 
-    hash = bitcoin.core.Hash(s)
+    hash = bitcointx.core.Hash(s)
 
     return (hash, None)
 
@@ -998,22 +998,22 @@ def SignatureHash(script, txTo, inIdx, hashtype, amount=None, sigversion=SIGVERS
             serialize_prevouts = bytes()
             for i in txTo.vin:
                 serialize_prevouts += i.prevout.serialize()
-            hashPrevouts = bitcoin.core.Hash(serialize_prevouts)
+            hashPrevouts = bitcointx.core.Hash(serialize_prevouts)
 
         if (not (hashtype & SIGHASH_ANYONECANPAY) and (hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
             serialize_sequence = bytes()
             for i in txTo.vin:
                 serialize_sequence += struct.pack("<I", i.nSequence)
-            hashSequence = bitcoin.core.Hash(serialize_sequence)
+            hashSequence = bitcointx.core.Hash(serialize_sequence)
 
         if ((hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
             serialize_outputs = bytes()
             for o in txTo.vout:
                 serialize_outputs += o.serialize()
-            hashOutputs = bitcoin.core.Hash(serialize_outputs)
+            hashOutputs = bitcointx.core.Hash(serialize_outputs)
         elif ((hashtype & 0x1f) == SIGHASH_SINGLE and inIdx < len(txTo.vout)):
             serialize_outputs = txTo.vout[inIdx].serialize()
-            hashOutputs = bitcoin.core.Hash(serialize_outputs)
+            hashOutputs = bitcointx.core.Hash(serialize_outputs)
 
         f = _BytesIO()
         f.write(struct.pack("<i", txTo.nVersion))
@@ -1027,7 +1027,7 @@ def SignatureHash(script, txTo, inIdx, hashtype, amount=None, sigversion=SIGVERS
         f.write(struct.pack("<i", txTo.nLockTime))
         f.write(struct.pack("<i", hashtype))
 
-        return bitcoin.core.Hash(f.getvalue())
+        return bitcointx.core.Hash(f.getvalue())
 
     assert not script.is_witness_scriptpubkey()
 

@@ -23,11 +23,11 @@ import urllib2
 import payments_pb2
 o = payments_pb2
 
-import bitcoin
-#bitcoin.SelectParams('testnet')
-from bitcoin.wallet import CBitcoinAddress
-from bitcoin.core.script import CScript
-from bitcoin.rpc import Proxy
+import bitcointx
+#bitcointx.SelectParams('testnet')
+from bitcointx.wallet import CBitcoinAddress
+from bitcointx.core.script import CScript
+from bitcointx.rpc import Proxy
 
 from time import time
 

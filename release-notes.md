@@ -1,3 +1,10 @@
+# python-bitcointx release notes
+# To be added at release
+
+# python-bitcointx is based on python-bitcoinlib
+# as of commit 05cbb3c9560b36cfe71bac06085a231a6244e13a
+#              2018-04-26 06:46:09
+# therefore we include
 # python-bitcoinlib release notes
 
 ## v0.10.1
