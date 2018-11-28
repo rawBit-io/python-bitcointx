@@ -95,6 +95,7 @@ the Satoshi codebase.
 It is possible to use libsecp256k1 for signing, but it have to be enabled manually, at this time.
 
 The relevant functions are is_libsec256k1_available() and use_libsecp256k1_for_signing(do_use)
+
 NOTE: libsecp256k1 will likely become default and required for signing,
       and this functions will be removed then.
 
