@@ -19,8 +19,8 @@ if sys.version > '3':
     _bchr = lambda x: bytes([x])
     _bord = lambda x: x
 
-from bitcoin.segwit_addr import encode, decode
-import bitcoin
+from bitcointx.segwit_addr import encode, decode
+import bitcointx
 
 class Bech32Error(Exception):
     pass
@@ -35,7 +35,7 @@ class CBech32Data(bytes):
     """
     def __new__(cls, s):
         """from bech32 addr to """
-        witver, data = decode(bitcoin.params.BECH32_HRP, s)
+        witver, data = decode(bitcointx.params.BECH32_HRP, s)
         if witver is None and data is None:
             raise Bech32Error('Bech32 decoding error')
 
@@ -69,7 +69,7 @@ class CBech32Data(bytes):
 
     def __str__(self):
         """Convert to string"""
-        return encode(bitcoin.params.BECH32_HRP, self.witver, self)
+        return encode(bitcointx.params.BECH32_HRP, self.witver, self)
 
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, str(self))

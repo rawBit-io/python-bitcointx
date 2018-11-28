@@ -1,4 +1,4 @@
-bitcoin.core
+bitcointx.core
 ============
 
 Everything consensus critical is found in the core subpackage.
@@ -6,25 +6,25 @@ Everything consensus critical is found in the core subpackage.
 :mod:`core`
 -----------
 
-.. automodule:: bitcoin.core
+.. automodule:: bitcointx.core
 
 :mod:`key`
 ----------
 
-.. automodule:: bitcoin.core.key
+.. automodule:: bitcointx.core.key
 
 :mod:`script`
 -------------
 
-.. automodule:: bitcoin.core.script
+.. automodule:: bitcointx.core.script
 
 :mod:`scripteval`
 -----------------
 
-.. automodule:: bitcoin.core.scripteval
+.. automodule:: bitcointx.core.scripteval
 
 :mod:`serialize`
 ----------------
 
-.. automodule:: bitcoin.core.serialize
+.. automodule:: bitcointx.core.serialize
 

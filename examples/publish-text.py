@@ -39,10 +39,10 @@ import logging
 import sys
 import os
 
-import bitcoin.rpc
-from bitcoin.core import *
-from bitcoin.core.script import *
-from bitcoin.wallet import *
+import bitcointx.rpc
+from bitcointx.core import *
+from bitcointx.core.script import *
+from bitcointx.wallet import *
 
 parser = argparse.ArgumentParser(
         description="Publish text in the blockchain, suitably padded for easy recovery with strings",
@@ -87,11 +87,11 @@ elif args.verbosity <= -2:
     logging.root.setLevel(logging.ERROR)
 
 if args.testnet:
-    bitcoin.SelectParams('testnet')
+    bitcointx.SelectParams('testnet')
 elif args.regtest:
-    bitcoin.SelectParams('regtest')
+    bitcointx.SelectParams('regtest')
 
-proxy = bitcoin.rpc.Proxy()
+proxy = bitcointx.rpc.Proxy()
 
 if args.privkey is None:
     args.privkey = CBitcoinSecret.from_secret_bytes(os.urandom(32))

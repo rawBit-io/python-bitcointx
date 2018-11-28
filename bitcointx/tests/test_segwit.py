@@ -15,10 +15,10 @@ import unittest
 import random
 import sys
 
-import bitcoin
-from bitcoin.core import *
-from bitcoin.core.script import *
-from bitcoin.wallet import *
+import bitcointx
+from bitcointx.core import *
+from bitcointx.core.script import *
+from bitcointx.wallet import *
 
 if sys.version > '3':
     _bytes = bytes
@@ -133,7 +133,7 @@ class Test_Segwit(unittest.TestCase):
         witness_merkle_root = CBlock.build_witness_merkle_tree_from_txs((coinbase, tx_legacy, tx_segwit))[-1]
 
         commitment = Hash(witness_merkle_root + witness_nonce)
-        commitment_script = bitcoin.core.WITNESS_COINBASE_SCRIPTPUBKEY_MAGIC + commitment
+        commitment_script = bitcointx.core.WITNESS_COINBASE_SCRIPTPUBKEY_MAGIC + commitment
         coinbase.vout.append(CTxOut(0, CScript(commitment_script)))
 
         block = CBlock(2, b'\x00'*32, b'\x00'*32, 0, 0, 0, (coinbase, tx_legacy, tx_segwit))
