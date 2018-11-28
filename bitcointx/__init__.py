@@ -19,7 +19,6 @@ import bitcointx.core
 __version__ = '0.10.2dev'
 
 class MainParams(bitcointx.core.CoreMainParams):
-    MESSAGE_START = b'\xf9\xbe\xb4\xd9'
     RPC_PORT = 8332
     BASE58_PREFIXES = {'PUBKEY_ADDR':0,
                        'SCRIPT_ADDR':5,
@@ -27,7 +26,6 @@ class MainParams(bitcointx.core.CoreMainParams):
     BECH32_HRP = 'bc'
 
 class TestNetParams(bitcointx.core.CoreTestNetParams):
-    MESSAGE_START = b'\x0b\x11\x09\x07'
     RPC_PORT = 18332
     BASE58_PREFIXES = {'PUBKEY_ADDR':111,
                        'SCRIPT_ADDR':196,
@@ -35,7 +33,6 @@ class TestNetParams(bitcointx.core.CoreTestNetParams):
     BECH32_HRP = 'tb'
 
 class RegTestParams(bitcointx.core.CoreRegTestParams):
-    MESSAGE_START = b'\xfa\xbf\xb5\xda'
     RPC_PORT = 18443
     BASE58_PREFIXES = {'PUBKEY_ADDR':111,
                        'SCRIPT_ADDR':196,
