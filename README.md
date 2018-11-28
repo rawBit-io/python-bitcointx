@@ -7,6 +7,10 @@ bitcoin transactions, and related data structures. Network-related code
 that deals with sending and receiving data from and to bitcoin nodes is removed.
 Bech32 segwit address support and RFC6979 signing with libsecp256k1 are added.
 
+!!!
+
+Please note that python-bitcointx transition to the independent derivative library from python-bitcoinlib is not yet finished. The python package will be renamed from 'bitcoin' to 'bitcointx' in the near future, and use_libsecp256k1_for_signing() function will probably be gone, because libsecp256k1 will be the default.
+
 "The Swiss Army Knife of the Bitcoin protocol." - Wladimir J. van der Laan
 
 
