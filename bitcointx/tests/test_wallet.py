@@ -16,7 +16,7 @@ import unittest
 
 from bitcointx.core import b2x, x
 from bitcointx.core.script import CScript, IsLowDERSignature
-from bitcointx.core.key import CPubKey, is_libsec256k1_available, use_libsecp256k1_for_signing
+from bitcointx.core.key import CPubKey
 from bitcointx.wallet import *
 
 class Test_CBitcoinAddress(unittest.TestCase):
@@ -284,11 +284,6 @@ class Test_CBitcoinSecret(unittest.TestCase):
 
 class Test_RFC6979(unittest.TestCase):
     def test(self):
-        if not is_libsec256k1_available():
-            return
-
-        use_libsecp256k1_for_signing(True)
-
         # Test Vectors for RFC 6979 ECDSA, secp256k1, SHA-256
         # (private key, message, expected k, expected signature)
         test_vectors = [
@@ -332,5 +327,3 @@ class Test_RFC6979(unittest.TestCase):
             sval = encoded_sig[spos:spos+slen]
             sig = b2x(rval + sval)
             assert(str(sig) == vector[3])
-
-        use_libsecp256k1_for_signing(False)

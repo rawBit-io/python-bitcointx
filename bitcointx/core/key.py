@@ -19,6 +19,7 @@ import ctypes
 import ctypes.util
 import hashlib
 import sys
+from os import urandom
 import bitcointx
 import bitcointx.signature
 
@@ -31,12 +32,7 @@ if sys.version > '3':
 import bitcointx.core.script
 
 _ssl = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
-
-_libsecp256k1_path = ctypes.util.find_library('secp256k1')
-_libsecp256k1_enable_signing = False
-_libsecp256k1_context = None
-_libsecp256k1 = None
-
+_libsecp256k1 = ctypes.cdll.LoadLibrary(ctypes.util.find_library('secp256k1'))
 
 class OpenSSLException(EnvironmentError):
     pass
@@ -206,32 +202,32 @@ SECP256K1_FLAGS_BIT_CONTEXT_SIGN = (1 << 9)
 SECP256K1_CONTEXT_SIGN = \
     (SECP256K1_FLAGS_TYPE_CONTEXT | SECP256K1_FLAGS_BIT_CONTEXT_SIGN)
 
+_libsecp256k1.secp256k1_context_create.restype = ctypes.c_void_p
+_libsecp256k1.secp256k1_context_create.errcheck = _check_res_void_p
+_libsecp256k1.secp256k1_context_create.argtypes = [ctypes.c_uint]
 
-def is_libsec256k1_available():
-    return _libsecp256k1_path is not None
+_libsecp256k1.secp256k1_context_randomize.restype = ctypes.c_int
+_libsecp256k1.secp256k1_context_randomize.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+
+_libsecp256k1.secp256k1_ecdsa_sign.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ecdsa_sign.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
+
+_libsecp256k1.secp256k1_ecdsa_signature_serialize_der.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ecdsa_signature_serialize_der.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p]
+
+_libsecp256k1.secp256k1_ecdsa_sign_recoverable.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ecdsa_sign_recoverable.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
+
+_libsecp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int), ctypes.c_char_p]
 
 
-def use_libsecp256k1_for_signing(do_use):
-    global _libsecp256k1
-    global _libsecp256k1_context
-    global _libsecp256k1_enable_signing
+_libsecp256k1_context = _libsecp256k1.secp256k1_context_create(SECP256K1_CONTEXT_SIGN)
 
-    if not do_use:
-        _libsecp256k1_enable_signing = False
-        return
-
-    if not is_libsec256k1_available():
-        raise ImportError("unable to locate libsecp256k1")
-
-    if _libsecp256k1_context is None:
-        _libsecp256k1 = ctypes.cdll.LoadLibrary(_libsecp256k1_path)
-        _libsecp256k1.secp256k1_context_create.restype = ctypes.c_void_p
-        _libsecp256k1.secp256k1_context_create.errcheck = _check_res_void_p
-        _libsecp256k1_context = _libsecp256k1.secp256k1_context_create(SECP256K1_CONTEXT_SIGN)
-        assert(_libsecp256k1_context is not None)
-
-    _libsecp256k1_enable_signing = True
-
+assert _libsecp256k1_context is not None
+seed = urandom(32)
+result = _libsecp256k1.secp256k1_context_randomize(_libsecp256k1_context, seed)
+assert 1 == result
 
 
 # From openssl/ecdsa.h
@@ -309,7 +305,12 @@ class CECKey:
         _ssl.BN_bn2bin(bn, mb)
         return mb.raw.rjust(32, b'\x00')
 
-    def _sign_with_libsecp256k1(self, hash):
+    def sign(self, hash):
+        if not isinstance(hash, bytes):
+            raise TypeError('Hash must be bytes instance; got %r' % hash.__class__)
+        if len(hash) != 32:
+            raise ValueError('Hash must be exactly 32 bytes long')
+
         raw_sig = ctypes.create_string_buffer(64)
         result = _libsecp256k1.secp256k1_ecdsa_sign(
             _libsecp256k1_context, raw_sig, hash, self.get_raw_privkey(), None, None)
@@ -325,14 +326,11 @@ class CECKey:
         return mb_sig.raw[:sig_size0.value]
 
 
-    def sign(self, hash): # pylint: disable=redefined-builtin
+    def sign_with_openssl(self, hash): # pylint: disable=redefined-builtin
         if not isinstance(hash, bytes):
             raise TypeError('Hash must be bytes instance; got %r' % hash.__class__)
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
-
-        if _libsecp256k1_enable_signing:
-            return self._sign_with_libsecp256k1(hash)
 
         sig_size0 = ctypes.c_uint32()
         sig_size0.value = _ssl.ECDSA_size(self.k)
@@ -345,6 +343,30 @@ class CECKey:
             return self.signature_to_low_s(mb_sig.raw[:sig_size0.value])
 
     def sign_compact(self, hash): # pylint: disable=redefined-builtin
+        if not isinstance(hash, bytes):
+            raise TypeError('Hash must be bytes instance; got %r' % hash.__class__)
+        if len(hash) != 32:
+            raise ValueError('Hash must be exactly 32 bytes long')
+
+        recoverable_sig = ctypes.create_string_buffer(65)
+
+        result = _libsecp256k1.secp256k1_ecdsa_sign_recoverable(
+            _libsecp256k1_context, recoverable_sig, hash, self.get_raw_privkey(), None, None)
+
+        assert 1 == result
+
+        recid = ctypes.c_int()
+        recid.value = 0
+        output = ctypes.create_string_buffer(64)
+        result = _libsecp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact(
+            _libsecp256k1_context, output, ctypes.byref(recid), recoverable_sig)
+
+        assert 1 == result
+
+        return bytes(output), recid.value
+
+
+    def sign_compact_with_openssl(self, hash): # pylint: disable=redefined-builtin
         if not isinstance(hash, bytes):
             raise TypeError('Hash must be bytes instance; got %r' % hash.__class__)
         if len(hash) != 32:
