@@ -241,6 +241,15 @@ _libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact.argtypes = [ct
 _libsecp256k1.secp256k1_ec_pubkey_serialize.restype = ctypes.c_int
 _libsecp256k1.secp256k1_ec_pubkey_serialize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p, ctypes.c_uint]
 
+_libsecp256k1.secp256k1_ecdsa_signature_parse_der.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ecdsa_signature_parse_der.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+
+_libsecp256k1.secp256k1_ecdsa_signature_normalize.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ecdsa_signature_normalize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+
+_libsecp256k1.secp256k1_ecdsa_verify.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ecdsa_verify.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+
 _libsecp256k1_context_sign = _libsecp256k1.secp256k1_context_create(SECP256K1_CONTEXT_SIGN)
 assert _libsecp256k1_context_sign is not None
 _libsecp256k1_context_verify = _libsecp256k1.secp256k1_context_create(SECP256K1_CONTEXT_VERIFY)
@@ -467,7 +476,21 @@ class CECKey:
         if not sig:
           return False
 
-        # New versions of OpenSSL will reject non-canonical DER signatures. de/re-serialize first.
+        # bitcoind uses ecdsa_signature_parse_der_lax() to load signatures that
+        # may be not properly encoded, but is still accepted by openssl.
+        # it allows a strict subset of violations what OpenSSL will accept.
+        # ecdsa_signature_parse_der_lax() is present in libsecp256k1 contrib/
+        # directory, but is not compiled by default. Bundling it with this
+        # library will mean that it have to use C compiler at build stage, and
+        # I would like to avoid this build-dependency.
+        #
+        # secp256k1_ecdsa_verify won't accept encoding violations for
+        # signatures, so instead of ecdsa_signature_parse_der_lax() we use
+        # decode-openssl/encode-openssl/decode-libsecp256k cycle
+        # this means that we allow all encoding violatons that openssl allows.
+        #
+        # extra encode/decode is wasteful, but the result is that verification
+        # is still roughly 4 times faster than with openssl's ECDSA_verify()
         norm_sig = ctypes.c_void_p(0)
         _ssl.d2i_ECDSA_SIG(ctypes.byref(norm_sig), ctypes.byref(ctypes.c_char_p(sig)), len(sig))
 
@@ -480,8 +503,29 @@ class CECKey:
         _ssl.i2d_ECDSA_SIG(norm_sig, ctypes.byref(ctypes.pointer(norm_der)))
         _ssl.ECDSA_SIG_free(norm_sig)
 
-        # -1 = error, 0 = bad sig, 1 = good
-        return _ssl.ECDSA_verify(0, hash, len(hash), norm_der, derlen, self.k) == 1
+        raw_sig = ctypes.create_string_buffer(64)
+        result = _libsecp256k1.secp256k1_ecdsa_signature_parse_der(
+            _libsecp256k1_context_verify, raw_sig, norm_der, len(norm_der))
+
+        if result != 1:
+            return False
+
+        _libsecp256k1.secp256k1_ecdsa_signature_normalize(
+            _libsecp256k1_context_verify, raw_sig, raw_sig)
+
+        unparsed_pub = self.get_pubkey()
+        pub = ctypes.create_string_buffer(64)
+
+        result = _libsecp256k1.secp256k1_ec_pubkey_parse(
+            _libsecp256k1_context_verify, pub, unparsed_pub, len(unparsed_pub))
+
+        if result != 1:
+            return False
+
+        result = _libsecp256k1.secp256k1_ecdsa_verify(
+            _libsecp256k1_context_verify, raw_sig, hash, pub)
+
+        return result == 1
 
     def set_compressed(self, compressed):
         if compressed:
