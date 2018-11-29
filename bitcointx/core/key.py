@@ -246,9 +246,8 @@ assert _libsecp256k1_context_sign is not None
 _libsecp256k1_context_verify = _libsecp256k1.secp256k1_context_create(SECP256K1_CONTEXT_VERIFY)
 assert _libsecp256k1_context_verify is not None
 
-seed = urandom(32)
-result = _libsecp256k1.secp256k1_context_randomize(_libsecp256k1_context_sign, seed)
-assert 1 == result
+_libsecp256k1_seed = urandom(32)
+assert(_libsecp256k1.secp256k1_context_randomize(_libsecp256k1_context_sign, _libsecp256k1_seed) == 1)
 
 
 # From openssl/ecdsa.h
