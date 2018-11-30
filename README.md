@@ -49,14 +49,14 @@ library. Non-consensus critical modules include the following:
 Effort has been made to follow the Satoshi source relatively closely, for
 instance Python code and classes that duplicate the functionality of
 corresponding Satoshi C++ code uses the same naming conventions: CTransaction,
-CBlockHeader, nValue etc. Otherwise Python naming conventions are followed.
+CPubKey, nValue etc. Otherwise Python naming conventions are followed.
 
 
 ## Mutable vs. Immutable objects
 
 Like the Bitcoin Core codebase CTransaction is immutable and
 CMutableTransaction is mutable; unlike the Bitcoin Core codebase this
-distinction also applies to COutPoint, CTxIn, CTxOut, and CBlock.
+distinction also applies to COutPoint, CTxIn, CTxOut.
 
 
 ## Endianness Gotchas
