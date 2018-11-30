@@ -5,8 +5,6 @@ structures. This is based on https://github.com/petertodd/python-bitcoinlib,
 but is focused only on providing the tools to build, manipulate and sign
 bitcoin transactions, and related data structures.
 
-"The Swiss Army Knife of the Bitcoin protocol." - Wladimir J. van der Laan
-
 ## Notable differences from python-bitcoinlib:
 
 * Network-related code that deals with sending and receiving data
