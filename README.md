@@ -3,16 +3,22 @@
 This Python3 library provides an easy interface to the bitcoin data
 structures. This is based on https://github.com/petertodd/python-bitcoinlib,
 but is focused only on providing the tools to build, manipulate and sign
-bitcoin transactions, and related data structures. Network-related code
-that deals with sending and receiving data from and to bitcoin nodes is removed.
-Bech32 segwit address support and RFC6979 signing with libsecp256k1 are added.
+bitcoin transactions, and related data structures.
 
 "The Swiss Army Knife of the Bitcoin protocol." - Wladimir J. van der Laan
 
+## Notable differences from python-bitcoinlib:
+
+* Network-related code that deals with sending and receiving data
+  from and to bitcoin nodes is removed.
+* Bech32 segwit address support is added.
+* libsecp256k1 are used for signing and verifying.
+  Signing by libsecp256k1 is deterministic, per RFC6979.
 
 ## Requirements
 
-    sudo apt-get install libssl-dev
+    openssl (https://github.com/openssl/openssl)
+    libsecp256k1 (https://github.com/bitcoin-core/secp256k1)
 
 The RPC interface, `bitcointx.rpc`, is designed to work with Bitcoin Core v0.16.0.
 Older versions may work but there do exist some incompatibilities.
@@ -90,25 +96,11 @@ Where NAME is one of 'testnet', 'mainnet', or 'regtest'. The chain currently
 selected is a global variable that changes behavior everywhere, just like in
 the Satoshi codebase.
 
-## Using libsecp256k1 for signing
-
-It is possible to use libsecp256k1 for signing, but it have to be enabled manually, at this time.
-
-The relevant functions are is_libsec256k1_available() and use_libsecp256k1_for_signing(do_use)
-
-NOTE: libsecp256k1 will likely become default and required for signing,
-      and this functions will be removed then.
-
-refer to Test_RFC6979() in bitcointx/tests/test_wallet.py for example of usage.
-
-
 ## Unit tests
 
 Under bitcointx/tests using test data from Bitcoin Core. To run them:
 
     python -m unittest discover && python3 -m unittest discover
-
-Please run the tests on both Python2 and Python3 for your pull-reqs!
 
 Alternately, if Tox (see https://tox.readthedocs.org/) is available on your
 system, you can run unit tests for multiple Python versions:
