@@ -102,8 +102,6 @@ Under bitcointx/tests using test data from Bitcoin Core. To run them:
 
     python -m unittest discover && python3 -m unittest discover
 
-Please run the tests on both Python2 and Python3 for your pull-reqs!
-
 Alternately, if Tox (see https://tox.readthedocs.org/) is available on your
 system, you can run unit tests for multiple Python versions:
 
