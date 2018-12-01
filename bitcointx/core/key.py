@@ -159,7 +159,7 @@ def _libsecp256k1_illegal_callback_fn(error_str, _data): # pylint: disable=unuse
 
 
 def libsecp256k1_get_last_error():
-    return _libsecp256k1_error_storage.last_error
+    return getattr(_libsecp256k1_error_storage, 'last_error', None)
 
 
 def _check_res_libsecp256k1_void_p(val, func, args): # pylint: disable=unused-argument
