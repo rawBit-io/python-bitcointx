@@ -1,14 +1,17 @@
 # Copyright (C) 2011 Sam Rushing
 # Copyright (C) 2012-2015 The python-bitcoinlib developers
+# Copyright (C) 2018 The python-bitcointx developers
 #
-# This file is part of python-bitcoinlib.
+# This file is part of python-bitcointx.
 #
 # It is subject to the license terms in the LICENSE file found in the top-level
 # directory of this distribution.
 #
-# No part of python-bitcoinlib, including this file, may be copied, modified,
+# No part of python-bitcointx, including this file, may be copied, modified,
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
+
+# pylama:ignore=E501,E261
 
 """ECC secp256k1 crypto routines
 
@@ -17,24 +20,25 @@ disk in swap! Use with caution!
 """
 import ctypes
 import ctypes.util
+import threading
 import sys
 from os import urandom
-
-_bchr = chr
-_bord = ord
-if sys.version > '3':
-    _bchr = lambda x: bytes([x])
-    _bord = lambda x: x
 
 _ssl = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
 _libsecp256k1 = ctypes.cdll.LoadLibrary(ctypes.util.find_library('secp256k1'))
 
+
 class OpenSSLException(EnvironmentError):
     pass
 
+
+class Libsecp256k1Exception(EnvironmentError):
+    pass
+
+
 # Thx to Sam Devlin for the ctypes magic 64-bit fix (FIXME: should this
 # be applied to every OpenSSL call whose return type is a pointer?)
-def _check_res_void_p(val, func, args): # pylint: disable=unused-argument
+def _check_res_openssl_void_p(val, func, args): # pylint: disable=unused-argument
     if val == 0:
         errno = _ssl.ERR_get_error()
         errmsg = ctypes.create_string_buffer(120)
@@ -46,21 +50,21 @@ def _check_res_void_p(val, func, args): # pylint: disable=unused-argument
 _ssl.BN_bin2bn.restype = ctypes.c_void_p
 _ssl.BN_bin2bn.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
 
-_ssl.BN_new.errcheck = _check_res_void_p
+_ssl.BN_new.errcheck = _check_res_openssl_void_p
 _ssl.BN_new.restype = ctypes.c_void_p
 _ssl.BN_new.argtypes = []
 
 _ssl.BN_CTX_free.restype = None
 _ssl.BN_CTX_free.argtypes = [ctypes.c_void_p]
 
-_ssl.BN_CTX_new.errcheck = _check_res_void_p
+_ssl.BN_CTX_new.errcheck = _check_res_openssl_void_p
 _ssl.BN_CTX_new.restype = ctypes.c_void_p
 _ssl.BN_CTX_new.argtypes = []
 
 _ssl.EC_KEY_free.restype = None
 _ssl.EC_KEY_free.argtypes = [ctypes.c_void_p]
 
-_ssl.EC_KEY_new_by_curve_name.errcheck = _check_res_void_p
+_ssl.EC_KEY_new_by_curve_name.errcheck = _check_res_openssl_void_p
 _ssl.EC_KEY_new_by_curve_name.restype = ctypes.c_void_p
 _ssl.EC_KEY_new_by_curve_name.argtypes = [ctypes.c_int]
 
@@ -79,7 +83,7 @@ _ssl.EC_KEY_set_public_key.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 _ssl.EC_POINT_free.restype = None
 _ssl.EC_POINT_free.argtypes = [ctypes.c_void_p]
 
-_ssl.EC_POINT_new.errcheck = _check_res_void_p
+_ssl.EC_POINT_new.errcheck = _check_res_openssl_void_p
 _ssl.EC_POINT_new.restype = ctypes.c_void_p
 _ssl.EC_POINT_new.argtypes = [ctypes.c_void_p]
 
@@ -139,13 +143,44 @@ SECP256K1_FLAGS_BIT_COMPRESSION = (1 << 8)
 SECP256K1_EC_COMPRESSED = (SECP256K1_FLAGS_TYPE_COMPRESSION | SECP256K1_FLAGS_BIT_COMPRESSION)
 SECP256K1_EC_UNCOMPRESSED = (SECP256K1_FLAGS_TYPE_COMPRESSION)
 
+_libsecp256k1_error_storage = threading.local()
+
+_ctypes_functype = getattr(ctypes, 'WINFUNCTYPE', getattr(ctypes, 'CFUNCTYPE'))
+
+
+@_ctypes_functype(ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p)
+def _libsecp256k1_error_callback_fn(error_str, _data): # pylint: disable=unused-argument
+    _libsecp256k1_error_storage.last_error = {'code': -1, 'type': 'internal_error', 'message': str(error_str)}
+
+
+@_ctypes_functype(ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p)
+def _libsecp256k1_illegal_callback_fn(error_str, _data): # pylint: disable=unused-argument
+    _libsecp256k1_error_storage.last_error = {'code': -2, 'type': 'illegal_argument', 'message': str(error_str)}
+
+
+def libsecp256k1_get_last_error():
+    return _libsecp256k1_error_storage.last_error
+
+
+def _check_res_libsecp256k1_void_p(val, func, args): # pylint: disable=unused-argument
+    if val == 0:
+        err = _libsecp256k1_error_storage.last_error
+        raise Libsecp256k1Exception(err['code'], err['message'])
+    return ctypes.c_void_p(val)
+
 
 _libsecp256k1.secp256k1_context_create.restype = ctypes.c_void_p
-_libsecp256k1.secp256k1_context_create.errcheck = _check_res_void_p
+_libsecp256k1.secp256k1_context_create.errcheck = _check_res_libsecp256k1_void_p
 _libsecp256k1.secp256k1_context_create.argtypes = [ctypes.c_uint]
 
 _libsecp256k1.secp256k1_context_randomize.restype = ctypes.c_int
 _libsecp256k1.secp256k1_context_randomize.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+
+_libsecp256k1.secp256k1_context_set_illegal_callback.restype = None
+_libsecp256k1.secp256k1_context_set_illegal_callback.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+
+_libsecp256k1.secp256k1_context_set_error_callback.restype = None
+_libsecp256k1.secp256k1_context_set_error_callback.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
 
 _libsecp256k1.secp256k1_ecdsa_sign.restype = ctypes.c_int
 _libsecp256k1.secp256k1_ecdsa_sign.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
@@ -181,6 +216,11 @@ _libsecp256k1_context_sign = _libsecp256k1.secp256k1_context_create(SECP256K1_CO
 assert _libsecp256k1_context_sign is not None
 _libsecp256k1_context_verify = _libsecp256k1.secp256k1_context_create(SECP256K1_CONTEXT_VERIFY)
 assert _libsecp256k1_context_verify is not None
+
+_libsecp256k1.secp256k1_context_set_error_callback(_libsecp256k1_context_sign, _libsecp256k1_error_callback_fn, 0)
+_libsecp256k1.secp256k1_context_set_illegal_callback(_libsecp256k1_context_sign, _libsecp256k1_illegal_callback_fn, 0)
+_libsecp256k1.secp256k1_context_set_error_callback(_libsecp256k1_context_verify, _libsecp256k1_error_callback_fn, 0)
+_libsecp256k1.secp256k1_context_set_illegal_callback(_libsecp256k1_context_verify, _libsecp256k1_illegal_callback_fn, 0)
 
 _libsecp256k1_seed = urandom(32)
 assert(_libsecp256k1.secp256k1_context_randomize(_libsecp256k1_context_sign, _libsecp256k1_seed) == 1)
@@ -288,7 +328,7 @@ class CECKey:
     def verify(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a DER signature"""
         if not sig:
-          return False
+            return False
 
         # bitcoind uses ecdsa_signature_parse_der_lax() to load signatures that
         # may be not properly encoded, but is still accepted by openssl.
@@ -375,8 +415,8 @@ class CPubKey(bytes):
         if len(sig) != 65:
             raise ValueError("Signature should be 65 characters, not [%d]" % (len(sig), ))
 
-        recid = (_bord(sig[0]) - 27) & 3
-        compressed = (_bord(sig[0]) - 27) & 4 != 0
+        recid = (sig[0] - 27) & 3
+        compressed = (sig[0] - 27) & 4 != 0
 
         rec_sig = ctypes.create_string_buffer(65)
 
@@ -427,6 +467,6 @@ class CPubKey(bytes):
             return '%s(b%s)' % (self.__class__.__name__, super(CPubKey, self).__repr__())
 
 __all__ = (
-        'CECKey',
-        'CPubKey',
+    'CECKey',
+    'CPubKey',
 )

@@ -16,14 +16,8 @@ from bitcointx.core.serialize import ImmutableSerializable
 from bitcointx.wallet import P2PKHBitcoinAddress
 import bitcointx
 import base64
-import sys
 
-_bchr = chr
-_bord = ord
-if sys.version > '3':
-    long = int
-    _bchr = lambda x: bytes([x])
-    _bord = lambda x: x
+# pylama:ignore=E501
 
 
 def VerifyMessage(address, message, sig):
@@ -31,6 +25,9 @@ def VerifyMessage(address, message, sig):
     hash = message.GetHash()
 
     pubkey = CPubKey.recover_compact(hash, sig)
+
+    if pubkey is False:
+        return False
 
     return str(P2PKHBitcoinAddress.from_pubkey(pubkey)) == str(address)
 
@@ -42,7 +39,7 @@ def SignMessage(key, message):
     if key.is_compressed:
         meta += 4
 
-    return base64.b64encode(_bchr(meta) + sig)
+    return base64.b64encode(bytes([meta]) + sig)
 
 
 class BitcoinMessage(ImmutableSerializable):
