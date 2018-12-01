@@ -40,8 +40,8 @@ SCRIPT_VERIFY_STRICTENC = object()
 SCRIPT_VERIFY_DERSIG = object()
 # SCRIPT_VERIFY_LOW_S = object()  # is not handled in verification code, therefore disabled
 SCRIPT_VERIFY_NULLDUMMY = object()
-SCRIPT_VERIFY_SIGPUSHONLY = object()  # is not handled in verification code, therefore disabled
-SCRIPT_VERIFY_MINIMALDATA = object()  # is not handled in verification code, therefore disabled
+SCRIPT_VERIFY_SIGPUSHONLY = object()  # is not handled in verification code, should be disabled, but present in test data
+SCRIPT_VERIFY_MINIMALDATA = object()  # is not handled in verification code, should be disabled, but present in test data
 SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS = object()
 SCRIPT_VERIFY_CLEANSTACK = object()
 # SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()  # is not handled in verification code, therefore disabled
@@ -52,8 +52,8 @@ SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'DERSIG': SCRIPT_VERIFY_DERSIG,
     # 'LOW_S': SCRIPT_VERIFY_LOW_S,   # is not handled in verification code, therefore disabled
     'NULLDUMMY': SCRIPT_VERIFY_NULLDUMMY,
-    'SIGPUSHONLY': SCRIPT_VERIFY_SIGPUSHONLY,  # is not handled in verification code, therefore disabled
-    'MINIMALDATA': SCRIPT_VERIFY_MINIMALDATA,  # is not handled in verification code, therefore disabled
+    'SIGPUSHONLY': SCRIPT_VERIFY_SIGPUSHONLY,  # is not handled in verification code, should be disabled, but present in test data
+    'MINIMALDATA': SCRIPT_VERIFY_MINIMALDATA,  # is not handled in verification code, should be disabled, but present in test data
     'DISCOURAGE_UPGRADABLE_NOPS': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS,
     'CLEANSTACK': SCRIPT_VERIFY_CLEANSTACK,
     # 'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,  # is not handled in verification code, therefore disabled
@@ -932,8 +932,8 @@ __all__ = (
     'SCRIPT_VERIFY_DERSIG',
     # 'SCRIPT_VERIFY_LOW_S',  # is not handled in verification code, therefore disabled
     'SCRIPT_VERIFY_NULLDUMMY',
-    'SCRIPT_VERIFY_SIGPUSHONLY',  # is not handled in verification code, therefore disabled
-    'SCRIPT_VERIFY_MINIMALDATA',  # is not handled in verification code, therefore disabled
+    'SCRIPT_VERIFY_SIGPUSHONLY',  # is not handled in verification code, should be disabled, but present in test data
+    'SCRIPT_VERIFY_MINIMALDATA',  # is not handled in verification code, should be disabled, but present in test data
     'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS',
     'SCRIPT_VERIFY_CLEANSTACK',
     # 'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',  # is not handled in verification code, therefore disabled
