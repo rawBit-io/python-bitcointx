@@ -38,15 +38,17 @@ MAX_STACK_ITEMS = 1000
 SCRIPT_VERIFY_P2SH = object()
 SCRIPT_VERIFY_STRICTENC = object()
 SCRIPT_VERIFY_DERSIG = object()
-SCRIPT_VERIFY_LOW_S = object()  # is not handled in verification code, should be disabled
+SCRIPT_VERIFY_LOW_S = object()
 SCRIPT_VERIFY_NULLDUMMY = object()
-SCRIPT_VERIFY_SIGPUSHONLY = object()  # is not handled in verification code, should be disabled, but present in test data
-SCRIPT_VERIFY_MINIMALDATA = object()  # is not handled in verification code, should be disabled, but present in test data
+SCRIPT_VERIFY_SIGPUSHONLY = object()
+SCRIPT_VERIFY_MINIMALDATA = object()
 SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS = object()
 SCRIPT_VERIFY_CLEANSTACK = object()
-# SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()  # is not handled in verification code, should be disabled
+SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()
 
 _STRICT_ENCODING_FLAGS = set((SCRIPT_VERIFY_DERSIG, SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_STRICTENC))
+
+UNHANDLED_SCRIPT_VERIFY_FLAGS = set((SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_SIGPUSHONLY, SCRIPT_VERIFY_MINIMALDATA, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY))
 
 SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'P2SH': SCRIPT_VERIFY_P2SH,
@@ -58,7 +60,7 @@ SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'MINIMALDATA': SCRIPT_VERIFY_MINIMALDATA,
     'DISCOURAGE_UPGRADABLE_NOPS': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS,
     'CLEANSTACK': SCRIPT_VERIFY_CLEANSTACK,
-    # 'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,  # is not handled in verification code, therefore disabled here
+    'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
 }
 
 
@@ -860,6 +862,8 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
 
     Raises a ValidationError subclass if the validation fails.
     """
+    assert not (UNHANDLED_SCRIPT_VERIFY_FLAGS & flags), "some of the flags cannot be handled by current code"
+
     stack = []
     EvalScript(stack, scriptSig, txTo, inIdx, flags=flags)
     if SCRIPT_VERIFY_P2SH in flags:
@@ -939,7 +943,7 @@ __all__ = (
     'SCRIPT_VERIFY_MINIMALDATA',
     'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS',
     'SCRIPT_VERIFY_CLEANSTACK',
-    # 'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',  # is not handled in verification code, therefore disabled here
+    'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',
     'SCRIPT_VERIFY_FLAGS_BY_NAME',
     'EvalScriptError',
     'MaxOpCountError',

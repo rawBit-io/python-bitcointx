@@ -23,7 +23,7 @@ from bitcointx.core import CTxOut, CTxIn, CTransaction, COutPoint, ValidationErr
 from bitcointx.core.script import OPCODES_BY_NAME, CScript
 from bitcointx.core.script import OP_0
 from bitcointx.core.scripteval import VerifyScript
-from bitcointx.core.scripteval import SCRIPT_VERIFY_FLAGS_BY_NAME
+from bitcointx.core.scripteval import SCRIPT_VERIFY_FLAGS_BY_NAME, UNHANDLED_SCRIPT_VERIFY_FLAGS
 
 
 def parse_script(s):
@@ -82,6 +82,7 @@ def load_test_vectors(name):
 
                     flag_set.add(flag)
 
+            flag_set -= UNHANDLED_SCRIPT_VERIFY_FLAGS
             yield (scriptSig, scriptPubKey, flag_set, comment, test_case)
 
 
