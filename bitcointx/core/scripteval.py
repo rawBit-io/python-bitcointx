@@ -1,4 +1,5 @@
 # Copyright (C) 2012-2017 The python-bitcoinlib developers
+# Copyright (C) 2018 The python-bitcointx developers
 #
 # This file is part of python-bitcoinlib.
 #
@@ -9,6 +10,8 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+# pylama:ignore=E501
+
 """Script evaluation
 
 Be warned that there are highly likely to be consensus bugs in this code; it is
@@ -17,12 +20,6 @@ module.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-
-import sys
-_bord = ord
-if sys.version > '3':
-    long = int
-    _bord = lambda x: x
 
 import hashlib
 
@@ -41,26 +38,27 @@ MAX_STACK_ITEMS = 1000
 SCRIPT_VERIFY_P2SH = object()
 SCRIPT_VERIFY_STRICTENC = object()
 SCRIPT_VERIFY_DERSIG = object()
-SCRIPT_VERIFY_LOW_S = object()
+# SCRIPT_VERIFY_LOW_S = object()  # is not handled in verification code, therefore disabled
 SCRIPT_VERIFY_NULLDUMMY = object()
-SCRIPT_VERIFY_SIGPUSHONLY = object()
-SCRIPT_VERIFY_MINIMALDATA = object()
+SCRIPT_VERIFY_SIGPUSHONLY = object()  # is not handled in verification code, therefore disabled
+SCRIPT_VERIFY_MINIMALDATA = object()  # is not handled in verification code, therefore disabled
 SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS = object()
 SCRIPT_VERIFY_CLEANSTACK = object()
-SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()
+# SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()  # is not handled in verification code, therefore disabled
 
 SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'P2SH': SCRIPT_VERIFY_P2SH,
     'STRICTENC': SCRIPT_VERIFY_STRICTENC,
     'DERSIG': SCRIPT_VERIFY_DERSIG,
-    'LOW_S': SCRIPT_VERIFY_LOW_S,
+    # 'LOW_S': SCRIPT_VERIFY_LOW_S,   # is not handled in verification code, therefore disabled
     'NULLDUMMY': SCRIPT_VERIFY_NULLDUMMY,
-    'SIGPUSHONLY': SCRIPT_VERIFY_SIGPUSHONLY,
-    'MINIMALDATA': SCRIPT_VERIFY_MINIMALDATA,
+    'SIGPUSHONLY': SCRIPT_VERIFY_SIGPUSHONLY,  # is not handled in verification code, therefore disabled
+    'MINIMALDATA': SCRIPT_VERIFY_MINIMALDATA,  # is not handled in verification code, therefore disabled
     'DISCOURAGE_UPGRADABLE_NOPS': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS,
     'CLEANSTACK': SCRIPT_VERIFY_CLEANSTACK,
-    'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
+    # 'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,  # is not handled in verification code, therefore disabled
 }
+
 
 class EvalScriptError(bitcointx.core.ValidationError):
     """Base class for exceptions raised when a script fails during EvalScript()
@@ -88,24 +86,26 @@ class EvalScriptError(bitcointx.core.ValidationError):
         self.pbegincodehash = pbegincodehash
         self.nOpCount = nOpCount
 
+
 class MaxOpCountError(EvalScriptError):
     def __init__(self, **kwargs):
-        super(MaxOpCountError, self).__init__('max opcode count exceeded',**kwargs)
+        super(MaxOpCountError, self).__init__('max opcode count exceeded', **kwargs)
+
 
 class MissingOpArgumentsError(EvalScriptError):
     """Missing arguments"""
     def __init__(self, opcode, s, n, **kwargs):
         super(MissingOpArgumentsError, self).__init__(
-                'missing arguments for %s; need %d items, but only %d on stack' %
-                                   (OPCODE_NAMES[opcode], n, len(s)),
-                **kwargs)
+            'missing arguments for %s; need %d items, but only %d on stack' %
+            (OPCODE_NAMES[opcode], n, len(s)), **kwargs)
+
 
 class ArgumentsInvalidError(EvalScriptError):
     """Arguments are invalid"""
     def __init__(self, opcode, msg, **kwargs):
         super(ArgumentsInvalidError, self).__init__(
-                '%s args invalid: %s' % (OPCODE_NAMES[opcode], msg),
-                **kwargs)
+            '%s args invalid: %s' % (OPCODE_NAMES[opcode], msg),
+            **kwargs)
 
 
 class VerifyOpFailedError(EvalScriptError):
@@ -114,15 +114,108 @@ class VerifyOpFailedError(EvalScriptError):
         super(VerifyOpFailedError, self).__init__('%s failed' % OPCODE_NAMES[opcode],
                                                   **kwargs)
 
+
+# A canonical signature exists of: <30> <total len> <02> <len R> <R> <02> <len S> <S> <hashtype>
+# Where R and S are not negative (their first byte has its highest bit not set), and not
+# excessively padded (do not start with a 0 byte, unless an otherwise negative number follows,
+# in which case a single 0 byte is necessary and even required).
+#
+# See https://bitcointalk.org/index.php?topic=8392.msg127623#msg127623
+#
+# This function is consensus-critical since BIP66.
+#
+# ported from bitcoind's src/script/interpreter.cpp
+#
+def IsValidSignatureEncoding(sig):
+    # Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S] [sighash]
+    # * total-length: 1-byte length descriptor of everything that follows,
+    #   excluding the sighash byte.
+    # * R-length: 1-byte length descriptor of the R value that follows.
+    # * R: arbitrary-length big-endian encoded R value. It must use the shortest
+    #   possible encoding for a positive integers (which means no null bytes at
+    #   the start, except a single one when the next byte has its highest bit set).
+    # * S-length: 1-byte length descriptor of the S value that follows.
+    # * S: arbitrary-length big-endian encoded S value. The same rules apply.
+    # * sighash: 1-byte value indicating what data is hashed (not part of the DER
+    #   signature)
+
+    # Minimum and maximum size constraints.
+    if (len(sig) < 9):
+        return False
+
+    if len(sig) > 73:
+        return False
+
+    # A signature is of type 0x30 (compound).
+    if sig[0] != 0x30:
+        return False
+
+    # Make sure the length covers the entire signature.
+    if sig[1] != len(sig) - 3:
+        return False
+
+    # Extract the length of the R element.
+    lenR = sig[3]
+
+    # Make sure the length of the S element is still inside the signature.
+    if 5 + lenR >= len(sig):
+        return False
+
+    # Extract the length of the S element.
+    lenS = sig[5 + lenR]
+
+    # Verify that the length of the signature matches the sum of the length
+    # of the elements.
+    if (lenR + lenS + 7) != len(sig):
+        return False
+
+    # Check whether the R element is an integer.
+    if sig[2] != 0x02:
+        return False
+
+    # Zero-length integers are not allowed for R.
+    if lenR == 0:
+        return False
+
+    # Negative numbers are not allowed for R.
+    if sig[4] & 0x80:
+        return False
+
+    # Null bytes at the start of R are not allowed, unless R would
+    # otherwise be interpreted as a negative number.
+    if lenR > 1 and sig[4] == 0x00 and (sig[5] & 0x80) == 0:
+        return False
+
+    # Check whether the S element is an integer.
+    if sig[lenR + 4] != 0x02:
+        return False
+
+    # Zero-length integers are not allowed for S.
+    if lenS == 0:
+        return False
+
+    # Negative numbers are not allowed for S.
+    if sig[lenR + 6] & 0x80:
+        return False
+
+    # Null bytes at the start of S are not allowed, unless S would otherwise be
+    # interpreted as a negative number.
+    if lenS > 1 and sig[lenR + 6] == 0x00 and (not (sig[lenR + 7] & 0x80)):
+        return False
+
+    return True
+
+
 def _CastToBigNum(s, err_raiser):
     v = bitcointx.core._bignum.vch2bn(s)
     if len(s) > MAX_NUM_SIZE:
         raise err_raiser(EvalScriptError, 'CastToBigNum() : overflow')
     return v
 
+
 def _CastToBool(s):
     for i in range(len(s)):
-        sv = _bord(s[i])
+        sv = s[i]
         if sv != 0:
             if (i == (len(s) - 1)) and (sv == 0x80):
                 return False
@@ -137,7 +230,11 @@ def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
 
     if len(sig) == 0:
         return False
-    hashtype = _bord(sig[-1])
+
+    if SCRIPT_VERIFY_STRICTENC in flags and not IsValidSignatureEncoding(sig):
+        return False
+
+    hashtype = sig[-1]
     sig = sig[:-1]
 
     # Raw signature hash due to the SIGHASH_SINGLE bug
@@ -244,6 +341,7 @@ _ISA_UNOP = {
     OP_0NOTEQUAL,
 }
 
+
 def _UnaryOp(opcode, stack, err_raiser):
     if len(stack) < 1:
         err_raiser(MissingOpArgumentsError, opcode, stack, 1)
@@ -264,10 +362,10 @@ def _UnaryOp(opcode, stack, err_raiser):
             bn = -bn
 
     elif opcode == OP_NOT:
-        bn = long(bn == 0)
+        bn = int(bn == 0)
 
     elif opcode == OP_0NOTEQUAL:
-        bn = long(bn != 0)
+        bn = int(bn != 0)
 
     else:
         raise AssertionError("Unknown unary opcode encountered; this should not happen")
@@ -292,6 +390,7 @@ _ISA_BINOP = {
     OP_MAX,
 }
 
+
 def _BinOp(opcode, stack, err_raiser):
     if len(stack) < 2:
         err_raiser(MissingOpArgumentsError, opcode, stack, 2)
@@ -309,16 +408,16 @@ def _BinOp(opcode, stack, err_raiser):
         bn = bn1 - bn2
 
     elif opcode == OP_BOOLAND:
-        bn = long(bn1 != 0 and bn2 != 0)
+        bn = int(bn1 != 0 and bn2 != 0)
 
     elif opcode == OP_BOOLOR:
-        bn = long(bn1 != 0 or bn2 != 0)
+        bn = int(bn1 != 0 or bn2 != 0)
 
     elif opcode == OP_NUMEQUAL:
-        bn = long(bn1 == bn2)
+        bn = int(bn1 == bn2)
 
     elif opcode == OP_NUMEQUALVERIFY:
-        bn = long(bn1 == bn2)
+        bn = int(bn1 == bn2)
         if not bn:
             err_raiser(VerifyOpFailedError, opcode)
         else:
@@ -328,19 +427,19 @@ def _BinOp(opcode, stack, err_raiser):
             return
 
     elif opcode == OP_NUMNOTEQUAL:
-        bn = long(bn1 != bn2)
+        bn = int(bn1 != bn2)
 
     elif opcode == OP_LESSTHAN:
-        bn = long(bn1 < bn2)
+        bn = int(bn1 < bn2)
 
     elif opcode == OP_GREATERTHAN:
-        bn = long(bn1 > bn2)
+        bn = int(bn1 > bn2)
 
     elif opcode == OP_LESSTHANOREQUAL:
-        bn = long(bn1 <= bn2)
+        bn = int(bn1 <= bn2)
 
     elif opcode == OP_GREATERTHANOREQUAL:
-        bn = long(bn1 >= bn2)
+        bn = int(bn1 >= bn2)
 
     elif opcode == OP_MIN:
         if bn1 < bn2:
@@ -375,7 +474,7 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
     """
     if len(scriptIn) > MAX_SCRIPT_SIZE:
         raise EvalScriptError('script too large; got %d bytes; maximum %d bytes' %
-                                        (len(scriptIn), MAX_SCRIPT_SIZE),
+                              (len(scriptIn), MAX_SCRIPT_SIZE),
                               stack=stack,
                               scriptIn=scriptIn,
                               txTo=txTo,
@@ -399,12 +498,11 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
             Fills in the state of execution for you.
             """
             raise cls(*args,
-                    sop=sop,
-                    sop_data=sop_data,
-                    sop_pc=sop_pc,
-                    stack=stack, scriptIn=scriptIn, txTo=txTo, inIdx=inIdx, flags=flags,
-                    altstack=altstack, vfExec=vfExec, pbegincodehash=pbegincodehash, nOpCount=nOpCount[0])
-
+                      sop=sop,
+                      sop_data=sop_data,
+                      sop_pc=sop_pc,
+                      stack=stack, scriptIn=scriptIn, txTo=txTo, inIdx=inIdx, flags=flags,
+                      altstack=altstack, vfExec=vfExec, pbegincodehash=pbegincodehash, nOpCount=nOpCount[0])
 
         if sop in DISABLED_OPCODES:
             err_raiser(EvalScriptError, 'opcode %s is disabled' % OPCODE_NAMES[sop])
@@ -418,12 +516,11 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
             if len(stack) < n:
                 err_raiser(MissingOpArgumentsError, sop, stack, n)
 
-
         if sop <= OP_PUSHDATA4:
             if len(sop_data) > MAX_SCRIPT_ELEMENT_SIZE:
                 err_raiser(EvalScriptError,
                            'PUSHDATA of length %d; maximum allowed is %d' %
-                                (len(sop_data), MAX_SCRIPT_ELEMENT_SIZE))
+                           (len(sop_data), MAX_SCRIPT_ELEMENT_SIZE))
 
             elif fExec:
                 stack.append(sop_data)
@@ -594,7 +691,6 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
 
                 vfExec.append(val)
 
-
             elif sop == OP_IFDUP:
                 check_args(1)
                 vch = stack[-1]
@@ -743,8 +839,10 @@ def EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
                               inIdx=inIdx,
                               flags=flags)
 
+
 class VerifyScriptError(bitcointx.core.ValidationError):
     pass
+
 
 def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
     """Verify a scriptSig satisfies a scriptPubKey
@@ -802,6 +900,7 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
 class VerifySignatureError(bitcointx.core.ValidationError):
     pass
 
+
 def VerifySignature(txFrom, txTo, inIdx):
     """Verify a scriptSig signature can spend a txout
 
@@ -827,26 +926,26 @@ def VerifySignature(txFrom, txTo, inIdx):
 
 
 __all__ = (
-        'MAX_STACK_ITEMS',
-        'SCRIPT_VERIFY_P2SH',
-        'SCRIPT_VERIFY_STRICTENC',
-        'SCRIPT_VERIFY_DERSIG',
-        'SCRIPT_VERIFY_LOW_S',
-        'SCRIPT_VERIFY_NULLDUMMY',
-        'SCRIPT_VERIFY_SIGPUSHONLY',
-        'SCRIPT_VERIFY_MINIMALDATA',
-        'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS',
-        'SCRIPT_VERIFY_CLEANSTACK',
-        'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',
-        'SCRIPT_VERIFY_FLAGS_BY_NAME',
-        'EvalScriptError',
-        'MaxOpCountError',
-        'MissingOpArgumentsError',
-        'ArgumentsInvalidError',
-        'VerifyOpFailedError',
-        'EvalScript',
-        'VerifyScriptError',
-        'VerifyScript',
-        'VerifySignatureError',
-        'VerifySignature',
+    'MAX_STACK_ITEMS',
+    'SCRIPT_VERIFY_P2SH',
+    'SCRIPT_VERIFY_STRICTENC',
+    'SCRIPT_VERIFY_DERSIG',
+    # 'SCRIPT_VERIFY_LOW_S',  # is not handled in verification code, therefore disabled
+    'SCRIPT_VERIFY_NULLDUMMY',
+    'SCRIPT_VERIFY_SIGPUSHONLY',  # is not handled in verification code, therefore disabled
+    'SCRIPT_VERIFY_MINIMALDATA',  # is not handled in verification code, therefore disabled
+    'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS',
+    'SCRIPT_VERIFY_CLEANSTACK',
+    # 'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',  # is not handled in verification code, therefore disabled
+    'SCRIPT_VERIFY_FLAGS_BY_NAME',
+    'EvalScriptError',
+    'MaxOpCountError',
+    'MissingOpArgumentsError',
+    'ArgumentsInvalidError',
+    'VerifyOpFailedError',
+    'EvalScript',
+    'VerifyScriptError',
+    'VerifyScript',
+    'VerifySignatureError',
+    'VerifySignature',
 )

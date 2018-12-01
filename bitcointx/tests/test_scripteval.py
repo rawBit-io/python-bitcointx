@@ -9,21 +9,22 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+# pylama:ignore=E501
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import json
 import os
 import unittest
 
-import sys
-if sys.version > '3':
-    long = int
-
 from binascii import unhexlify
 
-from bitcointx.core import *
-from bitcointx.core.script import *
-from bitcointx.core.scripteval import *
+from bitcointx.core import CTxOut, CTxIn, CTransaction, COutPoint, ValidationError
+from bitcointx.core.script import OPCODES_BY_NAME, CScript
+from bitcointx.core.script import OP_0
+from bitcointx.core.scripteval import VerifyScript
+from bitcointx.core.scripteval import SCRIPT_VERIFY_FLAGS_BY_NAME
+
 
 def parse_script(s):
     def ishex(s):
@@ -40,7 +41,7 @@ def parse_script(s):
 
     for word in s.split():
         if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
-            r.append(CScript([long(word)]))
+            r.append(CScript([int(word)]))
         elif word.startswith('0x') and ishex(word[2:]):
             # Raw ex data, inserted NOT pushed onto stack:
             r.append(unhexlify(word[2:].encode('utf8')))
@@ -58,10 +59,10 @@ def load_test_vectors(name):
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
         for test_case in json.load(fd):
             if len(test_case) == 1:
-                continue # comment
+                continue  # comment
 
             if len(test_case) == 3:
-                test_case.append('') # add missing comment
+                test_case.append('')  # add missing comment
 
             scriptSig, scriptPubKey, flags, comment = test_case
 
