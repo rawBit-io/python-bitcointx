@@ -131,7 +131,7 @@ def _CastToBool(s):
     return False
 
 
-def _CheckSig(sig, pubkey, script, txTo, inIdx, err_raiser):
+def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
     key = bitcointx.core.key.CECKey()
     key.set_pubkey(pubkey)
 
@@ -149,6 +149,10 @@ def _CheckSig(sig, pubkey, script, txTo, inIdx, err_raiser):
     # that should cause other validation machinery to fail long before we ever
     # got here.
     (h, err) = RawSignatureHash(script, txTo, inIdx, hashtype)
+
+    if SCRIPT_VERIFY_STRICTENC not in flags:
+        return key.verify_nonstrict(h, sig)
+
     return key.verify(h, sig)
 
 
@@ -195,7 +199,7 @@ def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCou
         sig = stack[-isig]
         pubkey = stack[-ikey]
 
-        if _CheckSig(sig, pubkey, script, txTo, inIdx, err_raiser):
+        if _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
             isig += 1
             sigs_count -= 1
 
@@ -500,7 +504,7 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
                 # scriptSig and scriptPubKey are processed separately.
                 tmpScript = FindAndDelete(tmpScript, CScript([vchSig]))
 
-                ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx,
+                ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
                                err_raiser)
                 if not ok and sop == OP_CHECKSIGVERIFY:
                     err_raiser(VerifyOpFailedError, sop)

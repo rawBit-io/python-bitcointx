@@ -330,6 +330,35 @@ class CECKey:
         if not sig:
             return False
 
+        raw_sig = ctypes.create_string_buffer(64)
+        result = _libsecp256k1.secp256k1_ecdsa_signature_parse_der(
+            _libsecp256k1_context_verify, raw_sig, sig, len(sig))
+
+        if result != 1:
+            return False
+
+        _libsecp256k1.secp256k1_ecdsa_signature_normalize(
+            _libsecp256k1_context_verify, raw_sig, raw_sig)
+
+        unparsed_pub = self.get_pubkey()
+        pub = ctypes.create_string_buffer(64)
+
+        result = _libsecp256k1.secp256k1_ec_pubkey_parse(
+            _libsecp256k1_context_verify, pub, unparsed_pub, len(unparsed_pub))
+
+        if result != 1:
+            return False
+
+        result = _libsecp256k1.secp256k1_ecdsa_verify(
+            _libsecp256k1_context_verify, raw_sig, hash, pub)
+
+        return result == 1
+
+    def verify_nonstrict(self, hash, sig): # pylint: disable=redefined-builtin
+        """Verify a non-strict DER signature"""
+        if not sig:
+            return False
+
         # bitcoind uses ecdsa_signature_parse_der_lax() to load signatures that
         # may be not properly encoded, but is still accepted by openssl.
         # it allows a strict subset of violations what OpenSSL will accept.
@@ -357,29 +386,7 @@ class CECKey:
         _ssl.i2d_ECDSA_SIG(norm_sig, ctypes.byref(ctypes.pointer(norm_der)))
         _ssl.ECDSA_SIG_free(norm_sig)
 
-        raw_sig = ctypes.create_string_buffer(64)
-        result = _libsecp256k1.secp256k1_ecdsa_signature_parse_der(
-            _libsecp256k1_context_verify, raw_sig, norm_der, len(norm_der))
-
-        if result != 1:
-            return False
-
-        _libsecp256k1.secp256k1_ecdsa_signature_normalize(
-            _libsecp256k1_context_verify, raw_sig, raw_sig)
-
-        unparsed_pub = self.get_pubkey()
-        pub = ctypes.create_string_buffer(64)
-
-        result = _libsecp256k1.secp256k1_ec_pubkey_parse(
-            _libsecp256k1_context_verify, pub, unparsed_pub, len(unparsed_pub))
-
-        if result != 1:
-            return False
-
-        result = _libsecp256k1.secp256k1_ecdsa_verify(
-            _libsecp256k1_context_verify, raw_sig, hash, pub)
-
-        return result == 1
+        return self.verify(hash, norm_der)
 
     def set_compressed(self, compressed):
         if compressed:
