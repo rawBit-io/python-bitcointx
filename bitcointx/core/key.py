@@ -68,9 +68,6 @@ _ssl.EC_KEY_new_by_curve_name.argtypes = [ctypes.c_int]
 _ssl.EC_KEY_get0_group.restype = ctypes.c_void_p
 _ssl.EC_KEY_get0_group.argtypes = [ctypes.c_void_p]
 
-_ssl.EC_KEY_get0_public_key.restype = ctypes.c_void_p
-_ssl.EC_KEY_get0_public_key.argtypes = [ctypes.c_void_p]
-
 _ssl.EC_KEY_set_conv_form.restype = None
 _ssl.EC_KEY_set_conv_form.argtypes = [ctypes.c_void_p, ctypes.c_int]
 
@@ -92,9 +89,6 @@ _ssl.EC_POINT_mul.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
 
 _ssl.ECDSA_SIG_free.restype = None
 _ssl.ECDSA_SIG_free.argtypes = [ctypes.c_void_p]
-
-_ssl.ECDH_compute_key.restype = ctypes.c_int
-_ssl.ECDH_compute_key.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p]
 
 _ssl.ERR_error_string_n.restype = None
 _ssl.ERR_error_string_n.argtypes = [ctypes.c_ulong, ctypes.c_char_p, ctypes.c_size_t]
@@ -240,20 +234,6 @@ class CECKey:
         mb = ctypes.create_string_buffer(size)
         _ssl.i2o_ECPublicKey(self.k, ctypes.byref(ctypes.pointer(mb)))
         return mb.raw
-
-    def get_raw_ecdh_key(self, other_pubkey):
-        ecdh_keybuffer = ctypes.create_string_buffer(32)
-        r = _ssl.ECDH_compute_key(ctypes.pointer(ecdh_keybuffer), 32,
-                                 _ssl.EC_KEY_get0_public_key(other_pubkey.k),
-                                 self.k, 0)
-        if r != 32:
-            raise Exception('CKey.get_ecdh_key(): ECDH_compute_key() failed')
-        return ecdh_keybuffer.raw
-
-    def get_ecdh_key(self, other_pubkey, kdf=lambda k: hashlib.sha256(k).digest()):
-        # FIXME: be warned it's not clear what the kdf should be as a default
-        r = self.get_raw_ecdh_key(other_pubkey)
-        return kdf(r)
 
     def get_raw_privkey(self):
         bn = _ssl.EC_KEY_get0_private_key(self.k)
