@@ -38,25 +38,27 @@ MAX_STACK_ITEMS = 1000
 SCRIPT_VERIFY_P2SH = object()
 SCRIPT_VERIFY_STRICTENC = object()
 SCRIPT_VERIFY_DERSIG = object()
-# SCRIPT_VERIFY_LOW_S = object()  # is not handled in verification code, therefore disabled
+SCRIPT_VERIFY_LOW_S = object()  # is not handled in verification code, should be disabled
 SCRIPT_VERIFY_NULLDUMMY = object()
 SCRIPT_VERIFY_SIGPUSHONLY = object()  # is not handled in verification code, should be disabled, but present in test data
 SCRIPT_VERIFY_MINIMALDATA = object()  # is not handled in verification code, should be disabled, but present in test data
 SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS = object()
 SCRIPT_VERIFY_CLEANSTACK = object()
-# SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()  # is not handled in verification code, therefore disabled
+# SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()  # is not handled in verification code, should be disabled
+
+_STRICT_ENCODING_FLAGS = set((SCRIPT_VERIFY_DERSIG, SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_STRICTENC))
 
 SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'P2SH': SCRIPT_VERIFY_P2SH,
     'STRICTENC': SCRIPT_VERIFY_STRICTENC,
     'DERSIG': SCRIPT_VERIFY_DERSIG,
-    # 'LOW_S': SCRIPT_VERIFY_LOW_S,   # is not handled in verification code, therefore disabled
+    'LOW_S': SCRIPT_VERIFY_LOW_S,
     'NULLDUMMY': SCRIPT_VERIFY_NULLDUMMY,
-    'SIGPUSHONLY': SCRIPT_VERIFY_SIGPUSHONLY,  # is not handled in verification code, should be disabled, but present in test data
-    'MINIMALDATA': SCRIPT_VERIFY_MINIMALDATA,  # is not handled in verification code, should be disabled, but present in test data
+    'SIGPUSHONLY': SCRIPT_VERIFY_SIGPUSHONLY,
+    'MINIMALDATA': SCRIPT_VERIFY_MINIMALDATA,
     'DISCOURAGE_UPGRADABLE_NOPS': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS,
     'CLEANSTACK': SCRIPT_VERIFY_CLEANSTACK,
-    # 'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,  # is not handled in verification code, therefore disabled
+    # 'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,  # is not handled in verification code, therefore disabled here
 }
 
 
@@ -231,8 +233,12 @@ def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
     if len(sig) == 0:
         return False
 
-    if SCRIPT_VERIFY_STRICTENC in flags and not IsValidSignatureEncoding(sig):
-        return False
+    if _STRICT_ENCODING_FLAGS & flags:
+        if not IsValidSignatureEncoding(sig):
+            return False
+        verify_fn = key.verify
+    else:
+        verify_fn = key.verify_nonstrict
 
     hashtype = sig[-1]
     sig = sig[:-1]
@@ -247,10 +253,7 @@ def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
     # got here.
     (h, err) = RawSignatureHash(script, txTo, inIdx, hashtype)
 
-    if SCRIPT_VERIFY_STRICTENC not in flags:
-        return key.verify_nonstrict(h, sig)
-
-    return key.verify(h, sig)
+    return verify_fn(h, sig)
 
 
 def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCount):
@@ -930,13 +933,13 @@ __all__ = (
     'SCRIPT_VERIFY_P2SH',
     'SCRIPT_VERIFY_STRICTENC',
     'SCRIPT_VERIFY_DERSIG',
-    # 'SCRIPT_VERIFY_LOW_S',  # is not handled in verification code, therefore disabled
+    'SCRIPT_VERIFY_LOW_S',
     'SCRIPT_VERIFY_NULLDUMMY',
-    'SCRIPT_VERIFY_SIGPUSHONLY',  # is not handled in verification code, should be disabled, but present in test data
-    'SCRIPT_VERIFY_MINIMALDATA',  # is not handled in verification code, should be disabled, but present in test data
+    'SCRIPT_VERIFY_SIGPUSHONLY',
+    'SCRIPT_VERIFY_MINIMALDATA',
     'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS',
     'SCRIPT_VERIFY_CLEANSTACK',
-    # 'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',  # is not handled in verification code, therefore disabled
+    # 'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',  # is not handled in verification code, therefore disabled here
     'SCRIPT_VERIFY_FLAGS_BY_NAME',
     'EvalScriptError',
     'MaxOpCountError',
