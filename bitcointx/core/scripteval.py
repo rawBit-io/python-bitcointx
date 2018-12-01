@@ -862,6 +862,9 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
 
     Raises a ValidationError subclass if the validation fails.
     """
+
+    flags = set(flags)
+
     assert not (UNHANDLED_SCRIPT_VERIFY_FLAGS & flags), "some of the flags cannot be handled by current code"
 
     stack = []
