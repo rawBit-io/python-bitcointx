@@ -17,7 +17,6 @@ disk in swap! Use with caution!
 """
 import ctypes
 import ctypes.util
-import hashlib
 import sys
 from os import urandom
 
