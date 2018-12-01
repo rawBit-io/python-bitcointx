@@ -1,4 +1,5 @@
 # Copyright (C) 2012-2015 The python-bitcoinlib developers
+# Copyright (C) 2018 The python-bitcointx developers
 #
 # This file is part of python-bitcoinlib.
 #
@@ -9,6 +10,8 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+# pylama:ignore=E501,E261,E231,E221
+
 """Scripts
 
 Functionality to build scripts, as well as SignatureHash(). Script evaluation
@@ -17,18 +20,8 @@ is in bitcointx.core.scripteval
 
 from __future__ import absolute_import, division, print_function
 
-import sys
-_bchr = chr
-_bord = ord
-if sys.version > '3':
-    long = int
-    _bchr = lambda x: bytes([x])
-    _bord = lambda x: x
-    from io import BytesIO as _BytesIO
-else:
-    from cStringIO import StringIO as _BytesIO
-
 import struct
+from io import BytesIO
 
 import bitcointx.core
 import bitcointx.core._bignum
@@ -39,9 +32,14 @@ MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
 MAX_SCRIPT_OPCODES = 201
 
+SIGVERSION_BASE = 0
+SIGVERSION_WITNESS_V0 = 1
+
 OPCODE_NAMES = {}
 
 _opcode_instances = []
+
+
 class CScriptOp(int):
     """A single script opcode"""
     __slots__ = []
@@ -50,9 +48,9 @@ class CScriptOp(int):
     def encode_op_pushdata(d):
         """Encode a PUSHDATA op, returning bytes"""
         if len(d) < 0x4c:
-            return b'' + _bchr(len(d)) + d # OP_PUSHDATA
+            return b'' + bytes([len(d)]) + d # OP_PUSHDATA
         elif len(d) <= 0xff:
-            return b'\x4c' + _bchr(len(d)) + d # OP_PUSHDATA1
+            return b'\x4c' + bytes([len(d)]) + d # OP_PUSHDATA1
         elif len(d) <= 0xffff:
             return b'\x4d' + struct.pack(b'<H', len(d)) + d # OP_PUSHDATA2
         elif len(d) <= 0xffffffff:
@@ -497,15 +495,18 @@ DISABLED_OPCODES = frozenset((OP_VERIF, OP_VERNOTIF,
                               OP_OR, OP_XOR, OP_2MUL, OP_2DIV, OP_MUL, OP_DIV, OP_MOD,
                               OP_LSHIFT, OP_RSHIFT))
 
+
 class CScriptInvalidError(Exception):
     """Base class for CScript exceptions"""
     pass
+
 
 class CScriptTruncatedPushDataError(CScriptInvalidError):
     """Invalid pushdata due to truncation"""
     def __init__(self, msg, data):
         self.data = data
         super(CScriptTruncatedPushDataError, self).__init__(msg)
+
 
 class CScript(bytes):
     """Serialized script
@@ -521,12 +522,12 @@ class CScript(bytes):
     def __coerce_instance(cls, other):
         # Coerce other into bytes
         if isinstance(other, CScriptOp):
-            other = _bchr(other)
-        elif isinstance(other, (int, long)):
+            other = bytes([other])
+        elif isinstance(other, (int, int)):
             if 0 <= other <= 16:
-                other = bytes(_bchr(CScriptOp.encode_op_n(other)))
+                other = bytes([CScriptOp.encode_op_n(other)])
             elif other == -1:
-                other = bytes(_bchr(OP_1NEGATE))
+                other = bytes([OP_1NEGATE])
             else:
                 other = CScriptOp.encode_op_pushdata(bitcointx.core._bignum.bn2vch(other))
         elif isinstance(other, (bytes, bytearray)):
@@ -569,7 +570,7 @@ class CScript(bytes):
         i = 0
         while i < len(self):
             sop_idx = i
-            opcode = _bord(self[i])
+            opcode = self[i]
             i += 1
 
             if opcode > OP_PUSHDATA4:
@@ -585,26 +586,25 @@ class CScript(bytes):
                     pushdata_type = 'PUSHDATA1'
                     if i >= len(self):
                         raise CScriptInvalidError('PUSHDATA1: missing data length')
-                    datasize = _bord(self[i])
+                    datasize = self[i]
                     i += 1
 
                 elif opcode == OP_PUSHDATA2:
                     pushdata_type = 'PUSHDATA2'
                     if i + 1 >= len(self):
                         raise CScriptInvalidError('PUSHDATA2: missing data length')
-                    datasize = _bord(self[i]) + (_bord(self[i+1]) << 8)
+                    datasize = self[i] + (self[i+1] << 8)
                     i += 2
 
                 elif opcode == OP_PUSHDATA4:
                     pushdata_type = 'PUSHDATA4'
                     if i + 3 >= len(self):
                         raise CScriptInvalidError('PUSHDATA4: missing data length')
-                    datasize = _bord(self[i]) + (_bord(self[i+1]) << 8) + (_bord(self[i+2]) << 16) + (_bord(self[i+3]) << 24)
+                    datasize = self[i] + (self[i+1] << 8) + (self[i+2] << 16) + (self[i+3] << 24)
                     i += 4
 
                 else:
                     assert False # shouldn't happen
-
 
                 data = bytes(self[i:i+datasize])
 
@@ -673,9 +673,9 @@ class CScript(bytes):
         Note that this test is consensus-critical.
         """
         return (len(self) == 23 and
-                _bord(self[0]) == OP_HASH160 and
-                _bord(self[1]) == 0x14 and
-                _bord(self[22]) == OP_EQUAL)
+                self[0] == OP_HASH160 and
+                self[1] == 0x14 and
+                self[22] == OP_EQUAL)
 
     def is_witness_scriptpubkey(self):
         """Returns true if this is a scriptpubkey signaling segregated witness data.
@@ -699,6 +699,10 @@ class CScript(bytes):
     def witness_version(self):
         """Returns the witness version on [0,16]. """
         return next(iter(self))
+
+    def witness_program(self):
+        """Returns the witness program"""
+        return self[2:]
 
     def is_witness_v0_keyhash(self):
         """Returns true if this is a scriptpubkey for V0 P2WPKH. """
@@ -744,7 +748,7 @@ class CScript(bytes):
                 if op > OP_16:
                     continue
 
-                elif op < OP_PUSHDATA1 and op > OP_0 and len(data) == 1 and _bord(data[0]) <= 16:
+                elif op < OP_PUSHDATA1 and op > OP_0 and len(data) == 1 and data[0] <= 16:
                     # Could have used an OP_n code, rather than a 1-byte push.
                     return False
 
@@ -767,7 +771,7 @@ class CScript(bytes):
     def is_unspendable(self):
         """Test if the script is provably unspendable"""
         return (len(self) > 0 and
-                _bord(self[0]) == OP_RETURN)
+                self[0] == OP_RETURN)
 
     def is_valid(self):
         """Return True if the script is valid, False otherwise
@@ -817,6 +821,7 @@ class CScript(bytes):
             lastOpcode = opcode
         return n
 
+
 class CScriptWitness(ImmutableSerializable):
     """An encoding of the data elements on the initial stack for (segregated
         witness)
@@ -855,6 +860,7 @@ SIGHASH_NONE = 2
 SIGHASH_SINGLE = 3
 SIGHASH_ANYONECANPAY = 0x80
 
+
 def FindAndDelete(script, sig):
     """Consensus critical, see FindAndDelete() in Satoshi codebase"""
     r = b''
@@ -871,6 +877,7 @@ def FindAndDelete(script, sig):
     if not skip:
         r += script[last_sop_idx:]
     return CScript(r)
+
 
 def IsLowDERSignature(sig):
     """
@@ -890,13 +897,14 @@ def IsLowDERSignature(sig):
     # complement modulo the order could have been used instead, which is
     # one byte shorter when encoded correctly.
     max_mod_half_order = [
-      0x7f,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-      0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-      0x5d,0x57,0x6e,0x73,0x57,0xa4,0x50,0x1d,
-      0xdf,0xe9,0x2f,0x46,0x68,0x1b,0x20,0xa0]
+        0x7f,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+        0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+        0x5d,0x57,0x6e,0x73,0x57,0xa4,0x50,0x1d,
+        0xdf,0xe9,0x2f,0x46,0x68,0x1b,0x20,0xa0]
 
     return CompareBigEndian(s_val, [0]) > 0 and \
-      CompareBigEndian(s_val, max_mod_half_order) <= 0
+        CompareBigEndian(s_val, max_mod_half_order) <= 0
+
 
 def CompareBigEndian(c1, c2):
     """
@@ -924,7 +932,7 @@ def CompareBigEndian(c1, c2):
     return 0
 
 
-def RawSignatureHash(script, txTo, inIdx, hashtype):
+def RawSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
     """Consensus-correct SignatureHash
 
     Returns (hash, err) to precisely match the consensus-critical behavior of
@@ -934,6 +942,50 @@ def RawSignatureHash(script, txTo, inIdx, hashtype):
     instead.
     """
     HASH_ONE = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+
+    if sigversion == SIGVERSION_WITNESS_V0:
+        hashPrevouts = b'\x00'*32
+        hashSequence = b'\x00'*32
+        hashOutputs  = b'\x00'*32
+
+        if not (hashtype & SIGHASH_ANYONECANPAY):
+            serialize_prevouts = bytes()
+            for i in txTo.vin:
+                serialize_prevouts += i.prevout.serialize()
+            hashPrevouts = bitcointx.core.Hash(serialize_prevouts)
+
+        if (not (hashtype & SIGHASH_ANYONECANPAY) and (hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
+            serialize_sequence = bytes()
+            for i in txTo.vin:
+                serialize_sequence += struct.pack("<I", i.nSequence)
+            hashSequence = bitcointx.core.Hash(serialize_sequence)
+
+        if ((hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
+            serialize_outputs = bytes()
+            for o in txTo.vout:
+                serialize_outputs += o.serialize()
+            hashOutputs = bitcointx.core.Hash(serialize_outputs)
+        elif ((hashtype & 0x1f) == SIGHASH_SINGLE and inIdx < len(txTo.vout)):
+            serialize_outputs = txTo.vout[inIdx].serialize()
+            hashOutputs = bitcointx.core.Hash(serialize_outputs)
+
+        f = BytesIO()
+        f.write(struct.pack("<i", txTo.nVersion))
+        f.write(hashPrevouts)
+        f.write(hashSequence)
+        txTo.vin[inIdx].prevout.stream_serialize(f)
+        BytesSerializer.stream_serialize(script, f)
+        f.write(struct.pack("<q", amount))
+        f.write(struct.pack("<I", txTo.vin[inIdx].nSequence))
+        f.write(hashOutputs)
+        f.write(struct.pack("<i", txTo.nLockTime))
+        f.write(struct.pack("<i", hashtype))
+
+        hash = bitcointx.core.Hash(f.getvalue())
+
+        return (hash, None)
+
+    assert not script.is_witness_scriptpubkey()
 
     if inIdx >= len(txTo.vin):
         return (HASH_ONE, "inIdx %d out of range (%d)" % (inIdx, len(txTo.vin)))
@@ -978,60 +1030,15 @@ def RawSignatureHash(script, txTo, inIdx, hashtype):
 
     return (hash, None)
 
-SIGVERSION_BASE = 0
-SIGVERSION_WITNESS_V0 = 1
 
-def SignatureHash(script, txTo, inIdx, hashtype, amount=None, sigversion=SIGVERSION_BASE):
+def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
     """Calculate a signature hash
 
     'Cooked' version that checks if inIdx is out of bounds - this is *not*
     consensus-correct behavior, but is what you probably want for general
     wallet use.
     """
-
-    if sigversion == SIGVERSION_WITNESS_V0:
-        hashPrevouts = b'\x00'*32
-        hashSequence = b'\x00'*32
-        hashOutputs  = b'\x00'*32
-
-        if not (hashtype & SIGHASH_ANYONECANPAY):
-            serialize_prevouts = bytes()
-            for i in txTo.vin:
-                serialize_prevouts += i.prevout.serialize()
-            hashPrevouts = bitcointx.core.Hash(serialize_prevouts)
-
-        if (not (hashtype & SIGHASH_ANYONECANPAY) and (hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
-            serialize_sequence = bytes()
-            for i in txTo.vin:
-                serialize_sequence += struct.pack("<I", i.nSequence)
-            hashSequence = bitcointx.core.Hash(serialize_sequence)
-
-        if ((hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
-            serialize_outputs = bytes()
-            for o in txTo.vout:
-                serialize_outputs += o.serialize()
-            hashOutputs = bitcointx.core.Hash(serialize_outputs)
-        elif ((hashtype & 0x1f) == SIGHASH_SINGLE and inIdx < len(txTo.vout)):
-            serialize_outputs = txTo.vout[inIdx].serialize()
-            hashOutputs = bitcointx.core.Hash(serialize_outputs)
-
-        f = _BytesIO()
-        f.write(struct.pack("<i", txTo.nVersion))
-        f.write(hashPrevouts)
-        f.write(hashSequence)
-        txTo.vin[inIdx].prevout.stream_serialize(f)
-        BytesSerializer.stream_serialize(script, f)
-        f.write(struct.pack("<q", amount))
-        f.write(struct.pack("<I", txTo.vin[inIdx].nSequence))
-        f.write(hashOutputs)
-        f.write(struct.pack("<i", txTo.nLockTime))
-        f.write(struct.pack("<i", hashtype))
-
-        return bitcointx.core.Hash(f.getvalue())
-
-    assert not script.is_witness_scriptpubkey()
-
-    (h, err) = RawSignatureHash(script, txTo, inIdx, hashtype)
+    (h, err) = RawSignatureHash(script, txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
     if err is not None:
         raise ValueError(err)
     return h

@@ -356,6 +356,7 @@ class CECKey:
 
     def verify_nonstrict(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a non-strict DER signature"""
+
         if not sig:
             return False
 

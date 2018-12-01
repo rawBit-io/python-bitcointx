@@ -45,10 +45,44 @@ SCRIPT_VERIFY_MINIMALDATA = object()
 SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS = object()
 SCRIPT_VERIFY_CLEANSTACK = object()
 SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()
+SCRIPT_VERIFY_CHECKSEQUENCEVERIFY = object()
+SCRIPT_VERIFY_MINIMALIF = object()
+SCRIPT_VERIFY_NULLFAIL = object()
+SCRIPT_VERIFY_WITNESS = object()
+SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = object()
+SCRIPT_VERIFY_WITNESS_PUBKEYTYPE = object()
+SCRIPT_VERIFY_CONST_SCRIPTCODE = object()
 
 _STRICT_ENCODING_FLAGS = set((SCRIPT_VERIFY_DERSIG, SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_STRICTENC))
 
-UNHANDLED_SCRIPT_VERIFY_FLAGS = set((SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_SIGPUSHONLY, SCRIPT_VERIFY_MINIMALDATA, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY))
+UNHANDLED_SCRIPT_VERIFY_FLAGS = set((
+    SCRIPT_VERIFY_SIGPUSHONLY,
+    SCRIPT_VERIFY_MINIMALDATA,
+    SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
+    SCRIPT_VERIFY_CHECKSEQUENCEVERIFY,
+    SCRIPT_VERIFY_CONST_SCRIPTCODE,
+))
+
+MANDATORY_SCRIPT_VERIFY_FLAGS = SCRIPT_VERIFY_P2SH
+
+STANDARD_SCRIPT_VERIFY_FLAGS = set((
+    MANDATORY_SCRIPT_VERIFY_FLAGS,
+    SCRIPT_VERIFY_DERSIG,
+    SCRIPT_VERIFY_STRICTENC,
+    SCRIPT_VERIFY_MINIMALDATA,
+    SCRIPT_VERIFY_NULLDUMMY,
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS,
+    SCRIPT_VERIFY_CLEANSTACK,
+    SCRIPT_VERIFY_MINIMALIF,
+    SCRIPT_VERIFY_NULLFAIL,
+    SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
+    SCRIPT_VERIFY_CHECKSEQUENCEVERIFY,
+    SCRIPT_VERIFY_LOW_S,
+    SCRIPT_VERIFY_WITNESS,
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM,
+    SCRIPT_VERIFY_WITNESS_PUBKEYTYPE,
+    SCRIPT_VERIFY_CONST_SCRIPTCODE))
+
 
 SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'P2SH': SCRIPT_VERIFY_P2SH,
@@ -61,7 +95,20 @@ SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'DISCOURAGE_UPGRADABLE_NOPS': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS,
     'CLEANSTACK': SCRIPT_VERIFY_CLEANSTACK,
     'CHECKLOCKTIMEVERIFY': SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
+    'CHECKSEQUENCEVERIFY': SCRIPT_VERIFY_CHECKSEQUENCEVERIFY,
+    'MINIMALIF': SCRIPT_VERIFY_MINIMALIF,
+    'NULLFAIL': SCRIPT_VERIFY_NULLFAIL,
+    'WITNESS': SCRIPT_VERIFY_WITNESS,
+    'DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM,
+    'WITNESS_PUBKEYTYPE': SCRIPT_VERIFY_WITNESS_PUBKEYTYPE,
+    'CONST_SCRIPTCODE': SCRIPT_VERIFY_CONST_SCRIPTCODE,
 }
+
+SCRIPT_VERIFY_FLAGS_NAMES = {v: k for k, v in SCRIPT_VERIFY_FLAGS_BY_NAME.items()}
+
+
+def _flags_set_str(flags):
+    return ",".join(SCRIPT_VERIFY_FLAGS_NAMES[f] for f in flags)
 
 
 class EvalScriptError(bitcointx.core.ValidationError):
@@ -130,7 +177,7 @@ class VerifyOpFailedError(EvalScriptError):
 #
 # ported from bitcoind's src/script/interpreter.cpp
 #
-def IsValidSignatureEncoding(sig):
+def _IsValidSignatureEncoding(sig):
     # Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S] [sighash]
     # * total-length: 1-byte length descriptor of everything that follows,
     #   excluding the sighash byte.
@@ -210,6 +257,88 @@ def IsValidSignatureEncoding(sig):
     return True
 
 
+def _IsCompressedOrUncompressedPubKey(pubkey):
+    if len(pubkey) < 33:
+        #  Non-canonical public key: too short
+        return False
+
+    if pubkey[0] == 0x04:
+        if len(pubkey) != 65:
+            #  Non-canonical public key: invalid length for uncompressed key
+            return False
+    elif pubkey[0] == 0x02 or pubkey[0] == 0x03:
+        if len(pubkey) != 33:
+            #  Non-canonical public key: invalid length for compressed key
+            return False
+    else:
+        #  Non-canonical public key: neither compressed nor uncompressed
+        return False
+
+    return True
+
+
+def _IsCompressedPubKey(pubkey):
+    if len(pubkey) != 33:
+        #  Non-canonical public key: invalid length for compressed key
+        return False
+
+    if pubkey[0] != 0x02 and pubkey[0] != 0x03:
+        #  Non-canonical public key: invalid prefix for compressed key
+        return False
+
+    return True
+
+
+def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(), amount=0):
+    sigversion = None
+
+    if witversion == 0:
+        sigversion = SIGVERSION_WITNESS_V0
+        stack = list(witness.stack)
+        if len(program) == 32:
+            # Version 0 segregated witness program: SHA256(CScript) inside the program,
+            # CScript + inputs in witness
+            if len(stack) == 0:
+                raise VerifyScriptError("witness is empty")
+
+            scriptPubKey = stack.pop()
+            hashScriptPubKey = hashlib.sha256(scriptPubKey).digest()
+            if hashScriptPubKey != program:
+                raise VerifyScriptError("witness program mismatch")
+        elif len(program) == 20:
+            # Special case for pay-to-pubkeyhash; signature + pubkey in witness
+            if len(stack) != 2:
+                raise VerifyScriptError("witness program mismatch")  # 2 items in witness
+
+            scriptPubKey = CScript([OP_DUP, OP_HASH160, program, OP_EQUALVERIFY, OP_CHECKSIG])
+        else:
+            raise VerifyScriptError("wrong length for witness program")
+    elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
+        raise VerifyScriptError("upgradeable witness program is not accepted")
+    else:
+        # Higher version witness scripts return true for future softfork compatibility
+        return True
+
+    assert sigversion is not None
+
+    # Disallow stack item size > MAX_SCRIPT_ELEMENT_SIZE in witness stack
+    if any(len(elt) > MAX_SCRIPT_ELEMENT_SIZE for elt in stack):
+        raise VerifyScriptError("maximum push size exceeded by an item on witness stack")
+
+    EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, amount=amount, sigversion=sigversion)
+
+    # Scripts inside witness implicitly require cleanstack behaviour
+    if len(stack) == 0:
+        raise VerifyScriptError("scriptPubKey left an empty stack")
+    elif len(stack) != 1:
+        raise VerifyScriptError("scriptPubKey left extra items on stack")
+
+    if not _CastToBool(stack[-1]):
+        raise VerifyScriptError("scriptPubKey returned false")
+
+    return True
+
+
 def _CastToBigNum(s, err_raiser):
     v = bitcointx.core._bignum.vch2bn(s)
     if len(s) > MAX_NUM_SIZE:
@@ -228,22 +357,38 @@ def _CastToBool(s):
     return False
 
 
-def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
+def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser,
+              amount=0, sigversion=SIGVERSION_BASE):
     key = bitcointx.core.key.CECKey()
     key.set_pubkey(pubkey)
 
     if len(sig) == 0:
         return False
 
-    if _STRICT_ENCODING_FLAGS & flags:
-        if not IsValidSignatureEncoding(sig):
-            return False
+    hashtype = sig[-1]
+
+    if flags & _STRICT_ENCODING_FLAGS:
         verify_fn = key.verify
+
+        if not _IsValidSignatureEncoding(sig):
+            raise VerifyScriptError("signature DER encoding is not strictly valid")
+
+        if SCRIPT_VERIFY_STRICTENC in flags:
+            low_hashtype = hashtype & (~SIGHASH_ANYONECANPAY)
+            if low_hashtype < SIGHASH_ALL or low_hashtype > SIGHASH_SINGLE:
+                raise VerifyScriptError("unknown hashtype in signature")
+
+            if not _IsCompressedOrUncompressedPubKey(pubkey):
+                raise VerifyScriptError("unknown pubkey type")
     else:
         verify_fn = key.verify_nonstrict
 
-    hashtype = sig[-1]
-    sig = sig[:-1]
+    if SCRIPT_VERIFY_WITNESS_PUBKEYTYPE in flags and sigversion == SIGVERSION_WITNESS_V0:
+        if not _IsCompressedPubKey(pubkey):
+            raise VerifyScriptError("witness pubkey is not compressed")
+
+    if SCRIPT_VERIFY_LOW_S in flags and not IsLowDERSignature(sig):
+        raise VerifyScriptError("signature is not low-S")
 
     # Raw signature hash due to the SIGHASH_SINGLE bug
     #
@@ -253,12 +398,13 @@ def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
     # imply the scriptSig being checked doesn't correspond to a valid txout -
     # that should cause other validation machinery to fail long before we ever
     # got here.
-    (h, err) = RawSignatureHash(script, txTo, inIdx, hashtype)
+    (h, err) = RawSignatureHash(script, txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
 
-    return verify_fn(h, sig)
+    return verify_fn(h, sig[:-1])
 
 
-def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCount):
+def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCount,
+                   amount=0, sigversion=SIGVERSION_BASE):
     i = 1
     if len(stack) < i:
         err_raiser(MissingOpArgumentsError, opcode, stack, i)
@@ -268,6 +414,9 @@ def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCou
         err_raiser(ArgumentsInvalidError, opcode, "keys count invalid")
     i += 1
     ikey = i
+    # ikey2 is the position of last non-signature item in the stack. Top stack item = 1.
+    # With SCRIPT_VERIFY_NULLFAIL, this is used for cleanup if operation fails.
+    ikey2 = keys_count + 2
     i += keys_count
     nOpCount[0] += keys_count
     if nOpCount[0] > MAX_SCRIPT_OPCODES:
@@ -287,21 +436,22 @@ def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCou
     elif len(stack) < i:
         raise err_raiser(ArgumentsInvalidError, opcode, "missing dummy value")
 
-    # Drop the signature, since there's no way for a signature to sign itself
-    #
-    # Of course, this can only come up in very contrived cases now that
-    # scriptSig and scriptPubKey are processed separately.
-    for k in range(sigs_count):
-        sig = stack[-isig - k]
-        script = FindAndDelete(script, CScript([sig]))
+    if sigversion == SIGVERSION_BASE:
+        # Drop the signature in pre-segwit scripts but not segwit scripts
+        for k in range(sigs_count):
+            sig = stack[-isig - k]
+            script = FindAndDelete(script, CScript([sig]))
 
     success = True
 
+    empty_sig_count = 0
     while success and sigs_count > 0:
         sig = stack[-isig]
+        empty_sig_count += int(len(sig) == 0)
         pubkey = stack[-ikey]
 
-        if _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser):
+        if _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser,
+                     amount=amount, sigversion=sigversion):
             isig += 1
             sigs_count -= 1
 
@@ -316,6 +466,12 @@ def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCou
                 err_raiser(VerifyOpFailedError, opcode)
 
     while i > 1:
+        if not success and SCRIPT_VERIFY_NULLFAIL in flags and ikey2 == 0 and len(stack[-1]):
+            raise VerifyScriptError("signature check failed, and of the signatures are not empty")
+
+        if ikey2 > 0:
+            ikey2 -= 1
+
         stack.pop()
         i -= 1
 
@@ -473,7 +629,7 @@ def _CheckExec(vfExec):
     return True
 
 
-def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
+def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(), amount=0, sigversion=SIGVERSION_BASE):
     """Evaluate a script
 
     """
@@ -592,22 +748,25 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
 
             elif sop == OP_CHECKMULTISIG or sop == OP_CHECKMULTISIGVERIFY:
                 tmpScript = CScript(scriptIn[pbegincodehash:])
-                _CheckMultiSig(sop, tmpScript, stack, txTo, inIdx, flags, err_raiser, nOpCount)
+                _CheckMultiSig(sop, tmpScript, stack, txTo, inIdx, flags, err_raiser, nOpCount,
+                               amount=amount, sigversion=sigversion)
 
             elif sop == OP_CHECKSIG or sop == OP_CHECKSIGVERIFY:
                 check_args(2)
                 vchPubKey = stack[-1]
                 vchSig = stack[-2]
+
+                # Subset of script starting at the most recent codeseparator
                 tmpScript = CScript(scriptIn[pbegincodehash:])
 
-                # Drop the signature, since there's no way for a signature to sign itself
-                #
-                # Of course, this can only come up in very contrived cases now that
-                # scriptSig and scriptPubKey are processed separately.
-                tmpScript = FindAndDelete(tmpScript, CScript([vchSig]))
+                if sigversion == SIGVERSION_BASE:
+                    # Drop the signature in pre-segwit scripts but not segwit scripts
+                    tmpScript = FindAndDelete(tmpScript, CScript([vchSig]))
 
                 ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
-                               err_raiser)
+                               err_raiser, amount=amount, sigversion=sigversion)
+                if not ok and SCRIPT_VERIFY_NULLFAIL in flags and len(vchSig):
+                    raise VerifyScriptError("signature check failed, and signature is not empty")
                 if not ok and sop == OP_CHECKSIGVERIFY:
                     err_raiser(VerifyOpFailedError, sop)
 
@@ -690,6 +849,13 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
                 if fExec:
                     check_args(1)
                     vch = stack.pop()
+
+                    if sigversion == SIGVERSION_WITNESS_V0 and SCRIPT_VERIFY_MINIMALIF in flags:
+                        if len(vch) > 1:
+                            raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
+                        if len(vch) == 1 and vch[0] != 1:
+                            raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
+
                     val = _CastToBool(vch)
                     if sop == OP_NOTIF:
                         val = not val
@@ -820,22 +986,24 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
                               flags=flags)
 
 
-def EvalScript(stack, scriptIn, txTo, inIdx, flags=()):
+def EvalScript(stack, scriptIn, txTo, inIdx, flags=(), amount=0, sigversion=SIGVERSION_BASE):
     """Evaluate a script
 
-    stack    - Initial stack
+    stack      - Initial stack
 
-    scriptIn - Script
+    scriptIn   - Script
 
-    txTo     - Transaction the script is a part of
+    txTo       - Transaction the script is a part of
 
-    inIdx    - txin index of the scriptSig
+    inIdx      - txin index of the scriptSig
 
-    flags    - SCRIPT_VERIFY_* flags to apply
+    flags      - SCRIPT_VERIFY_* flags to apply
+
+    sigversion - SIGVERSION_* version (not used for now)
     """
 
     try:
-        _EvalScript(stack, scriptIn, txTo, inIdx, flags=flags)
+        _EvalScript(stack, scriptIn, txTo, inIdx, flags=flags, amount=amount, sigversion=sigversion)
     except CScriptInvalidError as err:
         raise EvalScriptError(repr(err),
                               stack=stack,
@@ -849,7 +1017,7 @@ class VerifyScriptError(bitcointx.core.ValidationError):
     pass
 
 
-def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
+def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=None, amount=0, witness=None):
     """Verify a scriptSig satisfies a scriptPubKey
 
     scriptSig    - Signature
@@ -863,9 +1031,14 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
     Raises a ValidationError subclass if the validation fails.
     """
 
-    flags = set(flags)
+    if flags is None:
+        flags = STANDARD_SCRIPT_VERIFY_FLAGS - UNHANDLED_SCRIPT_VERIFY_FLAGS
+    else:
+        flags = set(flags)  # might be passed as tuple
 
-    assert not (UNHANDLED_SCRIPT_VERIFY_FLAGS & flags), "some of the flags cannot be handled by current code"
+    if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
+        raise VerifyScriptError(
+            "some of the flags cannot be handled by current code: {}".format(_flags_set_str(flags)))
 
     stack = []
     EvalScript(stack, scriptSig, txTo, inIdx, flags=flags)
@@ -876,6 +1049,25 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
         raise VerifyScriptError("scriptPubKey left an empty stack")
     if not _CastToBool(stack[-1]):
         raise VerifyScriptError("scriptPubKey returned false")
+
+    hadWitness = False
+    if witness is None:
+        witness = CScriptWitness([])
+
+    if SCRIPT_VERIFY_WITNESS in flags and scriptPubKey.is_witness_scriptpubkey():
+        hadWitness = True
+
+        if scriptSig:
+            raise VerifyScriptError("scriptSig is not empty")
+
+        VerifyWitnessProgram(witness,
+                             scriptPubKey.witness_version(),
+                             scriptPubKey.witness_program(),
+                             txTo, inIdx, flags=flags, amount=amount)
+
+        # Bypass the cleanstack check at the end. The actual stack is obviously not clean
+        # for witness programs.
+        stack = stack[:1]
 
     # Additional validation for spend-to-script-hash transactions
     if SCRIPT_VERIFY_P2SH in flags and scriptPubKey.is_p2sh():
@@ -900,17 +1092,45 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=()):
         if not _CastToBool(stack[-1]):
             raise VerifyScriptError("P2SH inner scriptPubKey returned false")
 
+        # P2SH witness program
+        if SCRIPT_VERIFY_WITNESS in flags and pubKey2.is_witness_scriptpubkey():
+            hadWitness = True
+
+            if scriptSig != CScript([pubKey2]):
+                raise VerifyScriptError("scriptSig is not exactly a single push of the redeemScript")
+
+            VerifyWitnessProgram(witness,
+                                 pubKey2.witness_version(),
+                                 pubKey2.witness_program(),
+                                 txTo, inIdx, flags=flags, amount=amount)
+
+            # Bypass the cleanstack check at the end. The actual stack is obviously not clean
+            # for witness programs.
+            stack = stack[:1]
+
     if SCRIPT_VERIFY_CLEANSTACK in flags:
         assert SCRIPT_VERIFY_P2SH in flags
 
-        if len(stack) != 1:
+        if len(stack) == 0:
+            raise VerifyScriptError("scriptPubKey left an empty stack")
+        elif len(stack) != 1:
             raise VerifyScriptError("scriptPubKey left extra items on stack")
+
+    if SCRIPT_VERIFY_WITNESS in flags:
+        # We can't check for correct unexpected witness data if P2SH was off, so require
+        # that WITNESS implies P2SH. Otherwise, going from WITNESS->P2SH+WITNESS would be
+        # possible, which is not a softfork.
+        assert SCRIPT_VERIFY_P2SH in flags, "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH"
+
+        if not hadWitness and witness:
+            raise VerifyScriptError("Unexpected witness")
 
 
 class VerifySignatureError(bitcointx.core.ValidationError):
     pass
 
 
+# XXX not tested for segwit, not covered by tests
 def VerifySignature(txFrom, txTo, inIdx):
     """Verify a scriptSig signature can spend a txout
 
@@ -932,7 +1152,12 @@ def VerifySignature(txFrom, txTo, inIdx):
     if txin.prevout.hash != txFrom.GetTxid():
         raise VerifySignatureError("prevout hash does not match txFrom")
 
-    VerifyScript(txin.scriptSig, txout.scriptPubKey, txTo, inIdx)
+    witness = None
+    if txFrom.wit:
+        witness = ctx.wit.vtxinwit[vin_index].scriptWitness
+
+    VerifyScript(txin.scriptSig, txout.scriptPubKey, txTo, inIdx,
+                 amount=txout.nValue, witness=witness or CScriptWitness([]))
 
 
 __all__ = (

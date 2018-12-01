@@ -1,4 +1,5 @@
 # Copyright (C) 2013-2017 The python-bitcoinlib developers
+# Copyright (C) 2018 The python-bitcointx developers
 #
 # This file is part of python-bitcoinlib.
 #
@@ -16,14 +17,16 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import json
 import os
 import unittest
+import logging
 
 from binascii import unhexlify
 
-from bitcointx.core import CTxOut, CTxIn, CTransaction, COutPoint, ValidationError
-from bitcointx.core.script import OPCODES_BY_NAME, CScript
+from bitcointx.core import CTxOut, CTxIn, CTransaction, COutPoint, ValidationError, x as ParseHex
+from bitcointx.core import CTxWitness, CTxInWitness
+from bitcointx.core.script import OPCODES_BY_NAME, CScript, CScriptWitness
 from bitcointx.core.script import OP_0
 from bitcointx.core.scripteval import VerifyScript
-from bitcointx.core.scripteval import SCRIPT_VERIFY_FLAGS_BY_NAME, UNHANDLED_SCRIPT_VERIFY_FLAGS
+from bitcointx.core.scripteval import SCRIPT_VERIFY_FLAGS_BY_NAME
 
 
 def parse_script(s):
@@ -56,15 +59,46 @@ def parse_script(s):
 
 
 def load_test_vectors(name):
+    logging.basicConfig()
+    log = logging.getLogger("Test_EvalScript")
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
+        fixme_comment = None
+        num_skipped = 0
         for test_case in json.load(fd):
             if len(test_case) == 1:
                 continue  # comment
 
-            if len(test_case) == 3:
-                test_case.append('')  # add missing comment
+            if len(test_case) == 2:
+                if test_case[0] == 'FIXME':
+                    fixme_comment = test_case[1]
+                    continue
+                if test_case[0] == 'FIXME_END':
+                    log.warning("SKIPPED {} tests: {}"
+                                .format(num_skipped, fixme_comment))
+                    fixme_comment = None
+                    num_skipped = 0
+                    continue
 
-            scriptSig, scriptPubKey, flags, comment = test_case
+            if fixme_comment:
+                num_skipped += 1
+                continue
+
+            to_unpack = test_case.copy()
+
+            witness = CScriptWitness()
+            nValue = 0
+            if isinstance(to_unpack[0], list):
+                wdata = to_unpack.pop(0)
+                stack = [CScript(ParseHex(d)) for d in wdata[:-1]]
+                witness = CScriptWitness(stack)
+                nValue = int(round(wdata[-1] * 1e8))
+
+            if len(to_unpack) == 4:
+                to_unpack.append('')  # add missing comment
+
+            assert len(to_unpack) == 5, "unexpected test data format: {}".format(to_unpack)
+
+            scriptSig, scriptPubKey, flags, expected_result, comment = to_unpack
 
             scriptSig = parse_script(scriptSig)
             scriptPubKey = parse_script(scriptPubKey)
@@ -82,36 +116,39 @@ def load_test_vectors(name):
 
                     flag_set.add(flag)
 
-            flag_set -= UNHANDLED_SCRIPT_VERIFY_FLAGS
-            yield (scriptSig, scriptPubKey, flag_set, comment, test_case)
+            yield (scriptSig, scriptPubKey, witness, nValue,
+                   flag_set, expected_result, comment, test_case)
+
+        if fixme_comment is not None:
+            raise Exception('Unbalanced FIXME blocks in test data')
 
 
 class Test_EvalScript(unittest.TestCase):
-    def create_test_txs(self, scriptSig, scriptPubKey):
+    def create_test_txs(self, scriptSig, scriptPubKey, witness, nValue):
         txCredit = CTransaction([CTxIn(COutPoint(), CScript([OP_0, OP_0]), nSequence=0xFFFFFFFF)],
-                                [CTxOut(0, scriptPubKey)],
+                                [CTxOut(nValue, scriptPubKey)],
+                                witness=CTxWitness(),
                                 nLockTime=0)
         txSpend = CTransaction([CTxIn(COutPoint(txCredit.GetTxid(), 0), scriptSig, nSequence=0xFFFFFFFF)],
-                               [CTxOut(0, CScript())],
-                               nLockTime=0)
+                               [CTxOut(nValue, CScript())],
+                               nLockTime=0,
+                               witness=CTxWitness([CTxInWitness(witness)]))
         return (txCredit, txSpend)
 
-    def test_script_valid(self):
-        for scriptSig, scriptPubKey, flags, comment, test_case in load_test_vectors('script_valid.json'):
-            (txCredit, txSpend) = self.create_test_txs(scriptSig, scriptPubKey)
+    def test_script(self):
+        num = 0
+        for t in load_test_vectors('script_tests.json'):
+            (scriptSig, scriptPubKey, witness, nValue,
+             flags, expected_result, comment, test_case) = t
+            (txCredit, txSpend) = self.create_test_txs(scriptSig, scriptPubKey, witness, nValue)
 
+            num += 1
             try:
-                VerifyScript(scriptSig, scriptPubKey, txSpend, 0, flags)
+                VerifyScript(scriptSig, scriptPubKey, txSpend, 0, flags, amount=nValue, witness=witness)
             except ValidationError as err:
-                self.fail('Script FAILED: %r %r %r with exception %r' % (scriptSig, scriptPubKey, comment, err))
-
-    def test_script_invalid(self):
-        for scriptSig, scriptPubKey, flags, comment, test_case in load_test_vectors('script_invalid.json'):
-            (txCredit, txSpend) = self.create_test_txs(scriptSig, scriptPubKey)
-
-            try:
-                VerifyScript(scriptSig, scriptPubKey, txSpend, 0, flags)
-            except ValidationError:
+                if expected_result == 'OK':
+                    self.fail('Script FAILED: %r %r %r with exception %r\n\nTest data: %r' % (scriptSig, scriptPubKey, comment, err, test_case))
                 continue
 
-            self.fail('Expected %r to fail' % test_case)
+            if expected_result != 'OK':
+                self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
