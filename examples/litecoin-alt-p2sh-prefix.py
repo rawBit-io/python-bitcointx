@@ -11,12 +11,12 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-import bitcointx.core
-from bitcointx.core import CBlock, x, COIN
+from bitcointx import SelectAlternativeParams
+from bitcointx.core import CBlock, x, COIN, CoreChainParams
 from bitcointx.wallet import CBitcoinAddress
 
 
-class CoreLitecoinParams(bitcointx.core.CoreChainParams):
+class CoreLitecoinParams(CoreChainParams):
     NAME = 'litecoin-mainnet'
     GENESIS_BLOCK = CBlock.deserialize(x(
         '0100000000000000000000000000000000000000000000000000000000000000'
@@ -40,14 +40,9 @@ class MainLitecoinParams(CoreLitecoinParams):
     ALT_BASE58_SCRIPT_PREFIXES = {'legacy': 5, 'canonical': 50}
 
 
-def select_litecoin_params():
-    bitcointx.params = MainLitecoinParams
-    bitcointx.core.coreparams = CoreLitecoinParams
-
-
 if __name__ == '__main__':
 
-    select_litecoin_params()
+    SelectAlternativeParams(CoreLitecoinParams, MainLitecoinParams)
 
     canonical_adr = 'MMDkQMv8pGGmAXdVyxaW8YtQMCHw7eouma'
     legacy_adr = '3F1c6UWAs9RLN2Mbt5bAJue12VhVCorXzs'
