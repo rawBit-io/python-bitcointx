@@ -66,17 +66,18 @@ bitcointx.core to convert from big-endian and little-endian hex to raw bytes to
 accomodate this. In addition see b2x() and b2lx() for conversion from bytes to
 big/little-endian hex.
 
-## Other considerations and warnings
+## Note on VerifyScript() usage
 
 Script evaluation code of VerifyScript() is NOT in sync with bitcoin core code,
 and lacks some features. While some effort was made to make it behave closer
 to the code in bitcoin core, full compatibility is far away, and most likely
 will not be ever achieved.
 
-DO NOT rely on VerifyScript() in deciding if certain signed transaction input is valid.
-In some corner cases (non-standard signature encoding, unhandled script evaluation
-flags, etc) it may deem something invalid that bitcoind would accept as valid.
-More importanty, it could accept something as valid that bitcoind would deem invalid.
+**WARNING**: DO NOT rely on VerifyScript() in deciding if certain signed
+transaction input is valid.  In some corner cases (non-standard signature encoding,
+unhandled script evaluation flags, etc) it may deem something invalid that bitcoind
+would accept as valid.  More importanty, it could accept something as valid
+that bitcoind would deem invalid.
 
 It is good to use VerifyScript to pre-screen the transaction inputs that
 you create, before passing the transaction to bitcoind, or for debugging purposes.
