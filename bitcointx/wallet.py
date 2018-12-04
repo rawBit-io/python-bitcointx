@@ -116,6 +116,10 @@ class CBase58BitcoinAddress(bitcointx.base58.CBase58Data, CBitcoinAddress):
 
     @classmethod
     def from_bytes(cls, data, nVersion):
+        alt_script_prefixes = getattr(bitcointx.params, 'ALT_BASE58_SCRIPT_PREFIXES', None)
+        if alt_script_prefixes and nVersion in alt_script_prefixes.values():
+            nVersion = bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']
+
         self = super(CBase58BitcoinAddress, cls).from_bytes(data, nVersion)
 
         if nVersion == bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']:
