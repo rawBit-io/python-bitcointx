@@ -9,59 +9,43 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+# pylama:ignore=E501
+
 from __future__ import absolute_import, division, print_function
 
 import binascii
 import struct
-import sys
 import time
 
-from .script import CScript, CScriptWitness, CScriptOp, OP_RETURN
+from .script import CScript, CScriptWitness, OP_RETURN
 
 from .serialize import *
-
-if sys.version > '3':
-    _bytes = bytes
-else:
-    _bytes = lambda x: bytes(bytearray(x))
 
 # Core definitions
 COIN = 100000000
 MAX_BLOCK_SIZE = 1000000
 MAX_BLOCK_WEIGHT = 4000000
 MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50
-WITNESS_COINBASE_SCRIPTPUBKEY_MAGIC = _bytes([OP_RETURN, 0x24, 0xaa, 0x21, 0xa9, 0xed])
+WITNESS_COINBASE_SCRIPTPUBKEY_MAGIC = bytes([OP_RETURN, 0x24, 0xaa, 0x21, 0xa9, 0xed])
+
 
 def MoneyRange(nValue, params=None):
     global coreparams
     if not params:
-      params = coreparams
+        params = coreparams
 
     return 0 <= nValue <= params.MAX_MONEY
 
-def _py2_x(h):
-    """Convert a hex string to bytes"""
-    return binascii.unhexlify(h)
 
 def x(h):
     """Convert a hex string to bytes"""
     return binascii.unhexlify(h.encode('utf8'))
 
-def _py2_b2x(b):
-    """Convert bytes to a hex string"""
-    return binascii.hexlify(b)
 
 def b2x(b):
     """Convert bytes to a hex string"""
     return binascii.hexlify(b).decode('utf8')
 
-def _py2_lx(h):
-    """Convert a little-endian hex string to bytes
-
-    Lets you write uint256's and uint160's the way the Satoshi codebase shows
-    them.
-    """
-    return binascii.unhexlify(h)[::-1]
 
 def lx(h):
     """Convert a little-endian hex string to bytes
@@ -71,13 +55,6 @@ def lx(h):
     """
     return binascii.unhexlify(h.encode('utf8'))[::-1]
 
-def _py2_b2lx(b):
-    """Convert bytes to a little-endian hex string
-
-    Lets you show uint256's and uint160's the way the Satoshi codebase shows
-    them.
-    """
-    return binascii.hexlify(b[::-1])
 
 def b2lx(b):
     """Convert bytes to a little-endian hex string
@@ -86,17 +63,6 @@ def b2lx(b):
     them.
     """
     return binascii.hexlify(b[::-1]).decode('utf8')
-
-if not (sys.version > '3'):
-    x = _py2_x
-    b2x = _py2_b2x
-    lx = _py2_lx
-    b2lx = _py2_b2lx
-
-del _py2_x
-del _py2_b2x
-del _py2_lx
-del _py2_b2lx
 
 
 def str_money_value(value):
@@ -114,6 +80,7 @@ class ValidationError(Exception):
     Everything that is related to validating the blockchain, blocks,
     transactions, scripts, etc. is derived from this class.
     """
+
 
 def __make_mutable(cls):
     # For speed we use a class decorator that removes the immutable
@@ -140,8 +107,8 @@ class COutPoint(ImmutableSerializable):
 
     @classmethod
     def stream_deserialize(cls, f):
-        hash = ser_read(f,32)
-        n = struct.unpack(b"<I", ser_read(f,4))[0]
+        hash = ser_read(f, 32)
+        n = struct.unpack(b"<I", ser_read(f, 4))[0]
         return cls(hash, n)
 
     def stream_serialize(self, f):
@@ -174,6 +141,7 @@ class COutPoint(ImmutableSerializable):
         else:
             return cls(outpoint.hash, outpoint.n)
 
+
 @__make_mutable
 class CMutableOutPoint(COutPoint):
     """A mutable COutPoint"""
@@ -184,6 +152,7 @@ class CMutableOutPoint(COutPoint):
         """Create a mutable copy of an existing COutPoint"""
         return cls(outpoint.hash, outpoint.n)
 
+
 class CTxIn(ImmutableSerializable):
     """An input of a transaction
 
@@ -192,7 +161,7 @@ class CTxIn(ImmutableSerializable):
     """
     __slots__ = ['prevout', 'scriptSig', 'nSequence']
 
-    def __init__(self, prevout=COutPoint(), scriptSig=CScript(), nSequence = 0xffffffff):
+    def __init__(self, prevout=COutPoint(), scriptSig=CScript(), nSequence=0xffffffff):
         if not (0 <= nSequence <= 0xffffffff):
             raise ValueError('CTxIn: nSequence must be an integer between 0x0 and 0xffffffff; got %x' % nSequence)
         object.__setattr__(self, 'nSequence', nSequence)
@@ -204,7 +173,7 @@ class CTxIn(ImmutableSerializable):
     def stream_deserialize(cls, f):
         prevout = COutPoint.stream_deserialize(f)
         scriptSig = script.CScript(BytesSerializer.stream_deserialize(f))
-        nSequence = struct.unpack(b"<I", ser_read(f,4))[0]
+        nSequence = struct.unpack(b"<I", ser_read(f, 4))[0]
         return cls(prevout, scriptSig, nSequence)
 
     def stream_serialize(self, f):
@@ -231,12 +200,13 @@ class CTxIn(ImmutableSerializable):
         else:
             return cls(COutPoint.from_outpoint(txin.prevout), txin.scriptSig, txin.nSequence)
 
+
 @__make_mutable
 class CMutableTxIn(CTxIn):
     """A mutable CTxIn"""
     __slots__ = []
 
-    def __init__(self, prevout=None, scriptSig=CScript(), nSequence = 0xffffffff):
+    def __init__(self, prevout=None, scriptSig=CScript(), nSequence=0xffffffff):
         if not (0 <= nSequence <= 0xffffffff):
             raise ValueError('CTxIn: nSequence must be an integer between 0x0 and 0xffffffff; got %x' % nSequence)
         self.nSequence = nSequence
@@ -267,7 +237,7 @@ class CTxOut(ImmutableSerializable):
 
     @classmethod
     def stream_deserialize(cls, f):
-        nValue = struct.unpack(b"<q", ser_read(f,8))[0]
+        nValue = struct.unpack(b"<q", ser_read(f, 8))[0]
         scriptPubKey = script.CScript(BytesSerializer.stream_deserialize(f))
         return cls(nValue, scriptPubKey)
 
@@ -300,6 +270,7 @@ class CTxOut(ImmutableSerializable):
 
         else:
             return cls(txout.nValue, txout.scriptPubKey)
+
 
 @__make_mutable
 class CMutableTxOut(CTxOut):
@@ -346,6 +317,7 @@ class CTxInWitness(ImmutableSerializable):
         else:
             return cls(txinwitness.scriptWitness)
 
+
 class CTxWitness(ImmutableSerializable):
     """Witness data for all inputs to a transaction"""
     __slots__ = ['vtxinwit']
@@ -355,14 +327,15 @@ class CTxWitness(ImmutableSerializable):
 
     def is_null(self):
         for n in range(len(self.vtxinwit)):
-            if not self.vtxinwit[n].is_null(): return False
+            if not self.vtxinwit[n].is_null():
+                return False
         return True
 
     # FIXME this cannot be a @classmethod like the others because we need to
     # know how many items to deserialize, which comes from len(vin)
     def stream_deserialize(self, f):
         vtxinwit = tuple(CTxInWitness.stream_deserialize(f) for dummy in
-                range(len(self.vtxinwit)))
+                         range(len(self.vtxinwit)))
         return CTxWitness(vtxinwit)
 
     def stream_serialize(self, f):
@@ -418,7 +391,7 @@ class CTransaction(ImmutableSerializable):
         but not here.
         """
         # FIXME can't assume f is seekable
-        nVersion = struct.unpack(b"<i", ser_read(f,4))[0]
+        nVersion = struct.unpack(b"<i", ser_read(f, 4))[0]
         pos = f.tell()
         markerbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         flagbyte = struct.unpack(b'B', ser_read(f, 1))[0]
@@ -427,22 +400,21 @@ class CTransaction(ImmutableSerializable):
             vout = VectorSerializer.stream_deserialize(CTxOut, f)
             wit = CTxWitness(tuple(0 for dummy in range(len(vin))))
             wit = wit.stream_deserialize(f)
-            nLockTime = struct.unpack(b"<I", ser_read(f,4))[0]
+            nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion, wit)
         else:
-            f.seek(pos) # put marker byte back, since we don't have peek
+            f.seek(pos)  # put marker byte back, since we don't have peek
             vin = VectorSerializer.stream_deserialize(CTxIn, f)
             vout = VectorSerializer.stream_deserialize(CTxOut, f)
-            nLockTime = struct.unpack(b"<I", ser_read(f,4))[0]
+            nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion)
-
 
     def stream_serialize(self, f, include_witness=True):
         f.write(struct.pack(b"<i", self.nVersion))
         if include_witness and not self.wit.is_null():
             assert(len(self.wit.vtxinwit) <= len(self.vin))
-            f.write(b'\x00') # Marker
-            f.write(b'\x01') # Flag
+            f.write(b'\x00')  # Marker
+            f.write(b'\x01')  # Flag
             VectorSerializer.stream_serialize(CTxIn, self.vin, f)
             VectorSerializer.stream_serialize(CTxOut, self.vout, f)
             self.wit.stream_serialize(f)
@@ -460,7 +432,7 @@ class CTransaction(ImmutableSerializable):
 
     def __repr__(self):
         return "CTransaction(%r, %r, %i, %i, %r)" % (self.vin, self.vout,
-                self.nLockTime, self.nVersion, self.wit)
+                                                     self.nLockTime, self.nVersion, self.wit)
 
     @classmethod
     def from_tx(cls, tx):
@@ -481,10 +453,11 @@ class CTransaction(ImmutableSerializable):
             includes it. """
         if self.wit != CTxWitness():
             txid = Hash(CTransaction(self.vin, self.vout, self.nLockTime,
-                self.nVersion).serialize())
+                                     self.nVersion).serialize())
         else:
             txid = Hash(self.serialize())
         return txid
+
 
 @__make_mutable
 class CMutableTransaction(CTransaction):
@@ -534,12 +507,12 @@ class CBlockHeader(ImmutableSerializable):
 
     @classmethod
     def stream_deserialize(cls, f):
-        nVersion = struct.unpack(b"<i", ser_read(f,4))[0]
-        hashPrevBlock = ser_read(f,32)
-        hashMerkleRoot = ser_read(f,32)
-        nTime = struct.unpack(b"<I", ser_read(f,4))[0]
-        nBits = struct.unpack(b"<I", ser_read(f,4))[0]
-        nNonce = struct.unpack(b"<I", ser_read(f,4))[0]
+        nVersion = struct.unpack(b"<i", ser_read(f, 4))[0]
+        hashPrevBlock = ser_read(f, 32)
+        hashMerkleRoot = ser_read(f, 32)
+        nTime = struct.unpack(b"<I", ser_read(f, 4))[0]
+        nBits = struct.unpack(b"<I", ser_read(f, 4))[0]
+        nNonce = struct.unpack(b"<I", ser_read(f, 4))[0]
         return cls(nVersion, hashPrevBlock, hashMerkleRoot, nTime, nBits, nNonce)
 
     def stream_serialize(self, f):
@@ -568,11 +541,13 @@ class CBlockHeader(ImmutableSerializable):
 
     def __repr__(self):
         return "%s(%i, lx(%s), lx(%s), %s, 0x%08x, 0x%08x)" % \
-                (self.__class__.__name__, self.nVersion, b2lx(self.hashPrevBlock), b2lx(self.hashMerkleRoot),
-                 self.nTime, self.nBits, self.nNonce)
+            (self.__class__.__name__, self.nVersion, b2lx(self.hashPrevBlock), b2lx(self.hashMerkleRoot),
+             self.nTime, self.nBits, self.nNonce)
+
 
 class NoWitnessData(Exception):
     """The block does not have witness data"""
+
 
 class CBlock(CBlockHeader):
     """A block including all transactions in it"""
@@ -733,6 +708,7 @@ class CBlock(CBlockHeader):
         """Return the block weight: (stripped_size * 3) + total_size"""
         return len(self.serialize(dict(include_witness=False))) * 3 + len(self.serialize())
 
+
 class CoreChainParams(object):
     """Define consensus-critical parameters of a given instance of the Bitcoin system"""
     MAX_MONEY = None
@@ -741,6 +717,7 @@ class CoreChainParams(object):
     SUBSIDY_HALVING_INTERVAL = None
     NAME = None
 
+
 class CoreMainParams(CoreChainParams):
     MAX_MONEY = 21000000 * COIN
     NAME = 'mainnet'
@@ -748,9 +725,11 @@ class CoreMainParams(CoreChainParams):
     SUBSIDY_HALVING_INTERVAL = 210000
     PROOF_OF_WORK_LIMIT = 2**256-1 >> 32
 
+
 class CoreTestNetParams(CoreMainParams):
     NAME = 'testnet'
     GENESIS_BLOCK = CBlock.deserialize(x('0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4adae5494dffff001d1aa4ae180101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000'))
+
 
 class CoreRegTestParams(CoreTestNetParams):
     NAME = 'regtest'
@@ -778,7 +757,7 @@ def _SelectAlternativeCoreParams(alt_core_params):
 
     assert(len(param_names) >= len(required_param_names)
            and len(required_param_names - param_names) == 0),\
-        ("alternative core params should specify all fields defined in "
+        ("alt_core_params should specify all fields defined in "
          "CoreChainParams, but {} are undefined"
          .format(required_param_names - param_names))
 
@@ -804,6 +783,7 @@ def _SelectCoreParams(name):
 
 class CheckTransactionError(ValidationError):
     pass
+
 
 def CheckTransaction(tx):
     """Basic transaction checks that don't depend on any context.
@@ -850,14 +830,13 @@ def CheckTransaction(tx):
                 raise CheckTransactionError("CheckTransaction() : prevout is null")
 
 
-
-
-
 class CheckBlockHeaderError(ValidationError):
     pass
 
+
 class CheckProofOfWorkError(CheckBlockHeaderError):
     pass
+
 
 def CheckProofOfWork(hash, nBits):
     """Check a proof-of-work
@@ -876,7 +855,7 @@ def CheckProofOfWork(hash, nBits):
         raise CheckProofOfWorkError("CheckProofOfWork() : hash doesn't match nBits")
 
 
-def CheckBlockHeader(block_header, fCheckPoW = True, cur_time=None):
+def CheckBlockHeader(block_header, fCheckPoW=True, cur_time=None):
     """Context independent CBlockHeader checks.
 
     fCheckPoW - Check proof-of-work.
@@ -900,6 +879,7 @@ def CheckBlockHeader(block_header, fCheckPoW = True, cur_time=None):
 class CheckBlockError(CheckBlockHeaderError):
     pass
 
+
 def GetLegacySigOpCount(tx):
     nSigOps = 0
     for txin in tx.vin:
@@ -909,7 +889,7 @@ def GetLegacySigOpCount(tx):
     return nSigOps
 
 
-def CheckBlock(block, fCheckPoW = True, fCheckMerkleRoot = True, cur_time=None):
+def CheckBlock(block, fCheckPoW=True, fCheckMerkleRoot=True, cur_time=None):
     """Context independent CBlock checks.
 
     CheckBlockHeader() is called first, which may raise a CheckBlockHeader
@@ -982,7 +962,6 @@ def CheckBlock(block, fCheckPoW = True, fCheckMerkleRoot = True, cur_time=None):
             commit_script = block.vtx[0].vout[index].scriptPubKey
             if not (6 + 32 <= len(commit_script) <= 6 + 32 + 1):
                 raise CheckBlockError("CheckBlock() : invalid segwit commitment length")
-            commitment = commit_script[6:6 + 32]
             commit = commit_script[6:6 + 32]
             if commit != Hash(root + nonce):
                 raise CheckBlockError("CheckBlock() : invalid segwit commitment")

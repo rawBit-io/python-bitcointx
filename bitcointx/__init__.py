@@ -72,7 +72,7 @@ def SelectAlternativeParams(alt_core_params, alt_main_params):
 
     assert(len(param_names) >= len(required_param_names)
            and len(required_param_names - param_names) == 0),\
-        ("alternative params should specify all fields defined in "
+        ("alt_main_params should specify all fields defined in "
          "MainParams, but {} are undefined"
          .format(required_param_names - param_names))
 
