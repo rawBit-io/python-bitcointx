@@ -17,7 +17,7 @@ setup(name='python-bitcointx',
       long_description=README,
       long_description_content_type='text/markdown',
       classifiers=[
-          "Programming Language :: Python",
+          "Programming Language :: Python :: 3",
           "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
       ],
       url='https://github.com/Simplexum/python-bitcointx',
