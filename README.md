@@ -35,8 +35,11 @@ consensus critical and non-consensus-critical.
     bitcointx.core.scripteval - Script evaluation/verification
     bitcointx.core.serialize  - Serialization
 
-In the future the bitcointx.core may use the Satoshi sourcecode directly as a
-library. Non-consensus critical modules include the following:
+Note that this code may not be fully consensus-compatible with current
+bitcoin core codebase. Corner cases that is not relevant to creating valid bitcoin
+transactions is unlikely to be considered. See also note on VerifyScript usage below.
+
+Non-consensus critical modules include the following:
 
     bitcointx          - Chain selection
     bitcointx.base58   - Base58 encoding
@@ -48,7 +51,6 @@ Effort has been made to follow the Satoshi source relatively closely, for
 instance Python code and classes that duplicate the functionality of
 corresponding Satoshi C++ code uses the same naming conventions: CTransaction,
 CPubKey, nValue etc. Otherwise Python naming conventions are followed.
-
 
 ## Mutable vs. Immutable objects
 
