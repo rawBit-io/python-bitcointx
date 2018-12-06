@@ -9,7 +9,7 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+# pylama:ignore=E501
 
 import hashlib
 import unittest
@@ -18,6 +18,7 @@ from bitcointx.core import b2x, x
 from bitcointx.core.script import CScript, IsLowDERSignature
 from bitcointx.core.key import CPubKey
 from bitcointx.wallet import *
+
 
 class Test_CBitcoinAddress(unittest.TestCase):
     def test_create_from_string(self):
@@ -241,6 +242,7 @@ class Test_P2PKHBitcoinAddress(unittest.TestCase):
         with self.assertRaises(CBitcoinAddressError):
             P2PKHBitcoinAddress.from_pubkey(CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c72')))
 
+
 class Test_CBitcoinSecret(unittest.TestCase):
     def test(self):
         def T(base58_privkey, expected_hex_pubkey, expected_is_compressed_value):
@@ -275,11 +277,11 @@ class Test_CBitcoinSecret(unittest.TestCase):
     def test_sign_invalid_hash(self):
         key = CBitcoinSecret('5KJvsngHeMpm884wtkJNzQGaCErckhHJBGFsvd3VyK5qMZXj3hS')
         with self.assertRaises(TypeError):
-          sig = key.sign('0' * 32)
+            key.sign('0' * 32)
 
         hash = b'\x00' * 32
         with self.assertRaises(ValueError):
-          sig = key.sign(hash[0:-2])
+            key.sign(hash[0:-2])
 
 
 class Test_RFC6979(unittest.TestCase):

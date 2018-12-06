@@ -15,14 +15,16 @@ import bitcointx.core
 # Note that setup.py can break if __init__.py imports any external
 # dependencies, as these might not be installed when setup.py runs. In this
 # case __version__ could be moved to a separate version.py and imported here.
-__version__ = '0.10.2.dev3'
+__version__ = '0.10.2'
 
 
 class MainParams(bitcointx.core.CoreMainParams):
     RPC_PORT = 8332
     BASE58_PREFIXES = {'PUBKEY_ADDR':0,
                        'SCRIPT_ADDR':5,
-                       'SECRET_KEY' :128}
+                       'SECRET_KEY' :128,
+                       'EXTENDED_PUBKEY': b'\x04\x88\xB2\x1E',
+                       'EXTENDED_PRIVKEY': b'\x04\x88\xAD\xE4'}
     BECH32_HRP = 'bc'
 
 
@@ -30,7 +32,9 @@ class TestNetParams(bitcointx.core.CoreTestNetParams):
     RPC_PORT = 18332
     BASE58_PREFIXES = {'PUBKEY_ADDR':111,
                        'SCRIPT_ADDR':196,
-                       'SECRET_KEY' :239}
+                       'SECRET_KEY' :239,
+                       'EXTENDED_PUBKEY': b'\x04\x35\x87\xCF',
+                       'EXTENDED_PRIVKEY': b'\x04\x35\x83\x94'}
     BECH32_HRP = 'tb'
 
 

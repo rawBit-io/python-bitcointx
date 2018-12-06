@@ -9,14 +9,15 @@ bitcoin transactions, and related data structures.
 
 * Network-related code that deals with sending and receiving data
   from and to bitcoin nodes is removed.
-* Bech32 segwit address support is added.
 * libsecp256k1 are used for signing and verifying.
   Signing by libsecp256k1 is deterministic, per RFC6979.
+* Bech32-encoded address support
+* HD keys support
 
 ## Requirements
 
-    openssl (https://github.com/openssl/openssl)
-    libsecp256k1 (https://github.com/bitcoin-core/secp256k1)
+    [openssl](https://github.com/openssl/openssl) (optional, for historic signatures)
+    [libsecp256k1](https://github.com/bitcoin-core/secp256k1)
 
 The RPC interface, `bitcointx.rpc`, is designed to work with Bitcoin Core v0.16.0.
 Older versions may work but there do exist some incompatibilities.

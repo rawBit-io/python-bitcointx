@@ -35,7 +35,11 @@ class CoreLitecoinParams(CoreChainParams):
 
 class MainLitecoinParams(CoreLitecoinParams):
     RPC_PORT = 9332
-    BASE58_PREFIXES = {'PUBKEY_ADDR': 48, 'SCRIPT_ADDR': 50, 'SECRET_KEY': 176}
+    BASE58_PREFIXES = {'PUBKEY_ADDR': 48,
+                       'SCRIPT_ADDR': 50,
+                       'SECRET_KEY': 176,
+                       'EXTENDED_PUBKEY': b'\x04\x88\xB2\x1E',
+                       'EXTENDED_PRIVKEY': b'\x04\x88\xAD\xE4'}
     BECH32_HRP = 'ltc'
     ALT_BASE58_SCRIPT_PREFIXES = {'legacy': 5, 'canonical': 50}
 

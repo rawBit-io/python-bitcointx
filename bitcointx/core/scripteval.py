@@ -359,8 +359,7 @@ def _CastToBool(s):
 
 def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser,
               amount=0, sigversion=SIGVERSION_BASE):
-    key = bitcointx.core.key.CECKey()
-    key.set_pubkey(pubkey)
+    key = bitcointx.core.key.CPubKey(pubkey)
 
     if len(sig) == 0:
         return False

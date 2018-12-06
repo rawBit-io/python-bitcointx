@@ -11,8 +11,6 @@
 
 # pylama:ignore=E501
 
-from __future__ import absolute_import, division, print_function
-
 import binascii
 import struct
 import time
@@ -27,6 +25,7 @@ MAX_BLOCK_SIZE = 1000000
 MAX_BLOCK_WEIGHT = 4000000
 MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50
 WITNESS_COINBASE_SCRIPTPUBKEY_MAGIC = bytes([OP_RETURN, 0x24, 0xaa, 0x21, 0xa9, 0xed])
+BIP32_HARDENED_KEY_LIMIT = 0x80000000
 
 
 def MoneyRange(nValue, params=None):

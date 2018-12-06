@@ -1,6 +1,29 @@
 # python-bitcointx release notes
 
-To be added at release
+## v0.10.2
+
+* Support for bech32-encoded segwit addresses
+
+* Support for HD keys. Modelled after Bitcoin Core classes: CExtKey, CExtPubKey,
+  CBitcoinExtKey, CBitcoinExtPubKey. for usage examples,
+  see examples/derive-hd-key.py and bitcointx/tests/test\_hd\_keys.py
+
+* openssl dependency is optional, used only for verification of historical
+  non-strict-DER-encoded signatures - CPubKey.verify\_nonstrict(). If not
+  available, and verify\_nonstrict() is called, a RuntimeError will be raised.
+
+* VerifyScript(): more `SCRIPT_VERIFY_*` flags are handled.
+  VerifyScriptError is raised if unhandled flag is explicitly given. 
+  Warning about VerifyScript not being consensus-compatible added to README.
+
+* Make specifying alternative chain params easier with SelectAlternativeParams()
+  (see examples/litecoin-alt-p2sh-prefix.py)
+
+* CKey class has been moved from bitcointx.wallet to bitcointx.core.key
+  - this is more logical and matches Bitcoin Core layout
+
+* CECKey class was removed - it was a wrapper around OpenSSL's EC\_KEY,
+  and is not needed anymore.
 
 ---
 

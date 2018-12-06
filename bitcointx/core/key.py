@@ -11,21 +11,36 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-# pylama:ignore=E501,E261
+# pylama:ignore=E501,E261,E221
 
 """ECC secp256k1 crypto routines
 
 WARNING: This module does not mlock() secrets; your private keys may end up on
 disk in swap! Use with caution!
 """
+import hmac
+import struct
 import ctypes
 import ctypes.util
+import hashlib
 import threading
-import sys
 from os import urandom
 
-_ssl = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
+from bitcointx.core import Hash160
+
+try:
+    _ssl = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
+    if not getattr(_ssl, 'EC_KEY_new_by_curve_name', None):
+        _ssl = None
+except OSError:
+    _ssl = None
+
 _libsecp256k1 = ctypes.cdll.LoadLibrary(ctypes.util.find_library('secp256k1'))
+
+PUBLIC_KEY_SIZE             = 65
+COMPRESSED_PUBLIC_KEY_SIZE  = 33
+SIGNATURE_SIZE              = 72
+COMPACT_SIGNATURE_SIZE      = 65
 
 
 class OpenSSLException(EnvironmentError):
@@ -33,6 +48,10 @@ class OpenSSLException(EnvironmentError):
 
 
 class Libsecp256k1Exception(EnvironmentError):
+    pass
+
+
+class KeyDerivationFailException(RuntimeError):
     pass
 
 
@@ -47,86 +66,31 @@ def _check_res_openssl_void_p(val, func, args): # pylint: disable=unused-argumen
 
     return ctypes.c_void_p(val)
 
-_ssl.BN_bin2bn.restype = ctypes.c_void_p
-_ssl.BN_bin2bn.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
+if _ssl:
+    _ssl.EC_KEY_new_by_curve_name.errcheck = _check_res_openssl_void_p
+    _ssl.EC_KEY_new_by_curve_name.restype = ctypes.c_void_p
+    _ssl.EC_KEY_new_by_curve_name.argtypes = [ctypes.c_int]
 
-_ssl.BN_new.errcheck = _check_res_openssl_void_p
-_ssl.BN_new.restype = ctypes.c_void_p
-_ssl.BN_new.argtypes = []
+    _ssl.ECDSA_SIG_free.restype = None
+    _ssl.ECDSA_SIG_free.argtypes = [ctypes.c_void_p]
 
-_ssl.BN_CTX_free.restype = None
-_ssl.BN_CTX_free.argtypes = [ctypes.c_void_p]
+    _ssl.ERR_error_string_n.restype = None
+    _ssl.ERR_error_string_n.argtypes = [ctypes.c_ulong, ctypes.c_char_p, ctypes.c_size_t]
 
-_ssl.BN_CTX_new.errcheck = _check_res_openssl_void_p
-_ssl.BN_CTX_new.restype = ctypes.c_void_p
-_ssl.BN_CTX_new.argtypes = []
+    _ssl.ERR_get_error.restype = ctypes.c_ulong
+    _ssl.ERR_get_error.argtypes = []
 
-_ssl.EC_KEY_free.restype = None
-_ssl.EC_KEY_free.argtypes = [ctypes.c_void_p]
+    _ssl.d2i_ECDSA_SIG.restype = ctypes.c_void_p
+    _ssl.d2i_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
 
-_ssl.EC_KEY_new_by_curve_name.errcheck = _check_res_openssl_void_p
-_ssl.EC_KEY_new_by_curve_name.restype = ctypes.c_void_p
-_ssl.EC_KEY_new_by_curve_name.argtypes = [ctypes.c_int]
+    _ssl.i2d_ECDSA_SIG.restype = ctypes.c_int
+    _ssl.i2d_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 
-_ssl.EC_KEY_get0_group.restype = ctypes.c_void_p
-_ssl.EC_KEY_get0_group.argtypes = [ctypes.c_void_p]
+    # this specifies the curve used with ECDSA.
+    _NID_secp256k1 = 714 # from openssl/obj_mac.h
 
-_ssl.EC_KEY_set_conv_form.restype = None
-_ssl.EC_KEY_set_conv_form.argtypes = [ctypes.c_void_p, ctypes.c_int]
-
-_ssl.EC_KEY_set_private_key.restype = ctypes.c_int
-_ssl.EC_KEY_set_private_key.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-
-_ssl.EC_KEY_set_public_key.restype = ctypes.c_int
-_ssl.EC_KEY_set_public_key.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-
-_ssl.EC_POINT_free.restype = None
-_ssl.EC_POINT_free.argtypes = [ctypes.c_void_p]
-
-_ssl.EC_POINT_new.errcheck = _check_res_openssl_void_p
-_ssl.EC_POINT_new.restype = ctypes.c_void_p
-_ssl.EC_POINT_new.argtypes = [ctypes.c_void_p]
-
-_ssl.EC_POINT_mul.restype = ctypes.c_int
-_ssl.EC_POINT_mul.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-
-_ssl.ECDSA_SIG_free.restype = None
-_ssl.ECDSA_SIG_free.argtypes = [ctypes.c_void_p]
-
-_ssl.ERR_error_string_n.restype = None
-_ssl.ERR_error_string_n.argtypes = [ctypes.c_ulong, ctypes.c_char_p, ctypes.c_size_t]
-
-_ssl.ERR_get_error.restype = ctypes.c_ulong
-_ssl.ERR_get_error.argtypes = []
-
-_ssl.d2i_ECDSA_SIG.restype = ctypes.c_void_p
-_ssl.d2i_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
-
-_ssl.d2i_ECPrivateKey.restype = ctypes.c_void_p
-_ssl.d2i_ECPrivateKey.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
-
-_ssl.i2d_ECDSA_SIG.restype = ctypes.c_int
-_ssl.i2d_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-
-_ssl.i2d_ECPrivateKey.restype = ctypes.c_int
-_ssl.i2d_ECPrivateKey.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-
-_ssl.i2o_ECPublicKey.restype = ctypes.c_void_p
-_ssl.i2o_ECPublicKey.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-
-_ssl.o2i_ECPublicKey.restype = ctypes.c_void_p
-_ssl.o2i_ECPublicKey.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
-
-_ssl.BN_num_bits.restype = ctypes.c_int
-_ssl.BN_num_bits.argtypes = [ctypes.c_void_p]
-
-_ssl.EC_KEY_get0_private_key.restype = ctypes.c_void_p
-
-# this specifies the curve used with ECDSA.
-_NID_secp256k1 = 714 # from openssl/obj_mac.h
-
-# test that OpenSSL supports secp256k1
-_ssl.EC_KEY_new_by_curve_name(_NID_secp256k1)
+    # test that OpenSSL supports secp256k1
+    _ssl.EC_KEY_new_by_curve_name(_NID_secp256k1)
 
 SECP256K1_FLAGS_TYPE_CONTEXT = (1 << 0)
 SECP256K1_FLAGS_BIT_CONTEXT_SIGN = (1 << 9)
@@ -203,6 +167,9 @@ _libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact.argtypes = [ct
 _libsecp256k1.secp256k1_ec_pubkey_serialize.restype = ctypes.c_int
 _libsecp256k1.secp256k1_ec_pubkey_serialize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p, ctypes.c_uint]
 
+_libsecp256k1.secp256k1_ec_pubkey_create.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ec_pubkey_create.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+
 _libsecp256k1.secp256k1_ecdsa_signature_parse_der.restype = ctypes.c_int
 _libsecp256k1.secp256k1_ecdsa_signature_parse_der.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
 
@@ -211,6 +178,15 @@ _libsecp256k1.secp256k1_ecdsa_signature_normalize.argtypes = [ctypes.c_void_p, c
 
 _libsecp256k1.secp256k1_ecdsa_verify.restype = ctypes.c_int
 _libsecp256k1.secp256k1_ecdsa_verify.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+
+_libsecp256k1.secp256k1_ec_pubkey_parse.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ec_pubkey_parse.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+
+_libsecp256k1.secp256k1_ec_pubkey_tweak_add.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ec_pubkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+
+_libsecp256k1.secp256k1_ec_privkey_tweak_add.restype = ctypes.c_int
+_libsecp256k1.secp256k1_ec_privkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
 
 _libsecp256k1_context_sign = _libsecp256k1.secp256k1_context_create(SECP256K1_CONTEXT_SIGN)
 assert _libsecp256k1_context_sign is not None
@@ -226,61 +202,41 @@ _libsecp256k1_seed = urandom(32)
 assert(_libsecp256k1.secp256k1_context_randomize(_libsecp256k1_context_sign, _libsecp256k1_seed) == 1)
 
 
-class CECKey:
-    """Wrapper around OpenSSL's EC_KEY"""
+# We do not want to make CKey a subclass of bytes, as we do with CPubKey,
+# to prevent accidental leak of key data when it is included in debug logs, etc.
+# to access key data, you need to explicitly say key.secret
+class CKey(object):
+    """An encapsulated private key
 
-    POINT_CONVERSION_COMPRESSED = 2
-    POINT_CONVERSION_UNCOMPRESSED = 4
+    Attributes:
 
-    def __init__(self):
-        self.k = _ssl.EC_KEY_new_by_curve_name(_NID_secp256k1)
+    pub           - The corresponding CPubKey for this private key
+    secret        - Raw secret bytes of private key
 
-    def __del__(self):
-        if _ssl:
-            _ssl.EC_KEY_free(self.k)
-        self.k = None
+    is_compressed - True if compressed
 
-    def set_secretbytes(self, secret):
-        priv_key = _ssl.BN_bin2bn(secret, 32, _ssl.BN_new())
-        group = _ssl.EC_KEY_get0_group(self.k)
-        pub_key = _ssl.EC_POINT_new(group)
-        ctx = _ssl.BN_CTX_new()
-        if not _ssl.EC_POINT_mul(group, pub_key, priv_key, None, None, ctx):
-            raise ValueError("Could not derive public key from the supplied secret.")
-        _ssl.EC_POINT_mul(group, pub_key, priv_key, None, None, ctx)
-        _ssl.EC_KEY_set_private_key(self.k, priv_key)
-        _ssl.EC_KEY_set_public_key(self.k, pub_key)
-        _ssl.EC_POINT_free(pub_key)
-        _ssl.BN_CTX_free(ctx)
-        return self.k
+    """
+    def __init__(self, secret, compressed=True):
+        assert len(secret) == 32
+        self.secret = secret
 
-    def set_privkey(self, key):
-        self.mb = ctypes.create_string_buffer(key)
-        return _ssl.d2i_ECPrivateKey(ctypes.byref(self.k), ctypes.byref(ctypes.pointer(self.mb)), len(key))
+        raw_pubkey = ctypes.create_string_buffer(64)
 
-    def set_pubkey(self, key):
-        self.mb = ctypes.create_string_buffer(key)
-        return _ssl.o2i_ECPublicKey(ctypes.byref(self.k), ctypes.byref(ctypes.pointer(self.mb)), len(key))
+        result = _libsecp256k1.secp256k1_ec_pubkey_create(
+            _libsecp256k1_context_sign, raw_pubkey, secret)
 
-    def get_privkey(self):
-        size = _ssl.i2d_ECPrivateKey(self.k, 0)
-        mb_pri = ctypes.create_string_buffer(size)
-        _ssl.i2d_ECPrivateKey(self.k, ctypes.byref(ctypes.pointer(mb_pri)))
-        return mb_pri.raw
+        if result != 1:
+            raise ValueError('Invalid private key data')
 
-    def get_pubkey(self):
-        size = _ssl.i2o_ECPublicKey(self.k, 0)
-        mb = ctypes.create_string_buffer(size)
-        _ssl.i2o_ECPublicKey(self.k, ctypes.byref(ctypes.pointer(mb)))
-        return mb.raw
+        self.pub = CPubKey._from_raw(raw_pubkey, compressed=compressed)
 
-    def get_raw_privkey(self):
-        bn = _ssl.EC_KEY_get0_private_key(self.k)
-        bn = ctypes.c_void_p(bn)
-        size = (_ssl.BN_num_bits(bn) + 7) / 8
-        mb = ctypes.create_string_buffer(int(size))
-        _ssl.BN_bn2bin(bn, mb)
-        return mb.raw.rjust(32, b'\x00')
+    @property
+    def is_compressed(self):
+        return self.pub.is_compressed
+
+    def set_compressed(self, compressed):
+        raw_pubkey = self.pub._to_raw()
+        self.pub = CPubKey._from_raw(raw_pubkey, compressed=compressed)
 
     def sign(self, hash):
         if not isinstance(hash, bytes):
@@ -290,7 +246,7 @@ class CECKey:
 
         raw_sig = ctypes.create_string_buffer(64)
         result = _libsecp256k1.secp256k1_ecdsa_sign(
-            _libsecp256k1_context_sign, raw_sig, hash, self.get_raw_privkey(), None, None)
+            _libsecp256k1_context_sign, raw_sig, hash, self, None, None)
         assert 1 == result
         sig_size0 = ctypes.c_size_t()
         sig_size0.value = 75
@@ -308,10 +264,10 @@ class CECKey:
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
 
-        recoverable_sig = ctypes.create_string_buffer(65)
+        recoverable_sig = ctypes.create_string_buffer(COMPACT_SIGNATURE_SIZE)
 
         result = _libsecp256k1.secp256k1_ecdsa_sign_recoverable(
-            _libsecp256k1_context_sign, recoverable_sig, hash, self.get_raw_privkey(), None, None)
+            _libsecp256k1_context_sign, recoverable_sig, hash, self, None, None)
 
         assert 1 == result
 
@@ -325,9 +281,108 @@ class CECKey:
 
         return bytes(output), recid.value
 
+    def verify(self, hash, sig):
+        return self.pub.verify(hash, sig)
+
+    def verify_nonstrict(self, hash, sig):
+        return self.pub.verify_nonstrict(hash, sig)
+
+
+class CPubKey(bytes):
+    """An encapsulated public key
+
+    Attributes:
+
+    is_valid      - Corresponds to CPubKey.IsValid()
+
+    is_fullyvalid - Corresponds to CPubKey.IsFullyValid()
+
+    is_compressed - Corresponds to CPubKey.IsCompressed()
+
+    key_id        - Hash160(pubkey)
+    """
+
+    def __new__(cls, buf):
+        self = super(CPubKey, cls).__new__(cls, buf)
+
+        self.is_fullyvalid = False
+        if self.is_valid:
+            tmp_pub = ctypes.create_string_buffer(64)
+            result = _libsecp256k1.secp256k1_ec_pubkey_parse(
+                _libsecp256k1_context_verify, tmp_pub, self, len(self))
+            self.is_fullyvalid = (result == 1)
+
+        self.key_id = Hash160(self)
+
+        return self
+
+    @classmethod
+    def _from_raw(cls, raw_pubkey, compressed=True):
+        pub_size0 = ctypes.c_size_t()
+        pub_size0.value = PUBLIC_KEY_SIZE
+        pub = ctypes.create_string_buffer(pub_size0.value)
+
+        _libsecp256k1.secp256k1_ec_pubkey_serialize(
+            _libsecp256k1_context_verify, pub, ctypes.byref(pub_size0), raw_pubkey,
+            SECP256K1_EC_COMPRESSED if compressed else SECP256K1_EC_UNCOMPRESSED)
+
+        return CPubKey(bytes(pub)[:pub_size0.value])
+
+    def _to_raw(self):
+        assert self.is_valid
+        raw_pub = ctypes.create_string_buffer(64)
+        result = _libsecp256k1.secp256k1_ec_pubkey_parse(
+            _libsecp256k1_context_verify, raw_pub, self, len(self))
+        assert 1 == result
+        return raw_pub
+
+    @classmethod
+    def recover_compact(cls, hash, sig): # pylint: disable=redefined-builtin
+        """Recover a public key from a compact signature."""
+        if len(sig) != COMPACT_SIGNATURE_SIZE:
+            raise ValueError("Signature should be %d characters, not [%d]" % (COMPACT_SIGNATURE_SIZE, len(sig)))
+
+        recid = (sig[0] - 27) & 3
+        compressed = ((sig[0] - 27) & 4) != 0
+
+        rec_sig = ctypes.create_string_buffer(COMPACT_SIGNATURE_SIZE)
+
+        result = _libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact(
+            _libsecp256k1_context_verify, rec_sig, sig[1:], recid)
+
+        if result != 1:
+            return False
+
+        raw_pubkey = ctypes.create_string_buffer(64)
+
+        result = _libsecp256k1.secp256k1_ecdsa_recover(
+            _libsecp256k1_context_verify, raw_pubkey, rec_sig, hash)
+
+        if result != 1:
+            return False
+
+        return cls._from_raw(raw_pubkey, compressed=compressed)
+
+    @property
+    def is_valid(self):
+        return len(self) > 0
+
+    @property
+    def is_compressed(self):
+        return len(self) == COMPRESSED_PUBLIC_KEY_SIZE
+
+    def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
+        return '%s(%s)' % (self.__class__.__name__, super(CPubKey, self).__repr__())
+
     def verify(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a DER signature"""
         if not sig:
+            return False
+
+        if not self.is_fullyvalid:
             return False
 
         raw_sig = ctypes.create_string_buffer(64)
@@ -340,22 +395,17 @@ class CECKey:
         _libsecp256k1.secp256k1_ecdsa_signature_normalize(
             _libsecp256k1_context_verify, raw_sig, raw_sig)
 
-        unparsed_pub = self.get_pubkey()
-        pub = ctypes.create_string_buffer(64)
-
-        result = _libsecp256k1.secp256k1_ec_pubkey_parse(
-            _libsecp256k1_context_verify, pub, unparsed_pub, len(unparsed_pub))
-
-        if result != 1:
-            return False
-
+        raw_pub = self._to_raw()
         result = _libsecp256k1.secp256k1_ecdsa_verify(
-            _libsecp256k1_context_verify, raw_sig, hash, pub)
+            _libsecp256k1_context_verify, raw_sig, hash, raw_pub)
 
         return result == 1
 
     def verify_nonstrict(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a non-strict DER signature"""
+
+        if not _ssl:
+            raise RuntimeError('openssl library is not available. verify_nonstrict is not functional.')
 
         if not sig:
             return False
@@ -389,92 +439,161 @@ class CECKey:
 
         return self.verify(hash, norm_der)
 
-    def set_compressed(self, compressed):
-        if compressed:
-            form = self.POINT_CONVERSION_COMPRESSED
-        else:
-            form = self.POINT_CONVERSION_UNCOMPRESSED
-        _ssl.EC_KEY_set_conv_form(self.k, form)
+
+class CExtKeyMixin():
+
+    def _parse_buf(self, buf):
+        if len(buf) != 74:
+            raise ValueError('Invalid length for extended key')
+
+        self.depth = buf[0]
+        self.parent_fp = buf[1:5]
+        self.child_number = struct.unpack(">L", buf[5:9])[0]
+        self.chaincode = buf[9:41]
+
+        return buf[41:74]
 
 
-class CPubKey(bytes):
-    """An encapsulated public key
+class CExtKey(bytes, CExtKeyMixin):
+    """An encapsulated extended private key
 
-    Attributes:
-
-    is_valid      - Corresponds to CPubKey.IsValid()
-
-    is_fullyvalid - Corresponds to CPubKey.IsFullyValid()
-
-    is_compressed - Corresponds to CPubKey.IsCompressed()
+    priv          - The corresponding CKey for extended privkey
+    pub           - shortcut property for priv.pub
     """
 
-    def __new__(cls, buf, _cec_key=None):
-        self = super(CPubKey, cls).__new__(cls, buf)
-        if _cec_key is None:
-            _cec_key = CECKey()
-        self._cec_key = _cec_key
-        self.is_fullyvalid = _cec_key.set_pubkey(self) is not None
+    def __new__(cls, buf):
+        self = super(CExtKey, cls).__new__(cls, buf)
+
+        # Note that we ignore first byte - for xpubkey,
+        # this is pubkey prefix byte.
+        # For xprivkey, this byte is supposed to be zero,
+        # but Bitcoin Core ignores that and do not check.
+        # We also do not check, to be compatible.
+        secret_bytes = self._parse_buf(buf)[1:]
+
+        self.priv = CKey(secret_bytes)
+
         return self
 
+    @property
+    def pub(self):
+        return self.priv.pub
+
     @classmethod
-    def recover_compact(cls, hash, sig): # pylint: disable=redefined-builtin
-        """Recover a public key from a compact signature."""
-        if len(sig) != 65:
-            raise ValueError("Signature should be 65 characters, not [%d]" % (len(sig), ))
+    def from_seed(cls, seed):
+        if len(seed) not in (128//8, 256//8, 512//8):
+            raise ValueError('Unexpected seed length')
 
-        recid = (sig[0] - 27) & 3
-        compressed = (sig[0] - 27) & 4 != 0
+        hmac_hash = hmac.new(b'Bitcoin seed', seed, hashlib.sha512).digest()
+        depth = 0
+        parent_fp = child_number_packed = b'\x00\x00\x00\x00'
+        privkey = hmac_hash[:32]
+        chaincode = hmac_hash[32:]
+        return cls(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + privkey)
 
-        rec_sig = ctypes.create_string_buffer(65)
+    def derive(self, child_number):
+        if self.depth >= 255:
+            raise ValueError('Maximum derivation path length is reached')
 
-        result = _libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact(
-            _libsecp256k1_context_verify, rec_sig, sig[1:], recid)
+        if (child_number >> 32) != 0:
+            raise ValueError('Child number is too big')
+
+        depth = self.depth + 1
+
+        child_number_packed = struct.pack(">L", child_number)
+
+        if (child_number >> 31) == 0:
+            bip32_hash = hmac.new(self.chaincode, self.pub + child_number_packed,
+                                  hashlib.sha512).digest()
+        else:
+            bip32_hash = hmac.new(self.chaincode,
+                                  bytes([0]) + self.priv.secret + child_number_packed,
+                                  hashlib.sha512).digest()
+
+        chaincode = bip32_hash[32:]
+
+        child_privkey = ctypes.create_string_buffer(self.priv.secret, size=32)
+
+        result = _libsecp256k1.secp256k1_ec_privkey_tweak_add(
+            _libsecp256k1_context_sign, child_privkey, bip32_hash)
 
         if result != 1:
-            return False
+            raise KeyDerivationFailException('extended privkey derivation failed')
 
-        pubkey = ctypes.create_string_buffer(64)
+        parent_fp = self.pub.key_id[:4]
+        cls = self.__class__
+        return cls(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + child_privkey)
 
-        result = _libsecp256k1.secp256k1_ecdsa_recover(
-            _libsecp256k1_context_verify, pubkey, rec_sig, hash)
+    def neuter(self):
+        child_number_packed = struct.pack(">L", self.child_number)
+        return CExtPubKey(bytes([self.depth]) + self.parent_fp + child_number_packed
+                          + self.chaincode + self.pub)
+
+
+class CExtPubKey(bytes, CExtKeyMixin):
+    """An encapsulated extended public key
+
+    pub           - The corresponding CPubKey for extended pubkey
+
+    """
+
+    def __new__(cls, buf):
+        self = super(CExtPubKey, cls).__new__(cls, buf)
+        pubkey_bytes = self._parse_buf(buf)
+
+        self.pub = CPubKey(pubkey_bytes)
+        if not self.pub.is_fullyvalid:
+            raise ValueError('pubkey part of xpubkey is not valid')
+        return self
+
+    def derive(self, child_number):
+        if (child_number >> 31) != 0:
+            if (child_number >> 32) != 0:
+                raise ValueError('Child number is too big')
+            else:
+                raise ValueError('Hardened derivation not possible')
+        if self.depth >= 255:
+            raise ValueError('Maximum derivation path length is reached')
+        assert self.pub.is_fullyvalid
+        assert self.pub.is_compressed
+
+        child_number_packed = struct.pack(">L", child_number)
+
+        depth = self.depth + 1
+        bip32_hash = hmac.new(self.chaincode, self.pub + child_number_packed,
+                              hashlib.sha512).digest()
+        chaincode = bip32_hash[32:]
+
+        raw_pub = self.pub._to_raw()
+
+        result = _libsecp256k1.secp256k1_ec_pubkey_tweak_add(
+            _libsecp256k1_context_verify, raw_pub, bip32_hash)
 
         if result != 1:
-            return False
+            raise KeyDerivationFailException('extended pubkey derivation failed')
 
-        pub_size0 = ctypes.c_size_t()
-        pub_size0.value = 65
-        pub = ctypes.create_string_buffer(pub_size0.value)
+        child_pubkey_size0 = ctypes.c_size_t()
+        child_pubkey_size0.value = COMPRESSED_PUBLIC_KEY_SIZE
+        child_pubkey = ctypes.create_string_buffer(child_pubkey_size0.value)
 
-        _libsecp256k1.secp256k1_ec_pubkey_serialize(
-            _libsecp256k1_context_verify, pub, ctypes.byref(pub_size0), pubkey,
-            SECP256K1_EC_COMPRESSED if compressed else SECP256K1_EC_UNCOMPRESSED)
+        result = _libsecp256k1.secp256k1_ec_pubkey_serialize(
+            _libsecp256k1_context_verify, child_pubkey, ctypes.byref(child_pubkey_size0), raw_pub,
+            SECP256K1_EC_COMPRESSED)
 
-        return CPubKey(bytes(pub)[:pub_size0.value])
+        assert 1 == result
 
-    @property
-    def is_valid(self):
-        return len(self) > 0
-
-    @property
-    def is_compressed(self):
-        return len(self) == 33
-
-    def verify(self, hash, sig): # pylint: disable=redefined-builtin
-        return self._cec_key.verify(hash, sig)
+        parent_fp = self.pub.key_id[:4]
+        cls = self.__class__
+        return cls(bytes([depth]) + parent_fp + child_number_packed + chaincode + child_pubkey)
 
     def __str__(self):
         return repr(self)
 
     def __repr__(self):
-        # Always have represent as b'<secret>' so test cases don't have to
-        # change for py2/3
-        if sys.version > '3':
-            return '%s(%s)' % (self.__class__.__name__, super(CPubKey, self).__repr__())
-        else:
-            return '%s(b%s)' % (self.__class__.__name__, super(CPubKey, self).__repr__())
+        return '%s(%s)' % (self.__class__.__name__, super(CExtPubKey, self).__repr__())
 
 __all__ = (
-    'CECKey',
+    'CKey',
     'CPubKey',
+    'CExtPubKey'
 )
