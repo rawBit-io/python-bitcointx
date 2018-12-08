@@ -749,17 +749,6 @@ def _SelectAlternativeCoreParams(alt_core_params):
 
     assert(issubclass(alt_core_params, CoreChainParams))
 
-    param_names = set([pn for pn in alt_core_params.__dict__
-                       if not pn.startswith('_')])
-    required_param_names = set([pn for pn in CoreChainParams.__dict__
-                                if not pn.startswith('_')])
-
-    assert(len(param_names) >= len(required_param_names)
-           and len(required_param_names - param_names) == 0),\
-        ("alt_core_params should specify all fields defined in "
-         "CoreChainParams, but {} are undefined"
-         .format(required_param_names - param_names))
-
     coreparams = alt_core_params
 
 

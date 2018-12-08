@@ -69,17 +69,6 @@ def SelectAlternativeParams(alt_core_params, alt_main_params):
 
     assert(issubclass(alt_main_params, alt_core_params))
 
-    param_names = set([pn for pn in alt_main_params.__dict__
-                       if not pn.startswith('_')])
-    required_param_names = set([pn for pn in MainParams.__dict__
-                                if not pn.startswith('_')])
-
-    assert(len(param_names) >= len(required_param_names)
-           and len(required_param_names - param_names) == 0),\
-        ("alt_main_params should specify all fields defined in "
-         "MainParams, but {} are undefined"
-         .format(required_param_names - param_names))
-
     params = alt_main_params
 
 
