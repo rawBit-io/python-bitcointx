@@ -838,7 +838,7 @@ class CScriptWitness(ImmutableSerializable):
         return iter(self.stack)
 
     def __repr__(self):
-        return 'CScriptWitness(' + ','.join("x('%s')" % bitcointx.core.b2x(s) for s in self.stack) + ')'
+        return 'CScriptWitness([' + ','.join("x('%s')" % bitcointx.core.b2x(s) for s in self.stack) + '])'
 
     def is_null(self):
         return len(self.stack) == 0

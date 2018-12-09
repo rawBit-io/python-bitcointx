@@ -342,7 +342,7 @@ class CTxWitness(ImmutableSerializable):
             self.vtxinwit[i].stream_serialize(f)
 
     def __repr__(self):
-        return "CTxWitness(%s)" % (','.join(repr(w) for w in self.vtxinwit))
+        return "CTxWitness([%s])" % (','.join(repr(w) for w in self.vtxinwit))
 
     @classmethod
     def from_txwitness(cls, txwitness):
