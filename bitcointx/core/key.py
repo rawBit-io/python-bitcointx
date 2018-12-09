@@ -222,6 +222,9 @@ class CKey(object):
 
         raw_pubkey = ctypes.create_string_buffer(64)
 
+        # no need for explicit secp256k1_ec_seckey_verify()
+        # because secp256k1_ec_pubkey_create() will do
+        # the same checks and ensure that secret data is valid
         result = _libsecp256k1.secp256k1_ec_pubkey_create(
             _libsecp256k1_context_sign, raw_pubkey, secret)
 
