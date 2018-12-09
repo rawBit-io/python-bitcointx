@@ -11,11 +11,6 @@ bitcointx
 
 .. automodule:: bitcointx.base58
 
-:mod:`bloom`
-------------
-
-.. automodule:: bitcointx.bloom
-
 :mod:`messages`
 ---------------
 
