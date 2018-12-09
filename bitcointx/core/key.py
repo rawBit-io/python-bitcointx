@@ -249,7 +249,7 @@ class CKey(object):
             _libsecp256k1_context_sign, raw_sig, hash, self, None, None)
         assert 1 == result
         sig_size0 = ctypes.c_size_t()
-        sig_size0.value = 75
+        sig_size0.value = SIGNATURE_SIZE
         mb_sig = ctypes.create_string_buffer(sig_size0.value)
         result = _libsecp256k1.secp256k1_ecdsa_signature_serialize_der(
             _libsecp256k1_context_sign, mb_sig, ctypes.byref(sig_size0), raw_sig)
