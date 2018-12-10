@@ -152,17 +152,20 @@ _libsecp256k1.secp256k1_ecdsa_sign.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
 _libsecp256k1.secp256k1_ecdsa_signature_serialize_der.restype = ctypes.c_int
 _libsecp256k1.secp256k1_ecdsa_signature_serialize_der.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p]
 
-_libsecp256k1.secp256k1_ecdsa_sign_recoverable.restype = ctypes.c_int
-_libsecp256k1.secp256k1_ecdsa_sign_recoverable.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
+_libsecp256k1_has_pubkey_recovery = False
+if getattr(_libsecp256k1, 'secp256k1_ecdsa_sign_recoverable', None):
+    _libsecp256k1_has_pubkey_recovery = True
+    _libsecp256k1.secp256k1_ecdsa_sign_recoverable.restype = ctypes.c_int
+    _libsecp256k1.secp256k1_ecdsa_sign_recoverable.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
 
-_libsecp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact.restype = ctypes.c_int
-_libsecp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int), ctypes.c_char_p]
+    _libsecp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact.restype = ctypes.c_int
+    _libsecp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int), ctypes.c_char_p]
 
-_libsecp256k1.secp256k1_ecdsa_recover.restype = ctypes.c_int
-_libsecp256k1.secp256k1_ecdsa_recover.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+    _libsecp256k1.secp256k1_ecdsa_recover.restype = ctypes.c_int
+    _libsecp256k1.secp256k1_ecdsa_recover.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
 
-_libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact.restype = ctypes.c_int
-_libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    _libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact.restype = ctypes.c_int
+    _libsecp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
 
 _libsecp256k1.secp256k1_ec_pubkey_serialize.restype = ctypes.c_int
 _libsecp256k1.secp256k1_ec_pubkey_serialize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p, ctypes.c_uint]
@@ -267,6 +270,10 @@ class CKey(object):
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
 
+        if not _libsecp256k1_has_pubkey_recovery:
+            raise RuntimeError('libsecp256k1 compiled without pubkey recovery functions. '
+                               'sign_compact is not functional.')
+
         recoverable_sig = ctypes.create_string_buffer(COMPACT_SIGNATURE_SIZE)
 
         result = _libsecp256k1.secp256k1_ecdsa_sign_recoverable(
@@ -344,6 +351,10 @@ class CPubKey(bytes):
         """Recover a public key from a compact signature."""
         if len(sig) != COMPACT_SIGNATURE_SIZE:
             raise ValueError("Signature should be %d characters, not [%d]" % (COMPACT_SIGNATURE_SIZE, len(sig)))
+
+        if not _libsecp256k1_has_pubkey_recovery:
+            raise RuntimeError('libsecp256k1 compiled without pubkey recovery functions. '
+                               'recover_compact is not functional.')
 
         recid = (sig[0] - 27) & 3
         compressed = ((sig[0] - 27) & 4) != 0
