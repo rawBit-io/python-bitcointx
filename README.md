@@ -17,7 +17,7 @@ bitcoin transactions, and related data structures.
 ## Requirements
 
 - [libsecp256k1](https://github.com/bitcoin-core/secp256k1)
-- [openssl](https://github.com/openssl/openssl) (optional, for historical signatures)
+- [openssl](https://github.com/openssl/openssl) (optional, for historical signatures verification)
 
 The RPC interface, `bitcointx.rpc`, is designed to work with Bitcoin Core v0.16.0.
 Older versions may work but there do exist some incompatibilities.
