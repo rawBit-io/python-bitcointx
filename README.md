@@ -71,9 +71,15 @@ big/little-endian hex.
 
 ## Note on VerifyScript() usage
 
-Script evaluation code of VerifyScript() is NOT in sync with bitcoin core code,
+It is good to use VerifyScript to pre-screen the transaction inputs that
+you create, before passing the transaction to bitcoind, or for debugging purposes.
+
+But! Bitcoin Core should _always_ remain the authoritative source on bitcoin
+transaction inputs validity.
+
+Script evaluation code of VerifyScript() is NOT in sync with Bitcoin Core code,
 and lacks some features. While some effort was made to make it behave closer
-to the code in bitcoin core, full compatibility is far away, and most likely
+to the code in Bitcoin Core, full compatibility is far away, and most likely
 will not be ever achieved.
 
 **WARNING**: DO NOT rely on VerifyScript() in deciding if certain signed
@@ -81,10 +87,6 @@ transaction input is valid.  In some corner cases (non-standard signature encodi
 unhandled script evaluation flags, etc) it may deem something invalid that bitcoind
 would accept as valid.  More importanty, it could accept something as valid
 that bitcoind would deem invalid.
-
-It is good to use VerifyScript to pre-screen the transaction inputs that
-you create, before passing the transaction to bitcoind, or for debugging purposes.
-But bitcoind should always remain the authoritative source on transaction input validity.
 
 ## Module import style
 
