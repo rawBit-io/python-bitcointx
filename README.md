@@ -115,9 +115,12 @@ Where NAME is one of 'testnet', 'mainnet', or 'regtest'. The chain currently
 selected is a global variable that changes behavior everywhere, just like in
 the Satoshi codebase.
 
-You can use bitcointx.SelectAlternativeParams(AltCoreParams, AltMainParams)
-to use alternative blockchain parameters.
-See examples/litecoin-alt-p2sh-prefix.py for an example usage.
+To use alternative chain parameters:
+
+    import bitcointx
+    bitcointx.SelectAlternativeParams(AltCoreParams, AltMainParams)`
+
+See `examples/litecoin-alt-p2sh-prefix.py` for an example usage.
 
 ## Unit tests
 
