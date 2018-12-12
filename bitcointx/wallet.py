@@ -267,7 +267,7 @@ class P2PKHBitcoinAddress(CBase58BitcoinAddress):
                     and scriptPubKey[0] == 0x41
                     and scriptPubKey[66] == script.OP_CHECKSIG):
 
-                pubkey = scriptPubKey[1:65]
+                pubkey = scriptPubKey[1:66]
 
             if pubkey is not None:
                 return cls.from_pubkey(pubkey, accept_invalid=True)
