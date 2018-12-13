@@ -25,6 +25,13 @@ class Base58Error(Exception):
     pass
 
 
+class UnexpectedBase58PrefixError(Base58Error):
+    """Raised by check_base58_prefix_correct() when unexpected prefix encountered
+
+    """
+    pass
+
+
 class InvalidBase58Error(Base58Error):
     """Raised on generic invalid base58 data, such as bad characters.
 
@@ -92,67 +99,32 @@ class Base58ChecksumError(Base58Error):
     pass
 
 
-class CBase58Data(bytes):
+class CBase58RawData(bytes):
     """Base58-encoded data
 
-    Includes a version and checksum.
+    Includes a prefix and checksum.
     """
+    _reqire_base58_prefix = False
+    base58_prefix = b''
+
     def __new__(cls, s):
+        prefix_len = len(cls.base58_prefix)
+        if cls._reqire_base58_prefix:
+            assert prefix_len, "base58 prefix cannot be empty"
+        else:
+            assert not prefix_len, "base58 prefix must be empty for raw data"
         k = decode(s)
-        verbyte, data, check0 = k[0:1], k[1:-4], k[-4:]
-        check1 = bitcointx.core.Hash(verbyte + data)[:4]
-        if check0 != check1:
-            raise Base58ChecksumError('Checksum mismatch: expected %r, calculated %r' % (check0, check1))
-
-        return cls.from_bytes(data, verbyte[0])
-
-    def __init__(self, s):
-        """Initialize from base58-encoded string
-
-        Note: subclasses put your initialization routines here, but ignore the
-        argument - that's handled by __new__(), and .from_bytes() will call
-        __init__() with None in place of the string.
-        """
-
-    @classmethod
-    def from_bytes(cls, data, nVersion):
-        """Instantiate from data and nVersion"""
-        if not (0 <= nVersion <= 255):
-            raise ValueError('nVersion must be in range 0 to 255 inclusive; got %d' % nVersion)
-        self = bytes.__new__(cls, data)
-        self.nVersion = nVersion
-
-        return self
-
-    def to_bytes(self):
-        """Convert to bytes instance
-
-        Note that it's the data represented that is converted; the checkum and
-        nVersion is not included.
-        """
-        return b'' + self
-
-    def __str__(self):
-        """Convert to string"""
-        vs = bytes([self.nVersion]) + self
-        check = bitcointx.core.Hash(vs)[0:4]
-        return encode(vs + check)
-
-    def __repr__(self):
-        return '%s(%r)' % (self.__class__.__name__, str(self))
-
-
-class CBase58RawData(bytes):
-    """Base58-encoded data without nVersion
-
-    Includes a checksum.
-    """
-    def __new__(cls, s):
-        k = decode(s)
+        if len(k) < prefix_len + 4:
+            raise Base58Error('data too short')
         data, check0 = k[0:-4], k[-4:]
         check1 = bitcointx.core.Hash(data)[:4]
         if check0 != check1:
             raise Base58ChecksumError('Checksum mismatch: expected %r, calculated %r' % (check0, check1))
+
+        prefix, data = data[:prefix_len], data[prefix_len:]
+
+        if prefix_len:
+            return cls.from_bytes(data, prefix)
 
         return cls.from_bytes(data)
 
@@ -165,25 +137,41 @@ class CBase58RawData(bytes):
         """
 
     @classmethod
-    def from_bytes(cls, data):
+    def from_bytes(cls, data, prefix=b''):
         """Instantiate from data"""
+        assert len(prefix) == 0
         return bytes.__new__(cls, data)
 
     def to_bytes(self):
         """Convert to bytes instance
 
-        Note that it's the data represented that is converted; the checkum and
-        nVersion is not included.
+        Note that it's the data represented that is converted;
+        the prefix is not included.
         """
         return b'' + self
 
     def __str__(self):
         """Convert to string"""
-        check = bitcointx.core.Hash(self)[0:4]
-        return encode(self + check)
+        check = bitcointx.core.Hash(self.base58_prefix + self)[0:4]
+        return encode(self.base58_prefix + self + check)
 
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, str(self))
+
+
+class CBase58PrefixedData(CBase58RawData):
+    _reqire_base58_prefix = True
+
+    @classmethod
+    def check_base58_prefix_correct(cls, prefix):
+        if prefix is None or cls.base58_prefix[0] is None:
+            return
+        if prefix != cls.base58_prefix:
+            raise UnexpectedBase58PrefixError(
+                'Incorrect prefix bytes for {}: {}, expected {}'
+                .format(cls.__name__,
+                        bitcointx.core.b2x(prefix),
+                        bitcointx.core.b2x(cls.base58_prefix)))
 
 
 __all__ = (
@@ -193,6 +181,6 @@ __all__ = (
         'encode',
         'decode',
         'Base58ChecksumError',
-        'CBase58Data',
         'CBase58RawData',
+        'CBase58PrefixedData',
 )

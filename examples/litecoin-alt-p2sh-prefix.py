@@ -41,7 +41,7 @@ class MainLitecoinParams(CoreLitecoinParams):
                        'EXTENDED_PUBKEY': b'\x04\x88\xB2\x1E',
                        'EXTENDED_PRIVKEY': b'\x04\x88\xAD\xE4'}
     BECH32_HRP = 'ltc'
-    ALT_BASE58_SCRIPT_PREFIXES = {'legacy': 5, 'canonical': 50}
+    BASE58_PREFIX_ALIAS = {5: 50}
 
 
 if __name__ == '__main__':
@@ -53,7 +53,7 @@ if __name__ == '__main__':
 
     adr = CBitcoinAddress(legacy_adr)
 
-    assert str(adr) == str(canonical_adr)
+    assert str(adr) == canonical_adr
 
     print("")
     print("Litecoin address", legacy_adr)

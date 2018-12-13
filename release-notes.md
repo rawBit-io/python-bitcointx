@@ -1,5 +1,34 @@
 # python-bitcointx release notes
 
+## v0.10.3.dev0
+
+**Breaking Changes**
+
+* HD Key API changed, now it is more convenient.
+  CBitcoinExtKey now is a subclass of CExtKeyMixin
+  CBitcoinExtPubKey now is a subclass of CExtPubKeyMixin
+  all classes fork keys are instances of bytes
+  see `examples/derive-hd-key.py` and b`itcointx/tests/test_hd_keys.py`
+
+* CBase58Data removed, replaced with CBase58PrefixedData, CBase58RawData
+  CBase58PrefixedData is more generic, it works with arbitrary
+  prefixes instead of 1-byte nVersion. used both for addresses and keys.
+
+* Alternative base58 prefixes are now specified in MainParams
+  via BASE58\_PREFIX\_ALIAS. see `examples/litecoin-alt-p2sh-prefix.py`.
+
+**Other changes**
+
+* libsecp256k1 may be built without pubkey recovery functions.
+  in this case, CKey.sign\_compact() and CKey.recover\_compact()
+  will not work, but it will not affect other functions.
+
+* fix for bug when P2PKHBitcoinAddress.from\_scripPubKey is called
+  for bare checksig with uncompressed pubkey - wrong address were generated.
+  Relevant only for historical addresses.
+
+* Other small fixes
+
 ## v0.10.2
 
 * Support for bech32-encoded segwit addresses

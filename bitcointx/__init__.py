@@ -42,7 +42,9 @@ class RegTestParams(bitcointx.core.CoreRegTestParams):
     RPC_PORT = 18443
     BASE58_PREFIXES = {'PUBKEY_ADDR':111,
                        'SCRIPT_ADDR':196,
-                       'SECRET_KEY' :239}
+                       'SECRET_KEY' :239,
+                       'EXTENDED_PUBKEY': b'\x04\x35\x87\xCF',
+                       'EXTENDED_PRIVKEY': b'\x04\x35\x83\x94'}
     BECH32_HRP = 'bcrt'
 
 """Master global setting for what chain params we're using.
@@ -71,6 +73,8 @@ def SelectAlternativeParams(alt_core_params, alt_main_params):
 
     params = alt_main_params
 
+    bitcointx.wallet._SetBase58Prefixes()
+
 
 def SelectParams(name):
     """Select the chain parameters to use
@@ -89,3 +93,5 @@ def SelectParams(name):
         params = bitcointx.core.coreparams = RegTestParams()
     else:
         raise ValueError('Unknown chain %r' % name)
+
+    bitcointx.wallet._SetBase58Prefixes()

@@ -13,7 +13,7 @@
 
 import unittest
 
-from bitcointx.core import b2x, x
+from bitcointx.core import b2x, x, BIP32_HARDENED_KEY_LIMIT
 from bitcointx.core.key import CExtKey, CExtPubKey
 from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
 
@@ -77,7 +77,7 @@ class Test_CBitcoinExtKey(unittest.TestCase):
     def test(self):
         def T(base58_xprivkey, expected_hex_xprivkey):
             key = CBitcoinExtKey(base58_xprivkey)
-            self.assertEqual(b2x(key.xpriv), expected_hex_xprivkey)
+            self.assertEqual(b2x(key), expected_hex_xprivkey)
 
         T('xprv9s21ZrQH143K25QhxbucbDDuQ4naNntJRi4KUfWT7xo4EKsHt2QJDu7KXp1A3u7Bi1j8ph3EGsZ9Xvz9dGuVrtHHs7pXeTzjuxBrCmmhgC6',
           '00000000000000000001d28a3e53cffa419ec122c968b3259e16b65076495494d97cae10bbfec3c36f0000ddb80b067e0d4993197fe10f2657a844a384589847602d56f0c629c81aae32')
@@ -98,13 +98,13 @@ class Test_CBitcoinExtKey(unittest.TestCase):
 
     def test_from_xpriv(self):
         xpriv_str = 'xprv9vHkqa6EV4sPZHYqZznhT2NPtPCjKuDKGY38FBWLvgaDx45zo9WQRUT3dKYnjwih2yJD9mkrocEZXo1ex8G81dwSM1fwqWpWkeS3v86pgKt'
-        xpriv = CBitcoinExtKey(xpriv_str).xpriv
-        self.assertEqual(xpriv_str, str(CBitcoinExtKey.from_xpriv(xpriv)))
+        xpriv = CBitcoinExtKey(xpriv_str)
+        self.assertEqual(xpriv_str, str(CBitcoinExtKey.from_bytes(xpriv)))
 
     def test_invalid_derivation(self):
         xpriv = CBitcoinExtKey(
             'xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi'
-        ).xpriv
+        )
 
         with self.assertRaises(ValueError):
             xpriv.derive(1 << 32)
@@ -112,7 +112,7 @@ class Test_CBitcoinExtKey(unittest.TestCase):
         final_xpriv_str = 'xprvJ9DiCzes6yvKjEy8duXR1Qg6Et6CBmrR4yFJvnburXG4X6VnKbNxoTYhvVdpsxkjdXwX3D2NJHFCAnnN1DdAJCVQitnFbFWv3fL3oB2BFo4'
         for _ in range(255):
             xpriv = xpriv.derive(0)
-        self.assertEqual(str(CBitcoinExtKey.from_xpriv(xpriv)), final_xpriv_str)
+        self.assertEqual(str(CBitcoinExtKey.from_bytes(xpriv)), final_xpriv_str)
 
         with self.assertRaises(ValueError):
             xpriv.derive(0)  # depth > 255
@@ -120,10 +120,10 @@ class Test_CBitcoinExtKey(unittest.TestCase):
     def test_standard_bip32_vectors(self):
         for vector in BIP32_TEST_VECTORS:
             _, seed = vector[0]
-            key = CExtKey.from_seed(x(seed))
+            key = CBitcoinExtKey.from_seed(x(seed))
             for xpub, xpriv, child_num in vector[1:]:
-                self.assertEqual(xpub, str(CBitcoinExtPubKey.from_xpub(key.neuter())))
-                self.assertEqual(xpriv, str(CBitcoinExtKey.from_xpriv(key)))
+                self.assertEqual(xpub, str(key.neuter()))
+                self.assertEqual(xpriv, str(key))
                 key = key.derive(child_num)
 
 
@@ -131,7 +131,7 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
     def test(self):
         def T(base58_xpubkey, expected_hex_xpubkey):
             key = CBitcoinExtPubKey(base58_xpubkey)
-            self.assertEqual(b2x(key.xpub), expected_hex_xpubkey)
+            self.assertEqual(b2x(key), expected_hex_xpubkey)
 
         T('xpub661MyMwAqRbcFMfe2ZGFSPef9xMXWrZUDta7RXKPbtxuNyepg8ewAWVV5qME4omB67Ek4eDrpyFtMcUcznxCf8sV8DCnsZeWj6Z2N3RXqPo',
           '00000000000000000051cba4db213938e74101b4264be4f45a9f3a7b2c0005963331c7a0ffaa5978b903782da1cfa3f03b9ae2bfa3077296410f5f80cf92eaa2f87d738a320b8486f326')
@@ -140,11 +140,11 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
 
     def test_derive(self):
         def T(base_xpub, expected_child, path):
-            xpub = CBitcoinExtPubKey(base_xpub).xpub
+            xpub = CBitcoinExtPubKey(base_xpub)
             for child_num in path:
                 xpub = xpub.derive(child_num)
 
-            self.assertTrue(str(CBitcoinExtPubKey.from_xpub(xpub)) == expected_child)
+            self.assertTrue(str(CBitcoinExtPubKey.from_bytes(xpub)) == expected_child)
 
         T('xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB',
           'xpub69H7F5d8KSRgmmdJg2KhpAK8SR3DjMwAdkxj3ZuxV27CprR9LgpeyGmXUbC6wb7ERfvrnKZjXoUmmDznezpbZb7ap6r1D3tgFxHmwMkQTPH',
@@ -168,13 +168,13 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
 
     def test_from_xpub(self):
         xpub_str = 'xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB'
-        xpub = CBitcoinExtPubKey(xpub_str).xpub
-        self.assertEqual(xpub_str, str(CBitcoinExtPubKey.from_xpub(xpub)))
+        xpub = CBitcoinExtPubKey(xpub_str)
+        self.assertEqual(xpub_str, str(CBitcoinExtPubKey.from_bytes(xpub)))
 
     def test_invalid_derivation(self):
         xpub = CBitcoinExtPubKey(
             'xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB'
-        ).xpub
+        )
 
         with self.assertRaises(ValueError):
             xpub.derive(1 << 31)
@@ -182,7 +182,28 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
         final_xpub_str = 'xpubEPPCAoZp7t6CN5GGoyYTEr91FCaPpQonRouneRKmRCzgfcWNHnyHMuQPCDn8wLv1vYyPrFpSK26VeA9dDXTKMCLm7FaSY9aVTWw5mTZLC7F'
         for _ in range(255):
             xpub = xpub.derive(0)
-        self.assertEqual(str(CBitcoinExtPubKey.from_xpub(xpub)), final_xpub_str)
+        self.assertEqual(str(CBitcoinExtPubKey.from_bytes(xpub)), final_xpub_str)
 
         with self.assertRaises(ValueError):
             xpub.derive(0)  # depth > 255
+
+
+class Test_CExtPubKey(unittest.TestCase):
+    def test(self):
+        xpub_str = 'xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB'
+        xpub = CBitcoinExtPubKey(xpub_str)
+        xpub2 = CExtPubKey(xpub)
+        self.assertEqual(xpub_str, str(CBitcoinExtPubKey.from_bytes(xpub2)))
+        self.assertEqual(xpub, CBitcoinExtPubKey.from_bytes(xpub2))
+        self.assertEqual(xpub.derive(0), xpub2.derive(0))
+
+
+class Test_CExtKey(unittest.TestCase):
+    def test_extkey(self):
+        xprv_str = 'xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi'
+        xprv = CBitcoinExtKey(xprv_str)
+        xprv2 = CExtKey(xprv)
+        self.assertEqual(xprv_str, str(CBitcoinExtKey.from_bytes(xprv2)))
+        self.assertEqual(bytes(xprv.derive(BIP32_HARDENED_KEY_LIMIT)),
+                         bytes(xprv2.derive(BIP32_HARDENED_KEY_LIMIT)))
+        self.assertEqual(str(xprv.neuter()), str(CBitcoinExtPubKey.from_bytes(xprv2.neuter())))

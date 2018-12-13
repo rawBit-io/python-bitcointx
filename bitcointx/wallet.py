@@ -102,25 +102,37 @@ class CBech32BitcoinAddress(bitcointx.bech32.CBech32Data, CBitcoinAddress):
         raise CBitcoinAddressError('scriptPubKey not a valid bech32-encoded address')
 
 
-class CBase58BitcoinAddress(bitcointx.base58.CBase58Data, CBitcoinAddress):
+class CBase58BitcoinAddress(bitcointx.base58.CBase58PrefixedData, CBitcoinAddress):
     """A Base58-encoded Bitcoin address"""
 
+    # allow for CBase58PrefixedData to get length,
+    # but prevent any matches with real prefixes
+    base58_prefix = [None]
+    base58_prefix_alias = {}
+
     @classmethod
-    def from_bytes(cls, data, nVersion):
-        alt_script_prefixes = getattr(bitcointx.params, 'ALT_BASE58_SCRIPT_PREFIXES', None)
-        if alt_script_prefixes and nVersion in alt_script_prefixes.values():
-            nVersion = bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']
+    def from_bytes(cls, data, prefix=None):
 
-        self = super(CBase58BitcoinAddress, cls).from_bytes(data, nVersion)
-
-        if nVersion == bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']:
-            self.__class__ = P2SHBitcoinAddress
-
-        elif nVersion == bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR']:
-            self.__class__ = P2PKHBitcoinAddress
-
+        if prefix is None:
+            prefix = cls.base58_prefix
+            assert prefix[0] is not None
         else:
-            raise CBitcoinAddressError('Version %d not a recognized Bitcoin Address' % nVersion)
+            if prefix in cls.base58_prefix_alias:
+                prefix = cls.base58_prefix_alias[prefix]
+            cls.check_base58_prefix_correct(prefix)
+
+        nVersion = prefix[0]
+
+        self = super(CBase58BitcoinAddress, cls).from_bytes(data)
+
+        if cls not in CBase58BitcoinAddress.__subclasses__():
+            for subclass in CBase58BitcoinAddress.__subclasses__():
+                prefix = subclass.base58_prefix
+                if prefix is not None and nVersion == prefix[0]:
+                    self.__class__ = subclass
+                    break
+            else:
+                raise CBitcoinAddressError('Version %d not a recognized Bitcoin Address' % nVersion)
 
         return self
 
@@ -146,16 +158,6 @@ class CBase58BitcoinAddress(bitcointx.base58.CBase58Data, CBitcoinAddress):
 
 
 class P2SHBitcoinAddress(CBase58BitcoinAddress):
-    @classmethod
-    def from_bytes(cls, data, nVersion=None):
-        if nVersion is None:
-            nVersion = bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']
-
-        elif nVersion != bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']:
-            raise ValueError('nVersion incorrect for P2SH address: got %d; expected %d' %
-                             (nVersion, bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']))
-
-        return super(P2SHBitcoinAddress, cls).from_bytes(data, nVersion)
 
     @classmethod
     def from_redeemScript(cls, redeemScript):
@@ -173,14 +175,13 @@ class P2SHBitcoinAddress(CBase58BitcoinAddress):
         form.
         """
         if scriptPubKey.is_p2sh():
-            return cls.from_bytes(scriptPubKey[2:22], bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR'])
+            return cls.from_bytes(scriptPubKey[2:22])
 
         else:
             raise CBitcoinAddressError('not a P2SH scriptPubKey')
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        assert self.nVersion == bitcointx.params.BASE58_PREFIXES['SCRIPT_ADDR']
         return script.CScript([script.OP_HASH160, self, script.OP_EQUAL])
 
     def to_redeemScript(self):
@@ -188,16 +189,6 @@ class P2SHBitcoinAddress(CBase58BitcoinAddress):
 
 
 class P2PKHBitcoinAddress(CBase58BitcoinAddress):
-    @classmethod
-    def from_bytes(cls, data, nVersion=None):
-        if nVersion is None:
-            nVersion = bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR']
-
-        elif nVersion != bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR']:
-            raise ValueError('nVersion incorrect for P2PKH address: got %d; expected %d' %
-                             (nVersion, bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR']))
-
-        return super(P2PKHBitcoinAddress, cls).from_bytes(data, nVersion)
 
     @classmethod
     def from_pubkey(cls, pubkey, accept_invalid=False):
@@ -218,7 +209,7 @@ class P2PKHBitcoinAddress(CBase58BitcoinAddress):
                 raise CBitcoinAddressError('invalid pubkey')
 
         pubkey_hash = bitcointx.core.Hash160(pubkey)
-        return P2PKHBitcoinAddress.from_bytes(pubkey_hash)
+        return cls.from_bytes(pubkey_hash)
 
     @classmethod
     def from_scriptPubKey(cls, scriptPubKey, accept_non_canonical_pushdata=True, accept_bare_checksig=True):
@@ -241,16 +232,16 @@ class P2PKHBitcoinAddress(CBase58BitcoinAddress):
                 raise CBitcoinAddressError('not a P2PKH scriptPubKey: script is invalid')
 
         if scriptPubKey.is_witness_v0_keyhash():
-            return cls.from_bytes(scriptPubKey[2:22], bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR'])
+            return cls.from_bytes(scriptPubKey[2:22])
         elif scriptPubKey.is_witness_v0_nested_keyhash():
-            return cls.from_bytes(scriptPubKey[3:23], bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR'])
+            return cls.from_bytes(scriptPubKey[3:23])
         elif (len(scriptPubKey) == 25
                 and scriptPubKey[0]  == script.OP_DUP
                 and scriptPubKey[1]  == script.OP_HASH160
                 and scriptPubKey[2]  == 0x14
                 and scriptPubKey[23] == script.OP_EQUALVERIFY
                 and scriptPubKey[24] == script.OP_CHECKSIG):
-            return cls.from_bytes(scriptPubKey[3:23], bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR'])
+            return cls.from_bytes(scriptPubKey[3:23])
 
         elif accept_bare_checksig:
             pubkey = None
@@ -276,7 +267,6 @@ class P2PKHBitcoinAddress(CBase58BitcoinAddress):
 
     def to_scriptPubKey(self, nested=False):
         """Convert an address to a scriptPubKey"""
-        assert self.nVersion == bitcointx.params.BASE58_PREFIXES['PUBKEY_ADDR']
         return script.CScript([script.OP_DUP, script.OP_HASH160, self, script.OP_EQUALVERIFY, script.OP_CHECKSIG])
 
     def to_redeemScript(self):
@@ -333,93 +323,100 @@ class CBitcoinSecretError(bitcointx.base58.Base58Error):
     pass
 
 
-class CBitcoinSecret(bitcointx.base58.CBase58Data, bitcointx.core.key.CKey):
+class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CKeyMixin):
     """A base58-encoded secret key"""
+
+    @classmethod
+    def from_bytes(cls, data, prefix=None):
+        cls.check_base58_prefix_correct(prefix)
+        assert len(data) <= 33
+        compressed = (len(data) > 32 and data[32] == 1)
+        self = super(CBitcoinSecret, cls).from_bytes(data)
+        bitcointx.core.key.CKey.__init__(self, None, compressed=compressed)
+        return self
 
     @classmethod
     def from_secret_bytes(cls, secret, compressed=True):
         """Create a secret key from a 32-byte secret"""
-        self = cls.from_bytes(secret + (b'\x01' if compressed else b''),
-                              bitcointx.params.BASE58_PREFIXES['SECRET_KEY'])
+        assert len(secret) == 32
+        self = super(CBitcoinSecret, cls).from_bytes(secret + (b'\x01' if compressed else b''))
+        bitcointx.core.key.CKey.__init__(self, None, compressed=compressed)
+        return self
+
+    def to_compressed(self):
+        if self.is_compressed:
+            return self
+        return self.__class__.from_secret_bytes(self[:32], True)
+
+    def to_uncompressed(self):
+        if not self.is_compressed:
+            return self
+        return self.__class__.from_secret_bytes(self[:32], False)
+
+
+class CBitcoinExtPubKey(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CExtPubKeyMixin):
+    @classmethod
+    def from_bytes(cls, data, prefix=None):
+        cls.check_base58_prefix_correct(prefix)
+        self = super(CBitcoinExtPubKey, cls).from_bytes(data)
         self.__init__(None)
         return self
 
-    def __init__(self, s):
-        if self.nVersion != bitcointx.params.BASE58_PREFIXES['SECRET_KEY']:
-            raise CBitcoinSecretError('Not a base58-encoded secret key: got nVersion=%d; expected nVersion=%d' %
-                                      (self.nVersion, bitcointx.params.BASE58_PREFIXES['SECRET_KEY']))
-
-        bitcointx.core.key.CKey.__init__(self, self[0:32], len(self) > 32 and self[32] == 1)
+    def __init__(self, _s):
+        bitcointx.core.key.CExtPubKey.__init__(self, None)
 
 
-class CBitcoinExtKey(bitcointx.base58.CBase58RawData):
+class CBitcoinExtKey(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CExtKeyMixin):
+
+    _xpub_class = CBitcoinExtPubKey
+    _key_class = CBitcoinSecret
 
     @classmethod
-    def from_bytes(cls, data):
-        prefix = bitcointx.params.BASE58_PREFIXES['EXTENDED_PRIVKEY']
-        if data[:4] != prefix:
-            raise ValueError('incorrect version bytes for xprivkey: {}, expected {}'
-                             .format(bitcointx.core.b2x(data[:4]),
-                                     bitcointx.core.b2x(bitcointx.params.BASE58_PREFIXES['EXTENDED_PRIVKEY'])))
-
+    def from_bytes(cls, data, prefix=None):
+        cls.check_base58_prefix_correct(prefix)
         self = super(CBitcoinExtKey, cls).from_bytes(data)
-
-        self.xpriv = bitcointx.core.key.CExtKey(data[4:])
-
+        self.__init__(None)
         return self
 
-    @classmethod
-    def from_xpriv(cls, xpriv):
-        assert isinstance(xpriv, bitcointx.core.key.CExtKey)
-        prefix = bitcointx.params.BASE58_PREFIXES['EXTENDED_PRIVKEY']
-        return cls.from_bytes(prefix + xpriv)
-
-    def to_bytes(self):
-        """Convert to bytes instance
-
-        Note that it's the data represented that is converted; the checkum and
-        nVersion is not included.
-        """
-        prefix = bitcointx.params.BASE58_PREFIXES['EXTENDED_PRIVKEY']
-        return prefix + self
+    def __init__(self, _s):
+        bitcointx.core.key.CExtKey.__init__(self, None)
 
 
-class CBitcoinExtPubKey(bitcointx.base58.CBase58RawData):
-    @classmethod
-    def from_bytes(cls, data):
-        prefix = bitcointx.params.BASE58_PREFIXES['EXTENDED_PUBKEY']
-        if data[:4] != prefix:
-            raise ValueError('incorrect version bytes for xpubkey: {}, expected {}'
-                             .format(bitcointx.core.b2x(data[:4]),
-                                     bitcointx.core.b2x(bitcointx.params.BASE58_PREFIXES['EXTENDED_PUBKEY'])))
+_Base58PrefixMap = {
+    P2PKHBitcoinAddress: 'PUBKEY_ADDR',
+    P2SHBitcoinAddress: 'SCRIPT_ADDR',
+    CBitcoinSecret: 'SECRET_KEY',
+    CBitcoinExtKey: 'EXTENDED_PRIVKEY',
+    CBitcoinExtPubKey: 'EXTENDED_PUBKEY',
+}
 
-        self = super(CBitcoinExtPubKey, cls).from_bytes(data)
 
-        self.xpub = bitcointx.core.key.CExtPubKey(data[4:])
+def _SetBase58Prefixes():
 
-        return self
+    def ensure_pfx_bytes(prefix):
+        if isinstance(prefix, int):
+            prefix = bytes([prefix])
+        assert isinstance(prefix, bytes)
+        return prefix
 
-    @classmethod
-    def from_xpub(cls, xpub):
-        assert isinstance(xpub, bitcointx.core.key.CExtPubKey)
-        prefix = bitcointx.params.BASE58_PREFIXES['EXTENDED_PUBKEY']
-        return cls.from_bytes(prefix + xpub)
+    for cls, pname in _Base58PrefixMap.items():
+        prefix = bitcointx.params.BASE58_PREFIXES.get(pname)
+        if prefix is not None:
+            prefix = ensure_pfx_bytes(prefix)
+        cls.base58_prefix = prefix
+        CBase58BitcoinAddress.base58_prefix_alias = {}
+        for pfx_from, pfx_to in getattr(bitcointx.params, 'BASE58_PREFIX_ALIAS', {}).items():
+            pfx_from = ensure_pfx_bytes(pfx_from)
+            pfx_to = ensure_pfx_bytes(pfx_to)
+            CBase58BitcoinAddress.base58_prefix_alias[pfx_from] = pfx_to
 
-    def to_key(self):
-        return self.xpub
 
-    def to_bytes(self):
-        """Convert to bytes instance
-
-        Note that it's the data represented that is converted; the checkum and
-        nVersion is not included.
-        """
-        prefix = bitcointx.params.BASE58_PREFIXES['EXTENDED_PUBKEY']
-        return prefix + self
+_SetBase58Prefixes()
 
 __all__ = (
         'CBitcoinAddressError',
         'CBitcoinAddress',
+        '_SetBase58Prefixes',
         'CBase58BitcoinAddress',
         'CBech32BitcoinAddress',
         'P2SHBitcoinAddress',

@@ -18,6 +18,7 @@
 WARNING: This module does not mlock() secrets; your private keys may end up on
 disk in swap! Use with caution!
 """
+
 import hmac
 import struct
 import ctypes
@@ -205,31 +206,26 @@ _libsecp256k1_seed = urandom(32)
 assert(_libsecp256k1.secp256k1_context_randomize(_libsecp256k1_context_sign, _libsecp256k1_seed) == 1)
 
 
-# We do not want to make CKey a subclass of bytes, as we do with CPubKey,
-# to prevent accidental leak of key data when it is included in debug logs, etc.
-# to access key data, you need to explicitly say key.secret
-class CKey(object):
+class CKeyMixin():
     """An encapsulated private key
 
     Attributes:
 
     pub           - The corresponding CPubKey for this private key
-    secret        - Raw secret bytes of private key
+    secret_bytes  - Secret data, 32 bytes (needed because subclasses may have trailing data)
 
     is_compressed - True if compressed
 
     """
-    def __init__(self, secret, compressed=True):
-        assert len(secret) == 32
-        self.secret = secret
 
+    def __init__(self, s, compressed=True):
         raw_pubkey = ctypes.create_string_buffer(64)
 
         # no need for explicit secp256k1_ec_seckey_verify()
         # because secp256k1_ec_pubkey_create() will do
         # the same checks and ensure that secret data is valid
         result = _libsecp256k1.secp256k1_ec_pubkey_create(
-            _libsecp256k1_context_sign, raw_pubkey, secret)
+            _libsecp256k1_context_sign, raw_pubkey, self.secret_bytes)
 
         if result != 1:
             raise ValueError('Invalid private key data')
@@ -240,9 +236,9 @@ class CKey(object):
     def is_compressed(self):
         return self.pub.is_compressed
 
-    def set_compressed(self, compressed):
-        raw_pubkey = self.pub._to_raw()
-        self.pub = CPubKey._from_raw(raw_pubkey, compressed=compressed)
+    @property
+    def secret_bytes(self):
+        return self[:32]
 
     def sign(self, hash):
         if not isinstance(hash, bytes):
@@ -252,7 +248,7 @@ class CKey(object):
 
         raw_sig = ctypes.create_string_buffer(64)
         result = _libsecp256k1.secp256k1_ecdsa_sign(
-            _libsecp256k1_context_sign, raw_sig, hash, self, None, None)
+            _libsecp256k1_context_sign, raw_sig, hash, self.secret_bytes, None, None)
         assert 1 == result
         sig_size0 = ctypes.c_size_t()
         sig_size0.value = SIGNATURE_SIZE
@@ -277,7 +273,7 @@ class CKey(object):
         recoverable_sig = ctypes.create_string_buffer(COMPACT_SIGNATURE_SIZE)
 
         result = _libsecp256k1.secp256k1_ecdsa_sign_recoverable(
-            _libsecp256k1_context_sign, recoverable_sig, hash, self, None, None)
+            _libsecp256k1_context_sign, recoverable_sig, hash, self.secret_bytes, None, None)
 
         assert 1 == result
 
@@ -296,6 +292,16 @@ class CKey(object):
 
     def verify_nonstrict(self, hash, sig):
         return self.pub.verify_nonstrict(hash, sig)
+
+
+class CKey(bytes, CKeyMixin):
+    "Standalone privkey class"
+
+    @classmethod
+    def from_secret_bytes(cls, secret, compressed=True):
+        assert compressed
+        assert len(secret) == 32
+        return cls(secret)
 
 
 class CPubKey(bytes):
@@ -454,40 +460,59 @@ class CPubKey(bytes):
         return self.verify(hash, norm_der)
 
 
-class CExtKeyMixin():
+class CExtKeyBase():
 
-    def _parse_buf(self, buf):
-        if len(buf) != 74:
+    def _check_length(self):
+        if len(self) != 74:
             raise ValueError('Invalid length for extended key')
 
-        self.depth = buf[0]
-        self.parent_fp = buf[1:5]
-        self.child_number = struct.unpack(">L", buf[5:9])[0]
-        self.chaincode = buf[9:41]
+    @property
+    def depth(self):
+        return self[0]
 
-        return buf[41:74]
+    @property
+    def parent_fp(self):
+        return self[1:5]
+
+    @property
+    def child_number(self):
+        return struct.unpack(">L", self.child_number_bytes)[0]
+
+    @property
+    def child_number_bytes(self):
+        return self[5:9]
+
+    @property
+    def chaincode(self):
+        return self[9:41]
+
+    @property
+    def key_bytes(self):
+        return self[41:74]
 
 
-class CExtKey(bytes, CExtKeyMixin):
+class CExtKeyMixin(CExtKeyBase):
     """An encapsulated extended private key
 
     priv          - The corresponding CKey for extended privkey
     pub           - shortcut property for priv.pub
     """
 
-    def __new__(cls, buf):
-        self = super(CExtKey, cls).__new__(cls, buf)
+    def __init__(self, _s):
 
-        # Note that we ignore first byte - for xpubkey,
+        self._check_length()
+
+        # NOTE: we ignore first byte - for xpubkey,
         # this is pubkey prefix byte.
         # For xprivkey, this byte is supposed to be zero,
         # but Bitcoin Core ignores that and do not check.
         # We also do not check, to be compatible.
-        secret_bytes = self._parse_buf(buf)[1:]
+        raw_priv = self.key_bytes[1:]
 
-        self.priv = CKey(secret_bytes)
-
-        return self
+        # NOTE: cannot make self.priv a @property method
+        # because we need to check if the privkey is valid
+        # CKey() will do this for us.
+        self.priv = self._key_class.from_secret_bytes(raw_priv)
 
     @property
     def pub(self):
@@ -503,7 +528,7 @@ class CExtKey(bytes, CExtKeyMixin):
         parent_fp = child_number_packed = b'\x00\x00\x00\x00'
         privkey = hmac_hash[:32]
         chaincode = hmac_hash[32:]
-        return cls(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + privkey)
+        return cls.from_bytes(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + privkey)
 
     def derive(self, child_number):
         if self.depth >= 255:
@@ -521,12 +546,12 @@ class CExtKey(bytes, CExtKeyMixin):
                                   hashlib.sha512).digest()
         else:
             bip32_hash = hmac.new(self.chaincode,
-                                  bytes([0]) + self.priv.secret + child_number_packed,
+                                  bytes([0]) + self.priv.secret_bytes + child_number_packed,
                                   hashlib.sha512).digest()
 
         chaincode = bip32_hash[32:]
 
-        child_privkey = ctypes.create_string_buffer(self.priv.secret, size=32)
+        child_privkey = ctypes.create_string_buffer(self.priv.secret_bytes, size=32)
 
         result = _libsecp256k1.secp256k1_ec_privkey_tweak_add(
             _libsecp256k1_context_sign, child_privkey, bip32_hash)
@@ -536,29 +561,31 @@ class CExtKey(bytes, CExtKeyMixin):
 
         parent_fp = self.pub.key_id[:4]
         cls = self.__class__
-        return cls(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + child_privkey)
+        return cls.from_bytes(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + child_privkey)
 
     def neuter(self):
-        child_number_packed = struct.pack(">L", self.child_number)
-        return CExtPubKey(bytes([self.depth]) + self.parent_fp + child_number_packed
-                          + self.chaincode + self.pub)
+        return self._xpub_class.from_bytes(
+            bytes([self.depth]) + self.parent_fp + self.child_number_bytes + self.chaincode + self.pub)
 
 
-class CExtPubKey(bytes, CExtKeyMixin):
+class CExtPubKeyMixin(CExtKeyBase):
     """An encapsulated extended public key
 
     pub           - The corresponding CPubKey for extended pubkey
 
     """
 
-    def __new__(cls, buf):
-        self = super(CExtPubKey, cls).__new__(cls, buf)
-        pubkey_bytes = self._parse_buf(buf)
+    def __init__(self, _s):
 
-        self.pub = CPubKey(pubkey_bytes)
+        self._check_length()
+
+        self.pub = CPubKey(self.key_bytes)
         if not self.pub.is_fullyvalid:
             raise ValueError('pubkey part of xpubkey is not valid')
-        return self
+
+    @classmethod
+    def from_bytes(cls, data):
+        return cls(data)
 
     def derive(self, child_number):
         if (child_number >> 31) != 0:
@@ -598,7 +625,7 @@ class CExtPubKey(bytes, CExtKeyMixin):
 
         parent_fp = self.pub.key_id[:4]
         cls = self.__class__
-        return cls(bytes([depth]) + parent_fp + child_number_packed + chaincode + child_pubkey)
+        return cls.from_bytes(bytes([depth]) + parent_fp + child_number_packed + chaincode + child_pubkey)
 
     def __str__(self):
         return repr(self)
@@ -606,8 +633,27 @@ class CExtPubKey(bytes, CExtKeyMixin):
     def __repr__(self):
         return '%s(%s)' % (self.__class__.__name__, super(CExtPubKey, self).__repr__())
 
+
+class CExtPubKey(bytes, CExtPubKeyMixin):
+    "Standalone extended pubkey class"
+
+
+class CExtKey(bytes, CExtKeyMixin):
+    "Standalone extended key class"
+    _key_class = CKey
+    _xpub_class = CExtPubKey
+
+    @classmethod
+    def from_bytes(cls, data):
+        return cls(data)
+
+
 __all__ = (
     'CKey',
     'CPubKey',
-    'CExtPubKey'
+    'CExtKey',
+    'CExtPubKey',
+    'CKeyMixin',
+    'CExtKeyMixin',
+    'CExtPubKeyMixin'
 )

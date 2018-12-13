@@ -29,7 +29,7 @@ class Test_CBitcoinAddress(unittest.TestCase):
             self.assertEqual(addr.to_bytes(), expected_bytes)
             self.assertEqual(addr.__class__, expected_class)
             if isinstance(addr, CBase58BitcoinAddress):
-                self.assertEqual(addr.nVersion, expected_version)
+                self.assertEqual(addr.base58_prefix[0], expected_version)
             elif isinstance(addr, CBech32BitcoinAddress):
                 self.assertEqual(addr.witver, expected_version)
 
@@ -282,6 +282,41 @@ class Test_CBitcoinSecret(unittest.TestCase):
         hash = b'\x00' * 32
         with self.assertRaises(ValueError):
             key.sign(hash[0:-2])
+
+    def test_from_to_compressed(self):
+        def T(keydata, compressed, uncompressed):
+            k = CBitcoinSecret.from_secret_bytes(x(keydata))
+            k_u = CBitcoinSecret.from_secret_bytes(x(keydata), False)
+
+            self.assertTrue(k.is_compressed)
+            self.assertEqual(k.pub, x(compressed))
+
+            k2 = CBitcoinSecret(str(k))
+            self.assertTrue(k2.is_compressed)
+            self.assertEqual(k, k2)
+
+            k = k.to_uncompressed()
+            self.assertEqual(k, k_u)
+            self.assertEqual(len(k), 32)
+            self.assertFalse(k.is_compressed)
+            self.assertEqual(k.pub, x(uncompressed))
+
+            k2 = CBitcoinSecret(str(k))
+            self.assertFalse(k2.is_compressed)
+            self.assertEqual(k, k2)
+
+            k = k.to_compressed()
+            self.assertEqual(len(k), 33)
+            self.assertEqual(k[-1], 1)
+            self.assertTrue(k.is_compressed)
+            self.assertEqual(k.pub, x(compressed))
+
+        T('0de5306487851213f0aae1454f4e4449949a755802b60f6eb47906149395d080',
+          '023bd76d581c4823f66d8f3f6462dfdb3c8823ba77c7e8b5284d04b41b83659811',
+          '043bd76d581c4823f66d8f3f6462dfdb3c8823ba77c7e8b5284d04b41b836598111af4e26a83ff8e3e0eef15eca09953f9a3d3c2c15807c5ef68a180fb8d4260c6')
+        T('c9ff05edfbfb4710267ccf212fbb0414284b09fce621f8ab61a5b1cf0f3a5bf2',
+          '029925633a4ba7d5f6f60d94213f65dfc482aa9b0f3cadb1ce20d7b7d792428209',
+          '049925633a4ba7d5f6f60d94213f65dfc482aa9b0f3cadb1ce20d7b7d792428209973a2e2e14e13d6263c894fefd5374d1d2b0e637b2215209b55604c0bb4f1196')
 
 
 class Test_RFC6979(unittest.TestCase):

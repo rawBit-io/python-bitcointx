@@ -13,9 +13,8 @@
 
 import sys
 import ssl
-from bitcointx.core import BIP32_HARDENED_KEY_LIMIT
-from bitcointx.core.key import CExtKey
-from bitcointx.base58 import Base58Error
+from bitcointx.core import b2x, BIP32_HARDENED_KEY_LIMIT
+from bitcointx.base58 import Base58Error, UnexpectedBase58PrefixError
 from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
 
 if __name__ == '__main__':
@@ -25,13 +24,15 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     if len(sys.argv) == 2:
-        xkey = CBitcoinExtKey.from_xpriv(CExtKey.from_seed(ssl.RAND_bytes(32)))
+        xkey = CBitcoinExtKey.from_seed(ssl.RAND_bytes(32))
         print("generated xpriv: ", xkey)
     else:
         for cls in (CBitcoinExtKey, CBitcoinExtPubKey):
             try:
                 xkey = cls(sys.argv[2])
                 break
+            except UnexpectedBase58PrefixError:
+                pass
             except Base58Error:
                 print("ERROR: specified key is incorrectly encoded")
                 sys.exit(-1)
@@ -61,12 +62,32 @@ if __name__ == '__main__':
             print("ERROR: invalid element in the path:", elt)
             sys.exit(-1)
 
-        print("child: {:08x}".format(n))
+        print("child number: 0x{:08x}".format(n))
+        xkey = xkey.derive(n)
         if isinstance(xkey, CBitcoinExtKey):
-            xkey = CBitcoinExtKey.from_xpriv(xkey.xpriv.derive(n))
             print("xpriv:", xkey)
-            print("xpub: ",  CBitcoinExtPubKey.from_xpub(xkey.xpriv.neuter()))
+
+            # Note:
+            # if xkey is CBitcoinExtKey, xkey.priv is CBitcoinSecret
+            #     CBitcoinSecret is in WIF format, and compressed
+            #     len(bytes(xkey.privkey)) == 33
+            # if xkey is CExtKey, xkey.priv is CKey
+            #     CKey is always 32 bytes
+            #
+            # Standalone CBitcoinSecret key can be uncompressed,
+            # and be of 32 bytes length, but this is not the case
+            # with xpriv encapsulated in CBitcoinExtKey - it is
+            # always compressed there.
+            #
+            # you can always use xkey.priv.secret_bytes
+            # to get raw 32-byte secret data from both CBitcoinSecret and CKey
+            #
+            print("priv WIF:", xkey.priv)
+            print("raw priv:", b2x(xkey.priv.secret_bytes))
+
+            print("xpub: ", xkey.neuter())
+            print("pub:", b2x(xkey.pub))
         else:
             assert isinstance(xkey, CBitcoinExtPubKey)
-            xkey = CBitcoinExtPubKey.from_xpub(xkey.xpub.derive(n))
-            print("xpub:",  xkey)
+            print("xpub:", xkey)
+            print("pub:", b2x(xkey.pub))

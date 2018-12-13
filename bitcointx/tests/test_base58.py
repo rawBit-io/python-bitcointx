@@ -25,6 +25,7 @@ def load_test_vectors(name):
         for testcase in json.load(fd):
             yield testcase
 
+
 class Test_base58(unittest.TestCase):
     def test_encode_decode(self):
         for exp_bin, exp_base58 in load_test_vectors('base58_encode_decode.json'):
@@ -36,15 +37,34 @@ class Test_base58(unittest.TestCase):
             self.assertEqual(act_base58, exp_base58)
             self.assertEqual(act_bin, exp_bin)
 
-class Test_CBase58Data(unittest.TestCase):
-    def test_from_data(self):
-        b = CBase58Data.from_bytes(b"b\xe9\x07\xb1\\\xbf'\xd5BS\x99\xeb\xf6\xf0\xfbP\xeb\xb8\x8f\x18", 0)
-        self.assertEqual(b.nVersion, 0)
-        self.assertEqual(str(b), '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')
 
-        b = CBase58Data.from_bytes(b'Bf\xfco,(a\xd7\xfe"\x9b\'\x9ay\x80:\xfc\xa7\xba4', 196)
-        self.assertEqual(b.nVersion, 196)
-        self.assertEqual(str(b), '2MyJKxYR2zNZZsZ39SgkCXWCfQtXKhnWSWq')
+class Test_CBase58Data(unittest.TestCase):
+
+    def test_from_data(self):
+        def T(nVersion, data, address):
+            prefix = bytes([nVersion])
+
+            class MockBase58Address(CBase58PrefixedData):
+                @classmethod
+                def from_bytes(cls, data, _prefix):
+                    assert prefix == _prefix
+                    cls.check_base58_prefix_correct(prefix)
+                    return super(MockBase58Address, cls).from_bytes(data)
+
+            b = CBase58RawData.from_bytes(prefix + data)
+            self.assertEqual(str(b), address)
+
+            MockBase58Address.base58_prefix = bytes(prefix)
+            ma = MockBase58Address(address)
+            self.assertEqual(str(ma), address)
+            self.assertEqual(bytes(ma), data)
+
+            MockBase58Address.base58_prefix = bytes([(nVersion + 1) & 0xFF])
+            with self.assertRaises(Base58Error):
+                ma = MockBase58Address(address)
+
+        T(0, b"b\xe9\x07\xb1\\\xbf'\xd5BS\x99\xeb\xf6\xf0\xfbP\xeb\xb8\x8f\x18", '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')
+        T(196, b'Bf\xfco,(a\xd7\xfe"\x9b\'\x9ay\x80:\xfc\xa7\xba4', '2MyJKxYR2zNZZsZ39SgkCXWCfQtXKhnWSWq')
 
     def test_invalid_base58_exception(self):
         invalids = ('', # missing everything
@@ -55,4 +75,4 @@ class Test_CBase58Data(unittest.TestCase):
         for invalid in invalids:
             msg = '%r should have raised InvalidBase58Error but did not' % invalid
             with self.assertRaises(Base58Error, msg=msg):
-                CBase58Data(invalid)
+                CBase58RawData(invalid)

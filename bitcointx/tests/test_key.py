@@ -42,20 +42,12 @@ class Test_CPubKey(unittest.TestCase):
 
 class Test_CKey(unittest.TestCase):
     def test(self):
-        def T(keydata, compressed, uncompressed):
-            k = CKey(x(keydata))
-            assert k.is_compressed
-            assert k.pub == x(compressed)
-            k.set_compressed(False)
-            assert not k.is_compressed
-            assert k.pub == x(uncompressed)
+        data = x('5586e3531b857c5a3d7af6d512ec84161f4531b66daf2ad72a6f647e4164c8ae')
+        k = CKey(data)
+        self.assertEqual(k, data)
+        expected_pub = x('0392aef1ad6db10a2da4aa9f9e874fa28d5423eaa29ee83aa9acec01cc812903df')
+        self.assertEqual(k.pub, expected_pub)
 
-        T('0de5306487851213f0aae1454f4e4449949a755802b60f6eb47906149395d080',
-          '023bd76d581c4823f66d8f3f6462dfdb3c8823ba77c7e8b5284d04b41b83659811',
-          '043bd76d581c4823f66d8f3f6462dfdb3c8823ba77c7e8b5284d04b41b836598111af4e26a83ff8e3e0eef15eca09953f9a3d3c2c15807c5ef68a180fb8d4260c6')
-        T('c9ff05edfbfb4710267ccf212fbb0414284b09fce621f8ab61a5b1cf0f3a5bf2',
-          '029925633a4ba7d5f6f60d94213f65dfc482aa9b0f3cadb1ce20d7b7d792428209',
-          '049925633a4ba7d5f6f60d94213f65dfc482aa9b0f3cadb1ce20d7b7d792428209973a2e2e14e13d6263c894fefd5374d1d2b0e637b2215209b55604c0bb4f1196')
 
     def test_invalid_key(self):
         with self.assertRaises(ValueError):

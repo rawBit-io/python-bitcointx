@@ -12,7 +12,7 @@ bitcoin transactions, and related data structures.
 * libsecp256k1 are used for signing and verifying.
   Signing by libsecp256k1 is deterministic, per RFC6979.
 * Bech32-encoded address support
-* HD keys support (**NOTE**: API is still subject to change!)
+* HD keys support
 
 ## Requirements
 
