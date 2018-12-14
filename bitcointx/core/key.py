@@ -446,7 +446,9 @@ class CPubKey(bytes):
         # extra encode/decode is wasteful, but the result is that verification
         # is still roughly 4 times faster than with openssl's ECDSA_verify()
         norm_sig = ctypes.c_void_p(0)
-        _ssl.d2i_ECDSA_SIG(ctypes.byref(norm_sig), ctypes.byref(ctypes.c_char_p(sig)), len(sig))
+        result = _ssl.d2i_ECDSA_SIG(ctypes.byref(norm_sig), ctypes.byref(ctypes.c_char_p(sig)), len(sig))
+        if not result:
+            return False
 
         derlen = _ssl.i2d_ECDSA_SIG(norm_sig, 0)
         if derlen == 0:
@@ -454,8 +456,12 @@ class CPubKey(bytes):
             return False
 
         norm_der = ctypes.create_string_buffer(derlen)
-        _ssl.i2d_ECDSA_SIG(norm_sig, ctypes.byref(ctypes.pointer(norm_der)))
+        result = _ssl.i2d_ECDSA_SIG(norm_sig, ctypes.byref(ctypes.pointer(norm_der)))
+
         _ssl.ECDSA_SIG_free(norm_sig)
+
+        if not result:
+            return False
 
         return self.verify(hash, norm_der)
 
