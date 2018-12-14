@@ -494,6 +494,8 @@ class CExtKeyBase():
 class CExtKeyMixin(CExtKeyBase):
     """An encapsulated extended private key
 
+    Attributes:
+
     priv          - The corresponding CKey for extended privkey
     pub           - shortcut property for priv.pub
     """
@@ -570,6 +572,8 @@ class CExtKeyMixin(CExtKeyBase):
 
 class CExtPubKeyMixin(CExtKeyBase):
     """An encapsulated extended public key
+
+    Attributes:
 
     pub           - The corresponding CPubKey for extended pubkey
 

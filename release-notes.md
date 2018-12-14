@@ -10,6 +10,10 @@
   all classes fork keys are instances of bytes
   see `examples/derive-hd-key.py` and b`itcointx/tests/test_hd_keys.py`
 
+  Note that CBitcoinSecret instance is 33 bytes long if compressed,
+  and 32 if not. CKey instance is always 32 bytes long.
+  key.secret\_bytes is 32 bytes long in both cases.
+
 * CBase58Data removed, replaced with CBase58PrefixedData, CBase58RawData
   CBase58PrefixedData is more generic, it works with arbitrary
   prefixes instead of 1-byte nVersion. used both for addresses and keys.

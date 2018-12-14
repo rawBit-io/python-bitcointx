@@ -324,7 +324,20 @@ class CBitcoinSecretError(bitcointx.base58.Base58Error):
 
 
 class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CKeyMixin):
-    """A base58-encoded secret key"""
+    """A base58-encoded secret key
+
+    Attributes: (inherited from CKeyMixin):
+
+    pub           - The corresponding CPubKey for this private key
+    secret_bytes  - Secret data, 32 bytes
+
+    is_compressed - True if compressed
+
+    Note that CBitcoinSecret instance is 33 bytes long if compressed, 32 bytes otherwise
+    (due to WIF format that states b'\x01' should be appended for compressed keys).
+    secret_bytes property is 32 bytes long in both cases.
+
+    """
 
     @classmethod
     def from_bytes(cls, data, prefix=None):
@@ -355,6 +368,13 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
 
 
 class CBitcoinExtPubKey(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CExtPubKeyMixin):
+    """A base58-encoded extended public key
+
+    Attributes (inherited from CExtPubKeyMixin):
+
+    pub           - The corresponding CPubKey for extended pubkey
+    """
+
     @classmethod
     def from_bytes(cls, data, prefix=None):
         cls.check_base58_prefix_correct(prefix)
@@ -367,6 +387,15 @@ class CBitcoinExtPubKey(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key
 
 
 class CBitcoinExtKey(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CExtKeyMixin):
+    """A base58-encoded extended key.
+
+    Attributes (inherited from CExtKeyMixin):
+
+    priv          - The corresponding CBitcoinSecret for extended privkey
+    pub           - shortcut property for priv.pub
+
+    Note that priv is an instance of CBitcoinSecret (vs CKey for standalone CExtKey)
+    """
 
     _xpub_class = CBitcoinExtPubKey
     _key_class = CBitcoinSecret
