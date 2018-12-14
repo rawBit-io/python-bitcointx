@@ -1,6 +1,6 @@
 # python-bitcointx release notes
 
-## v0.10.3.dev0
+## v0.10.3
 
 **Breaking Changes**
 
