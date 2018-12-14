@@ -334,6 +334,8 @@ class CPubKey(bytes):
 
     @classmethod
     def _from_raw(cls, raw_pubkey, compressed=True):
+        if len(raw_pubkey) != 64:
+            raise ValueError('raw pubkey must be 64 bytes')
         pub_size0 = ctypes.c_size_t()
         pub_size0.value = PUBLIC_KEY_SIZE
         pub = ctypes.create_string_buffer(pub_size0.value)
