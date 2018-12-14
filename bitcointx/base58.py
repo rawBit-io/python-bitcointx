@@ -104,12 +104,12 @@ class CBase58RawData(bytes):
 
     Includes a prefix and checksum.
     """
-    _reqire_base58_prefix = False
+    base58_prefix_required = False
     base58_prefix = b''
 
     def __new__(cls, s):
         prefix_len = len(cls.base58_prefix)
-        if cls._reqire_base58_prefix:
+        if cls.base58_prefix_required:
             assert prefix_len, "base58 prefix cannot be empty"
         else:
             assert not prefix_len, "base58 prefix must be empty for raw data"
@@ -160,7 +160,18 @@ class CBase58RawData(bytes):
 
 
 class CBase58PrefixedData(CBase58RawData):
-    _reqire_base58_prefix = True
+    base58_prefix_required = True
+    base58_prefix_check_always = True
+
+    @classmethod
+    def from_bytes(cls, data, prefix=None):
+        if prefix is not None and len(cls.base58_prefix) != len(prefix):
+            raise UnexpectedBase58PrefixError(
+                'base58 prefix length must be {}'.format(len(cls.base58_prefix)))
+        self = super(CBase58PrefixedData, cls).from_bytes(data)
+        if cls.base58_prefix_check_always:
+            cls.check_base58_prefix_correct(prefix)
+        return self
 
     @classmethod
     def check_base58_prefix_correct(cls, prefix):

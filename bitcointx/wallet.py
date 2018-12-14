@@ -108,6 +108,7 @@ class CBase58BitcoinAddress(bitcointx.base58.CBase58PrefixedData, CBitcoinAddres
     # allow for CBase58PrefixedData to get length,
     # but prevent any matches with real prefixes
     base58_prefix = [None]
+    base58_prefix_check_always = False
     base58_prefix_alias = {}
 
     @classmethod
@@ -123,7 +124,7 @@ class CBase58BitcoinAddress(bitcointx.base58.CBase58PrefixedData, CBitcoinAddres
 
         nVersion = prefix[0]
 
-        self = super(CBase58BitcoinAddress, cls).from_bytes(data)
+        self = super(CBase58BitcoinAddress, cls).from_bytes(data, prefix)
 
         if cls not in CBase58BitcoinAddress.__subclasses__():
             for subclass in CBase58BitcoinAddress.__subclasses__():
@@ -341,10 +342,9 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
 
     @classmethod
     def from_bytes(cls, data, prefix=None):
-        cls.check_base58_prefix_correct(prefix)
         assert len(data) <= 33
         compressed = (len(data) > 32 and data[32] == 1)
-        self = super(CBitcoinSecret, cls).from_bytes(data)
+        self = super(CBitcoinSecret, cls).from_bytes(data, prefix)
         bitcointx.core.key.CKey.__init__(self, None, compressed=compressed)
         return self
 
@@ -377,8 +377,7 @@ class CBitcoinExtPubKey(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key
 
     @classmethod
     def from_bytes(cls, data, prefix=None):
-        cls.check_base58_prefix_correct(prefix)
-        self = super(CBitcoinExtPubKey, cls).from_bytes(data)
+        self = super(CBitcoinExtPubKey, cls).from_bytes(data, prefix)
         self.__init__(None)
         return self
 
@@ -402,8 +401,7 @@ class CBitcoinExtKey(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CE
 
     @classmethod
     def from_bytes(cls, data, prefix=None):
-        cls.check_base58_prefix_correct(prefix)
-        self = super(CBitcoinExtKey, cls).from_bytes(data)
+        self = super(CBitcoinExtKey, cls).from_bytes(data, prefix)
         self.__init__(None)
         return self
 
