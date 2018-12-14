@@ -118,7 +118,7 @@ the Satoshi codebase.
 To use alternative chain parameters:
 
     import bitcointx
-    bitcointx.SelectAlternativeParams(AltCoreParams, AltMainParams)`
+    bitcointx.SelectAlternativeParams(AltCoreParams, AltParams)`
 
 See `examples/litecoin-alt-p2sh-prefix.py` for an example usage.
 
