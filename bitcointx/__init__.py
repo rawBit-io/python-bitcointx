@@ -10,12 +10,13 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import sys
 import bitcointx.core
 
 # Note that setup.py can break if __init__.py imports any external
 # dependencies, as these might not be installed when setup.py runs. In this
 # case __version__ could be moved to a separate version.py and imported here.
-__version__ = '0.10.3'
+__version__ = '0.10.3.post0'
 
 
 class MainParams(bitcointx.core.CoreMainParams):
@@ -73,7 +74,8 @@ def SelectAlternativeParams(alt_core_params, alt_main_params):
 
     params = alt_main_params
 
-    bitcointx.wallet._SetBase58Prefixes()
+    if 'bitcointx.wallet' in sys.modules:
+        bitcointx.wallet._SetBase58Prefixes()
 
 
 def SelectParams(name):
@@ -94,4 +96,5 @@ def SelectParams(name):
     else:
         raise ValueError('Unknown chain %r' % name)
 
-    bitcointx.wallet._SetBase58Prefixes()
+    if 'bitcointx.wallet' in sys.modules:
+        bitcointx.wallet._SetBase58Prefixes()
