@@ -11,7 +11,7 @@
 * HD Key API changed, now it is more convenient.
   CBitcoinExtKey now is a subclass of CExtKeyMixin
   CBitcoinExtPubKey now is a subclass of CExtPubKeyMixin
-  all classes fork keys are instances of bytes
+  all classes for keys are instances of bytes
   see `examples/derive-hd-key.py` and b`itcointx/tests/test_hd_keys.py`
 
   Note that CBitcoinSecret instance is 33 bytes long if compressed,
