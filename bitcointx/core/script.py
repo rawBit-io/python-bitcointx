@@ -770,8 +770,7 @@ class CScript(bytes):
 
     def is_unspendable(self):
         """Test if the script is provably unspendable"""
-        return (len(self) > 0 and
-                self[0] == OP_RETURN)
+        return (len(self) > 0 and self[0] == OP_RETURN) or len(self) > MAX_SCRIPT_SIZE
 
     def is_valid(self):
         """Return True if the script is valid, False otherwise
