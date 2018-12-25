@@ -342,7 +342,8 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
 
     @classmethod
     def from_bytes(cls, data, prefix=None):
-        assert len(data) <= 33
+        if len(data) > 33:
+            return ValueError('data size must not exceed 33 bytes')
         compressed = (len(data) > 32 and data[32] == 1)
         self = super(CBitcoinSecret, cls).from_bytes(data, prefix)
         bitcointx.core.key.CKey.__init__(self, None, compressed=compressed)
@@ -351,7 +352,8 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
     @classmethod
     def from_secret_bytes(cls, secret, compressed=True):
         """Create a secret key from a 32-byte secret"""
-        assert len(secret) == 32
+        if len(secret) != 32:
+            return ValueError('secret size must be exactly 32 bytes')
         self = super(CBitcoinSecret, cls).from_bytes(secret + (b'\x01' if compressed else b''))
         bitcointx.core.key.CKey.__init__(self, None, compressed=compressed)
         return self
