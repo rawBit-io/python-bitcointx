@@ -11,8 +11,8 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import os
 import sys
-import ssl
 from bitcointx.core import b2x, BIP32_HARDENED_KEY_LIMIT
 from bitcointx.base58 import Base58Error, UnexpectedBase58PrefixError
 from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
@@ -24,7 +24,7 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     if len(sys.argv) == 2:
-        xkey = CBitcoinExtKey.from_seed(ssl.RAND_bytes(32))
+        xkey = CBitcoinExtKey.from_seed(os.urandom(32))
         print("generated xpriv: ", xkey)
     else:
         for cls in (CBitcoinExtKey, CBitcoinExtPubKey):
