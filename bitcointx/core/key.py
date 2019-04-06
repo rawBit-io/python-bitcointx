@@ -299,7 +299,7 @@ class CKey(bytes, CKeyMixin):
 
     def __new__(cls, secret, compressed=True):
         if len(secret) != 32:
-            return ValueError('secret size must be exactly 32 bytes')
+            raise ValueError('secret size must be exactly 32 bytes')
         return super(CKey, cls).__new__(cls, secret)
 
     @classmethod

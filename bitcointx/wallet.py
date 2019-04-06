@@ -294,7 +294,7 @@ class P2WSHBitcoinAddress(CBech32BitcoinAddress):
         return script.CScript([0, self])
 
     def to_redeemScript(self):
-        return NotImplementedError("not enough data in p2wsh address to reconstruct redeem script")
+        raise NotImplementedError("not enough data in p2wsh address to reconstruct redeem script")
 
 
 class P2WPKHBitcoinAddress(CBech32BitcoinAddress):
@@ -343,7 +343,7 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
     @classmethod
     def from_bytes(cls, data, prefix=None):
         if len(data) > 33:
-            return ValueError('data size must not exceed 33 bytes')
+            raise ValueError('data size must not exceed 33 bytes')
         compressed = (len(data) > 32 and data[32] == 1)
         self = super(CBitcoinSecret, cls).from_bytes(data, prefix)
         bitcointx.core.key.CKey.__init__(self, None, compressed=compressed)
@@ -353,7 +353,7 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
     def from_secret_bytes(cls, secret, compressed=True):
         """Create a secret key from a 32-byte secret"""
         if len(secret) != 32:
-            return ValueError('secret size must be exactly 32 bytes')
+            raise ValueError('secret size must be exactly 32 bytes')
         self = super(CBitcoinSecret, cls).from_bytes(secret + (b'\x01' if compressed else b''))
         bitcointx.core.key.CKey.__init__(self, None, compressed=compressed)
         return self
