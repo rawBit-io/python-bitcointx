@@ -106,6 +106,7 @@ class CScriptOp(int):
             _opcode_instances.append(super(CScriptOp, cls).__new__(cls, n))
             return _opcode_instances[n]
 
+
 # Populate opcode instance table
 for n in range(0xff+1):
     CScriptOp(n)
@@ -236,6 +237,7 @@ OP_NOP1 = CScriptOp(0xb0)
 OP_NOP2 = CScriptOp(0xb1)
 OP_CHECKLOCKTIMEVERIFY = OP_NOP2
 OP_NOP3 = CScriptOp(0xb2)
+OP_CHECKSEQUENCEVERIFY = OP_NOP3
 OP_NOP4 = CScriptOp(0xb3)
 OP_NOP5 = CScriptOp(0xb4)
 OP_NOP6 = CScriptOp(0xb5)
@@ -357,6 +359,7 @@ OPCODE_NAMES.update({
     OP_NOP1: 'OP_NOP1',
     OP_NOP2: 'OP_NOP2',
     OP_CHECKLOCKTIMEVERIFY: 'OP_CHECKLOCKTIMEVERIFY',
+    OP_CHECKSEQUENCEVERIFY: 'OP_CHECKSEQUENCEVERIFY',
     OP_NOP3: 'OP_NOP3',
     OP_NOP4: 'OP_NOP4',
     OP_NOP5: 'OP_NOP5',
@@ -478,6 +481,7 @@ OPCODES_BY_NAME = {
     'OP_NOP2': OP_NOP2,
     'OP_CHECKLOCKTIMEVERIFY': OP_CHECKLOCKTIMEVERIFY,
     'OP_NOP3': OP_NOP3,
+    'OP_CHECKSEQUENCEVERIFY': OP_CHECKSEQUENCEVERIFY,
     'OP_NOP4': OP_NOP4,
     'OP_NOP5': OP_NOP5,
     'OP_NOP6': OP_NOP6,

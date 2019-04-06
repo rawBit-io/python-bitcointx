@@ -47,7 +47,8 @@ from bitcointx.core.script import (
     RawBitcoinSignatureHash,
     SIGHASH_NONE,
     SIGHASH_SINGLE,
-    SIGHASH_ANYONECANPAY
+    SIGHASH_ANYONECANPAY,
+    CScriptOp
 )
 from bitcointx.core.sha256 import CSHA256
 from bitcointx.core.serialize import (
@@ -67,6 +68,12 @@ OUTPOINT_PEGIN_FLAG = (1 << 30)
 # extract the original meaning of `n` as the index into the
 # transaction's output array. */
 OUTPOINT_INDEX_MASK = 0x3fffffff
+
+
+OP_CAT = CScriptOp(0x7e)
+OP_DETERMINISTICRANDOM = CScriptOp(0xc1)
+OP_CHECKSIGFROMSTACK = CScriptOp(0xc1)
+OP_CHECKSIGFROMSTACKVERIFY = CScriptOp(0xc2)
 
 
 class WitnessSerializationError(SerializationError):
