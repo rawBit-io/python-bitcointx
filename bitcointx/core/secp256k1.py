@@ -264,6 +264,21 @@ secp256k1.secp256k1_ec_pubkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_ch
 secp256k1.secp256k1_ec_privkey_tweak_add.restype = ctypes.c_int
 secp256k1.secp256k1_ec_privkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
 
+secp256k1_has_pubkey_negate = False
+if getattr(secp256k1, 'secp256k1_ec_pubkey_negate', None):
+    secp256k1_has_pubkey_negate = True
+    secp256k1.secp256k1_ec_pubkey_negate.restype = ctypes.c_int
+    secp256k1.secp256k1_ec_pubkey_negate.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+
+secp256k1_has_privkey_negate = False
+if getattr(secp256k1, 'secp256k1_ec_privkey_negate', None):
+    secp256k1_has_privkey_negate = True
+    secp256k1.secp256k1_ec_privkey_negate.restype = ctypes.c_int
+    secp256k1.secp256k1_ec_privkey_negate.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+
+secp256k1.secp256k1_ec_pubkey_combine.restype = ctypes.c_int
+secp256k1.secp256k1_ec_pubkey_combine.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.c_int]
+
 secp256k1_has_ecdh = False
 if getattr(secp256k1, 'secp256k1_ecdh', None):
     secp256k1_has_ecdh = True

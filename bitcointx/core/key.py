@@ -31,7 +31,8 @@ from bitcointx.core.secp256k1 import (
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
     PUBLIC_KEY_SIZE, COMPRESSED_PUBLIC_KEY_SIZE,
     SECP256K1_EC_COMPRESSED, SECP256K1_EC_UNCOMPRESSED,
-    secp256k1_has_pubkey_recovery, secp256k1_has_ecdh
+    secp256k1_has_pubkey_recovery, secp256k1_has_ecdh,
+    secp256k1_has_privkey_negate, secp256k1_has_pubkey_negate
 )
 
 try:
@@ -60,6 +61,7 @@ def _check_res_openssl_void_p(val, func, args): # pylint: disable=unused-argumen
         raise OpenSSLException(errno, str(errmsg.value))
 
     return ctypes.c_void_p(val)
+
 
 if _ssl:
     _ssl.EC_KEY_new_by_curve_name.errcheck = _check_res_openssl_void_p
@@ -198,6 +200,39 @@ class CKeyMixin():
         assert ret == 1
         return bytes(result_data)
 
+    @classmethod
+    def combine(cls, *privkeys, compressed=True):
+        assert(len(privkeys) > 1)
+        if not all(isinstance(k, CKeyMixin) for k in privkeys):
+            return NotImplemented
+
+        result_data = ctypes.create_string_buffer(privkeys[0].secret_bytes)
+        for p in privkeys[1:]:
+            ret = secp256k1.secp256k1_ec_privkey_tweak_add(
+                secp256k1_context_sign, result_data, p.secret_bytes)
+            assert ret == 1
+        return cls.from_secret_bytes(result_data[:32], compressed=compressed)
+
+    @classmethod
+    def add(cls, a, b):
+        assert a.is_compressed == b.is_compressed,\
+            "compressed attributes must match on privkey addition/substraction"
+        return cls.combine(a, b, compressed=a.is_compressed)
+
+    @classmethod
+    def sub(cls, a, b):
+        return cls.add(a, b.negated())
+
+    def negated(self):
+        if not secp256k1_has_privkey_negate:
+            raise RuntimeError(
+                'secp256k1 does not export privkey negation function. '
+                'You should use newer version of secp256k1 library')
+        key_buf = ctypes.create_string_buffer(self.secret_bytes)
+        ret = secp256k1.secp256k1_ec_privkey_negate(secp256k1_context_sign, key_buf)
+        assert ret == 1
+        return self.__class__.from_secret_bytes(key_buf[:32], compressed=self.is_compressed)
+
 
 class CKey(bytes, CKeyMixin):
     "Standalone privkey class"
@@ -260,7 +295,7 @@ class CPubKey(bytes):
         result = secp256k1.secp256k1_ec_pubkey_parse(
             secp256k1_context_verify, raw_pub, self, len(self))
         assert 1 == result
-        return raw_pub
+        return raw_pub.raw
 
     @classmethod
     def recover_compact(cls, hash, sig): # pylint: disable=redefined-builtin
@@ -394,6 +429,43 @@ class CPubKey(bytes):
             return False
 
         return self.verify(hash, norm_der)
+
+    @classmethod
+    def combine(cls, *pubkeys, compressed=True):
+        assert(len(pubkeys) > 1)
+        if not all(isinstance(p, CPubKey) for p in pubkeys):
+            return NotImplemented
+
+        pubkey_arr = (ctypes.c_char_p*len(pubkeys))()
+        for i, p in enumerate(pubkeys):
+            pubkey_arr[i] = p._to_raw()
+
+        result_data = ctypes.create_string_buffer(64)
+        ret = secp256k1.secp256k1_ec_pubkey_combine(
+            secp256k1_context_verify, result_data, pubkey_arr, len(pubkeys))
+        assert ret == 1
+
+        return cls._from_raw(result_data, compressed=compressed)
+
+    def negated(self):
+        if not secp256k1_has_pubkey_negate:
+            raise RuntimeError(
+                'secp256k1 does not export pubkey negation function. '
+                'You should use newer version of secp256k1 library')
+        pubkey_buf = self._to_raw()
+        ret = secp256k1.secp256k1_ec_pubkey_negate(secp256k1_context_verify, pubkey_buf)
+        assert ret == 1
+        return self.__class__._from_raw(pubkey_buf, compressed=self.is_compressed)
+
+    @classmethod
+    def add(cls, a, b):
+        assert a.is_compressed == b.is_compressed,\
+            "compressed attributes must match on pubkey addition/substraction"
+        return cls.combine(a, b, compressed=a.is_compressed)
+
+    @classmethod
+    def sub(cls, a, b):
+        return cls.add(a, b.negated())
 
 
 class CExtKeyBase():
