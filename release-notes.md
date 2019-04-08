@@ -52,6 +52,9 @@
   CConfidentialAsset(CONFIDENTIAL) when rendered with str,
   but will show the bytes of the commitment when rendered with repr
 
+* CPubKey's `verify` and `verify_nonstrict` now assert that supplied hash and sig
+  are bytes instances
+
 * Refactoring and cleanup
 
 ## v0.10.3.post0

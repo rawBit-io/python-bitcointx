@@ -363,6 +363,10 @@ class CPubKey(bytes):
 
     def verify(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a DER signature"""
+
+        assert isinstance(sig, bytes), type(sig)
+        assert isinstance(hash, bytes), type(hash)
+
         if not sig:
             return False
 
@@ -391,6 +395,9 @@ class CPubKey(bytes):
 
         if not _ssl:
             raise RuntimeError('openssl library is not available. verify_nonstrict is not functional.')
+
+        assert isinstance(sig, bytes), type(sig)
+        assert isinstance(hash, bytes), type(hash)
 
         if not sig:
             return False
@@ -428,7 +435,7 @@ class CPubKey(bytes):
         if not result:
             return False
 
-        return self.verify(hash, norm_der)
+        return self.verify(hash, norm_der.raw)
 
     @classmethod
     def combine(cls, *pubkeys, compressed=True):
