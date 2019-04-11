@@ -13,9 +13,10 @@
 
 from bitcointx.segwit_addr import encode, decode
 import bitcointx
+import bitcointx.core
 
 
-class Bech32Error(Exception):
+class Bech32Error(bitcointx.core.AddressEncodingError):
     pass
 
 
@@ -28,12 +29,14 @@ class CBech32Data(bytes):
 
     Includes a witver and checksum.
     """
+    bech32_hrp = None
+
     def __new__(cls, s):
         """from bech32 addr to """
-        if bitcointx.params.BECH32_HRP is None:
-            raise Bech32Error(
-                'Bech32 support is disabled in current chain params')
-        witver, data = decode(bitcointx.params.BECH32_HRP, s)
+        if cls.bech32_hrp is None:
+            raise TypeError(
+                'CBech32Data subclasses should define bech32_hrp attribute')
+        witver, data = decode(cls.bech32_hrp, s)
         if witver is None and data is None:
             raise Bech32Error('Bech32 decoding error')
 
@@ -51,7 +54,8 @@ class CBech32Data(bytes):
     def from_bytes(cls, witver, witprog):
         """Instantiate from witver and data"""
         if not (0 <= witver <= 16):
-            raise ValueError('witver must be in range 0 to 16 inclusive; got %d' % witver)
+            raise ValueError(
+                'witver must be in range 0 to 16 inclusive; got %d' % witver)
         self = bytes.__new__(cls, witprog)
         self.witver = witver
 
@@ -67,10 +71,11 @@ class CBech32Data(bytes):
 
     def __str__(self):
         """Convert to string"""
-        return encode(bitcointx.params.BECH32_HRP, self.witver, self)
+        return encode(self.__class__.bech32_hrp, self.witver, self)
 
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, str(self))
+
 
 __all__ = (
     'Bech32Error',

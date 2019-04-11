@@ -507,11 +507,10 @@ class CExtKeyMixin(CExtKeyBase):
 
         self._check_length()
 
-        # NOTE: we ignore first byte - for xpubkey,
-        # this is pubkey prefix byte.
-        # For xprivkey, this byte is supposed to be zero,
-        # but Bitcoin Core ignores that and do not check.
-        # We also do not check, to be compatible.
+        # NOTE: for xpubkey, first byte is pubkey prefix byte.
+        # For xprivkey, this byte is supposed to be zero.
+        if self.key_bytes[0] != 0:
+            raise ValueError('The byte before private key data should be 0')
         raw_priv = self.key_bytes[1:]
 
         # NOTE: cannot make self.priv a @property method

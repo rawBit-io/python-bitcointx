@@ -41,9 +41,11 @@ from bitcointx.core import (
     CImmutableTransactionBase, CMutableTransactionBase,
 )
 from bitcointx.core.util import _disable_boolean_use
-from bitcointx.core.key import CKey, CKeyMixin, CPubKey
+from bitcointx.core.key import (
+    CKey, CKeyMixin, CPubKey, CExtPubKeyMixin, CExtKeyMixin
+)
 from bitcointx.core.script import (
-    CScript, CScriptBase, CScriptWitness,
+    CScriptBase, CScriptWitness,
     SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
     RawBitcoinSignatureHash,
     SIGHASH_NONE,
@@ -58,7 +60,11 @@ from bitcointx.core.serialize import (
     ser_read, make_mutable
 )
 from bitcointx.wallet import (
-    CBase58BitcoinAddress, CBitcoinAddressError
+    CBase58CoinAddressCommon, CBech32CoinAddressCommon,
+    CCoinAddressError, CCoinAddressBase,
+    P2SHCoinAddressCommon, P2PKHCoinAddressCommon,
+    P2WSHCoinAddressCommon, P2WPKHCoinAddressCommon,
+    CCoinSecretBase, CCoinExtSecretBase
 )
 
 # If this flag is set, the CTxIn including this COutPoint has a CAssetIssuance object.
@@ -85,47 +91,78 @@ class TxInSerializationError(SerializationError):
     pass
 
 
-class CConfidentialAddress(CBase58BitcoinAddress):
+class CConfidentialAddressError(CCoinAddressError):
+    """Raised when an invalid confidential address is encountered"""
 
-    @classmethod
-    def _base58_submatch(cls, data, prefix):
-        for subclass in cls.__subclasses__():
-            assert len(subclass.base58_prefix) == 2
-            assert prefix == subclass.base58_prefix[:1]
-            if data[0] == subclass.base58_prefix[1]:
-                return subclass, data[1:], subclass.base58_prefix
-        raise CBitcoinAddressError('Sub-version %d not a recognized Confidential Address' % data[0])
+
+class CElementsSidechainAddress(CCoinAddressBase):
+    ...
+
+
+class CBase58ElementsSidechainAddress(CBase58CoinAddressCommon,
+                                      CElementsSidechainAddress):
+    ...
+
+
+class CBech32ElementsSidechainAddress(CBech32CoinAddressCommon,
+                                      CElementsSidechainAddress):
+    bech32_hrp = 'ert'
+
+
+class CBech32ElementsSidechainConfidentialAddress(CBech32CoinAddressCommon,
+                                                  CElementsSidechainAddress):
+    bech32_hrp = 'el'
+
+
+class P2SHElementsSidechainAddress(P2SHCoinAddressCommon, CBase58ElementsSidechainAddress):
+    base58_prefix = bytes([75])
+
+
+class P2PKHElementsSidechainAddress(P2PKHCoinAddressCommon, CBase58ElementsSidechainAddress):
+    base58_prefix = bytes([235])
+
+
+class P2WSHElementsSidechainAddress(P2WSHCoinAddressCommon, CBech32ElementsSidechainAddress):
+    ...
+
+
+class P2WPKHElementsSidechainAddress(P2WPKHCoinAddressCommon, CBech32ElementsSidechainAddress):
+    ...
+
+
+class CConfidentialAddressCommon():
 
     @classmethod
     def from_unconfidential(cls, unconfidential_adr, blinding_pubkey):
         """Convert unconfidential address to confidential
 
-        Raises CBitcoinAddressError if blinding_pubkey is invalid
+        Raises CCoinAddressError if blinding_pubkey is invalid
 
-        unconfidential_adr can be string or CBase58BitcoinAddress instance
-        blinding_pubkey must be a bytes instance
+        unconfidential_adr can be string or CBase58CoinAddressCommon
+        instance. blinding_pubkey must be a bytes instance
         """
         if not isinstance(blinding_pubkey, bytes):
-            raise TypeError('blinding_pubkey must be bytes instance; got %r' % blinding_pubkey.__class__)
+            raise TypeError('blinding_pubkey must be bytes instance; got %r'
+                            % blinding_pubkey.__class__)
         if not isinstance(blinding_pubkey, CPubKey):
             blinding_pubkey = CPubKey(blinding_pubkey)
         if not blinding_pubkey.is_fullyvalid():
-            raise CBitcoinAddressError('invalid blinding pubkey')
+            raise CConfidentialAddressError('invalid blinding pubkey')
 
-        if not isinstance(unconfidential_adr, CBase58BitcoinAddress):
+        if not isinstance(unconfidential_adr, CBase58CoinAddressCommon):
             assert isinstance(unconfidential_adr, str)
-            unconfidential_adr = CBase58BitcoinAddress(unconfidential_adr)
+            unconfidential_adr = cls._unconfidential_address_class(unconfidential_adr)
 
-        if len(cls.base58_prefix) > 1 and unconfidential_adr.base58_prefix != cls.base58_prefix[1:]:
-            raise CBitcoinAddressError('cannot create {} from {}: inner prefix mismatch'
-                                       .format(cls, unconfidential_adr.__class__.__name__))
+        if len(cls.base58_prefix) > 1 and \
+                unconfidential_adr.base58_prefix != cls.base58_prefix[1:]:
+            raise CConfidentialAddressError(
+                'cannot create {} from {}: inner prefix mismatch'
+                .format(cls, unconfidential_adr.__class__.__name__))
 
-        return CBase58BitcoinAddress.from_bytes(
-            unconfidential_adr.base58_prefix + blinding_pubkey + unconfidential_adr,
-            cls.base58_prefix[0:1])
+        return cls.from_bytes(blinding_pubkey + unconfidential_adr)
 
     def to_unconfidential(self):
-        return CBase58BitcoinAddress.from_bytes(self[33:], self.base58_prefix[1:2])
+        return self.__class__._unconfidential_address_class.from_bytes(self[33:])
 
     @property
     def blinding_pubkey(self):
@@ -138,12 +175,76 @@ class CConfidentialAddress(CBase58BitcoinAddress):
         return self.to_unconfidential().to_scriptPubKey()
 
 
-class P2PKHConfidentialAddress(CConfidentialAddress):
-    pass
+class P2PKHElementsSidechainConfidentialAddress(CConfidentialAddressCommon,
+                                                CBase58ElementsSidechainAddress):
+    base58_prefix = b'\x04\xEB'
+    _unconfidential_address_class = P2PKHElementsSidechainAddress
 
 
-class P2SHConfidentialAddress(CConfidentialAddress):
-    pass
+class P2SHElementsSidechainConfidentialAddress(CConfidentialAddressCommon,
+                                               CBase58ElementsSidechainAddress):
+    base58_prefix = b'\x04\x4B'
+    _unconfidential_address_class = P2SHElementsSidechainAddress
+
+
+CElementsSidechainAddress._address_encoding_classes = (
+    CBech32ElementsSidechainConfidentialAddress,
+    CBech32ElementsSidechainAddress,
+    CBase58ElementsSidechainAddress
+)
+CBase58ElementsSidechainAddress._address_classes = (
+    P2SHElementsSidechainAddress, P2PKHElementsSidechainAddress,
+    P2SHElementsSidechainConfidentialAddress,
+    P2PKHElementsSidechainConfidentialAddress
+)
+CBech32ElementsSidechainAddress._address_classes = (
+    P2WSHElementsSidechainAddress, P2WPKHElementsSidechainAddress
+)
+CBech32ElementsSidechainConfidentialAddress._address_classes = (
+    # XXX not implemented yet
+)
+
+
+class CElementsSidechainSecret(CCoinSecretBase):
+    base58_prefix = bytes([239])
+
+
+class CElementsSidechainExtSecret(CCoinExtSecretBase):
+    ...
+
+
+class CElementsSidechainExtPubKey(CElementsSidechainExtSecret):
+    base58_prefix = b'\x04\x35\x87\xCF'
+    _key_mixin_class = CExtPubKeyMixin
+
+
+class CElementsSidechainExtKey(CElementsSidechainExtSecret):
+    base58_prefix = b'\x04\x35\x83\x94'
+    _key_mixin_class = CExtKeyMixin
+    _xpub_class = CElementsSidechainExtPubKey
+    _key_class = CElementsSidechainSecret
+
+
+class CElementsSidechainScript(CScriptBase):
+
+    def derive_blinding_key(self, blinding_derivation_key):
+        return derive_blinding_key(blinding_derivation_key, self)
+
+    @_disable_boolean_use
+    def is_unspendable(self):
+        if len(self) == 0:
+            return True
+        return super(CElementsSidechainScript, self).is_unspendable()
+
+    def raw_sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+        """Consensus-correct SignatureHash
+
+        Returns (hash, err) to precisely match the consensus-critical behavior of
+        the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
+
+        If you're just writing wallet software you probably want sighash() method instead."""
+        return RawElementsSidechainSignatureHash(self, txTo, inIdx, hashtype,
+                                                 amount=amount, sigversion=sigversion)
 
 
 class CConfidentialCommitmentBase(ImmutableSerializable):
@@ -315,8 +416,10 @@ class CElementsSidechainTxInWitness(CTxInWitnessBase, ReprOrStrMixin):
         assert isinstance(issuanceAmountRangeproof, bytes)
         assert isinstance(inflationKeysRangeproof, bytes)
         object.__setattr__(self, 'scriptWitness', scriptWitness)
-        object.__setattr__(self, 'issuanceAmountRangeproof', CScript(issuanceAmountRangeproof))
-        object.__setattr__(self, 'inflationKeysRangeproof', CScript(inflationKeysRangeproof))
+        object.__setattr__(self, 'issuanceAmountRangeproof',
+                           CElementsSidechainScript(issuanceAmountRangeproof))
+        object.__setattr__(self, 'inflationKeysRangeproof',
+                           CElementsSidechainScript(inflationKeysRangeproof))
         # Note that scriptWitness/pegin_witness naming convention mismatch
         # exists in reference client code, and is retained here.
         object.__setattr__(self, 'pegin_witness', pegin_witness)
@@ -330,8 +433,8 @@ class CElementsSidechainTxInWitness(CTxInWitnessBase, ReprOrStrMixin):
 
     @classmethod
     def stream_deserialize(cls, f):
-        issuanceAmountRangeproof = CScript(BytesSerializer.stream_deserialize(f))
-        inflationKeysRangeproof = CScript(BytesSerializer.stream_deserialize(f))
+        issuanceAmountRangeproof = CElementsSidechainScript(BytesSerializer.stream_deserialize(f))
+        inflationKeysRangeproof = CElementsSidechainScript(BytesSerializer.stream_deserialize(f))
         scriptWitness = CScriptWitness.stream_deserialize(f)
         pegin_witness = CScriptWitness.stream_deserialize(f)
         return cls(scriptWitness, issuanceAmountRangeproof, inflationKeysRangeproof,
@@ -381,8 +484,8 @@ class CElementsSidechainTxOutWitness(CTxOutWitnessBase):
     def __init__(self, surjectionproof=b'', rangeproof=b''):
         assert isinstance(surjectionproof, bytes)
         assert isinstance(rangeproof, bytes)
-        object.__setattr__(self, 'surjectionproof', CScript(surjectionproof))
-        object.__setattr__(self, 'rangeproof', CScript(rangeproof))
+        object.__setattr__(self, 'surjectionproof', CElementsSidechainScript(surjectionproof))
+        object.__setattr__(self, 'rangeproof', CElementsSidechainScript(rangeproof))
 
     @_disable_boolean_use
     def is_null(self):
@@ -390,8 +493,8 @@ class CElementsSidechainTxOutWitness(CTxOutWitnessBase):
 
     @classmethod
     def stream_deserialize(cls, f):
-        surjectionproof = CScript(BytesSerializer.stream_deserialize(f))
-        rangeproof = CScript(BytesSerializer.stream_deserialize(f))
+        surjectionproof = CElementsSidechainScript(BytesSerializer.stream_deserialize(f))
+        rangeproof = CElementsSidechainScript(BytesSerializer.stream_deserialize(f))
         return cls(surjectionproof, rangeproof)
 
     def stream_serialize(self, f):
@@ -575,7 +678,7 @@ class CElementsSidechainTxInBase(CTxInBase, ReprOrStrMixin):
     """
     __slots__ = ['prevout', 'scriptSig', 'nSequence', 'assetIssuance', 'is_pegin']
 
-    def __init__(self, prevout=None, scriptSig=CScript(), nSequence=0xffffffff,
+    def __init__(self, prevout=None, scriptSig=CElementsSidechainScript(), nSequence=0xffffffff,
                  assetIssuance=CAssetIssuance(), is_pegin=False):
         super(CElementsSidechainTxInBase, self).__init__(prevout, scriptSig, nSequence)
         object.__setattr__(self, 'assetIssuance', assetIssuance)
@@ -678,7 +781,7 @@ class CElementsSidechainTxOut(CTxOutBase, ReprOrStrMixin):
 
     # nValue and scriptPubKey is first to be compatible with
     # CTxOut(nValue, scriptPubKey) calls
-    def __init__(self, nValue=CConfidentialValue(), scriptPubKey=CScript(),
+    def __init__(self, nValue=CConfidentialValue(), scriptPubKey=CElementsSidechainScript(),
                  nAsset=CConfidentialAsset(), nNonce=CConfidentialNonce()):
         assert isinstance(nValue, CConfidentialValue)
         assert isinstance(nAsset, CConfidentialAsset)
@@ -693,7 +796,7 @@ class CElementsSidechainTxOut(CTxOutBase, ReprOrStrMixin):
         nAsset = CConfidentialAsset.stream_deserialize(f)
         nValue = CConfidentialValue.stream_deserialize(f)
         nNonce = CConfidentialNonce.stream_deserialize(f)
-        scriptPubKey = CScript(BytesSerializer.stream_deserialize(f))
+        scriptPubKey = CElementsSidechainScript(BytesSerializer.stream_deserialize(f))
         return cls(nValue, scriptPubKey, nAsset, nNonce)
 
     def stream_serialize(self, f):
@@ -1161,7 +1264,7 @@ class CElementsSidechainMutableTransaction(CElementsSidechainTransactionCommon, 
 
                     # Generate rangeproof, no script committed for issuances
                     rangeproof = generate_rangeproof(
-                        blinds, nonce, amount, CScript(), commit, gen, asset, assetblinds)
+                        blinds, nonce, amount, CElementsSidechainScript(), commit, gen, asset, assetblinds)
 
                     if nPseudo == 0:
                         txinwit.issuanceAmountRangeproof = rangeproof
@@ -1297,18 +1400,6 @@ class CElementsSidechainTransaction(CElementsSidechainTransactionCommon, CImmuta
     _txout_class = CElementsSidechainTxOut
 
 
-class CElementsSidechainScript(CScriptBase):
-
-    def derive_blinding_key(self, blinding_derivation_key):
-        return derive_blinding_key(blinding_derivation_key, self)
-
-    @_disable_boolean_use
-    def is_unspendable(self):
-        if len(self) == 0:
-            return True
-        return super(CElementsSidechainScript, self).is_unspendable()
-
-
 def RawElementsSidechainSignatureHash(script, txTo, inIdx, hashtype, amount=0,
                                       sigversion=SIGVERSION_BASE):
     """Consensus-correct SignatureHash
@@ -1384,9 +1475,6 @@ class CoreElementsSidechainParams(CoreMainParams):
     NAME = 'sidechain/elements'
     TRANSACTION_CLASS = CElementsSidechainTransaction
     SCRIPT_CLASS = CElementsSidechainScript
-    SUBSTITUTE_FUNCTIONS = {
-        'script': {'RawSignatureHash': RawElementsSidechainSignatureHash}
-    }
 
     ct_exponent = 0
     ct_bits = 32
@@ -1394,24 +1482,9 @@ class CoreElementsSidechainParams(CoreMainParams):
 
 class ElementsSidechainParams(CoreElementsSidechainParams):
     RPC_PORT = 7041
-    BASE58_PREFIXES = {'PUBKEY_ADDR': 235,
-                       'SCRIPT_ADDR': 75,
-                       'CONFIDENTIAL_ADDR': b'\x04',
-                       'CONFIDENTIAL_PUBKEY_ADDR': b'\x04\xEB',
-                       'CONFIDENTIAL_SCRIPT_ADDR': b'\x04\x4B',
-
-                       # Note: these are the same as for Bitcoin testnet
-                       'SECRET_KEY': 239,
-                       'EXTENDED_PUBKEY': b'\x04\x35\x87\xCF',
-                       'EXTENDED_PRIVKEY': b'\x04\x35\x83\x94'}
-
-    EXTRA_BASE58_ADDRESS_CLASS_MAP = {
-        CConfidentialAddress: 'CONFIDENTIAL_ADDR',
-        P2PKHConfidentialAddress: 'CONFIDENTIAL_PUBKEY_ADDR',
-        P2SHConfidentialAddress: 'CONFIDENTIAL_SCRIPT_ADDR',
-    }
-
-    BECH32_HRP = None
+    ADDRESS_CLASS = CElementsSidechainAddress
+    SECRET_CLASS = CElementsSidechainSecret
+    EXT_SECRET_CLASS = CElementsSidechainExtSecret
 
 
 def generate_asset_entropy(prevout, contracthash):
@@ -1625,7 +1698,7 @@ def unblind_confidential_pair(key, confValue, confAsset, nNonce, committedScript
         nonce = hashlib.sha256(key.ECDH(ephemeral_key)).digest()
     else:
         # Use blinding key directly, and don't commit to a scriptpubkey
-        committedScript = CScript()
+        committedScript = CElementsSidechainScript()
         nonce = key.secret_bytes
 
     # 32 bytes of asset type, 32 bytes of asset blinding factor in sidechannel
@@ -1753,8 +1826,7 @@ __all__ = (
     'generate_asset_entropy',
     'calculate_asset',
     'calculate_reissuance_token',
-    'CConfidentialAddress',
-    'P2SHConfidentialAddress',
-    'P2PKHConfidentialAddress',
+    'P2SHElementsSidechainConfidentialAddress',
+    'P2PKHElementsSidechainConfidentialAddress',
     'BlindingInputDescriptor',
 )

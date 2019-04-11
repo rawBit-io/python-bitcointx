@@ -109,6 +109,10 @@ class ValidationError(Exception):
     """
 
 
+class AddressEncodingError(Exception):
+    """Base class for all errors related to address encoding"""
+
+
 class ReprOrStrMixin(metaclass=ABCMeta):
 
     @abstractmethod
@@ -705,7 +709,7 @@ class _ParamsTag():
     pass
 
 
-class CoreChainParams(object):
+class CoreChainParamsBase(object):
     """Define consensus-critical parameters of a given instance of the Bitcoin system"""
     MAX_MONEY = None
     NAME = None
@@ -713,22 +717,23 @@ class CoreChainParams(object):
     SCRIPT_CLASS = None
 
 
-class CoreMainParams(CoreChainParams, _ParamsTag):
+class CoreMainParams(CoreChainParamsBase, _ParamsTag):
     MAX_MONEY = 21000000 * COIN
-    NAME = 'mainnet'
+    NAME = 'bitcoin'
+    READABLE_NAME = 'Bitcoin'
     TRANSACTION_CLASS = CBitcoinTransaction
     SCRIPT_CLASS = script.CBitcoinScript
-    SUBSTITUTE_FUNCTIONS = {
-        'script': {'RawSignatureHash': script.RawBitcoinSignatureHash}
-    }
 
 
 class CoreTestNetParams(CoreMainParams, _ParamsTag):
-    NAME = 'testnet'
+    NAME = 'bitcoin/testnet'
+    READABLE_NAME = 'Bitcoin testnet'
 
 
 class CoreRegTestParams(CoreTestNetParams, _ParamsTag):
-    NAME = 'regtest'
+    NAME = 'bitcoin/regtest'
+    READABLE_NAME = 'Bitcoin regtest'
+
 
 """Master global setting for what core chain params we're using"""
 coreparams = CoreMainParams()
@@ -741,13 +746,12 @@ def _SelectAlternativeCoreParams(alt_core_params):
     """
     global coreparams
 
-    assert(issubclass(alt_core_params, CoreChainParams))
+    assert(issubclass(alt_core_params, CoreChainParamsBase))
 
     coreparams = alt_core_params()
 
     _SetTransactionClassParams(coreparams.TRANSACTION_CLASS)
-    script._SetScriptClassParams(coreparams.SCRIPT_CLASS,
-                                 coreparams.SUBSTITUTE_FUNCTIONS['script'])
+    script._SetScriptClassParams(coreparams.SCRIPT_CLASS)
 
 
 def _CoreParamsByName(name):
@@ -914,6 +918,7 @@ __all__ = (
     'b2lx',
     'str_money_value',
     'ValidationError',
+    'AddressEncodingError',
     'COutPoint',
     'CMutableOutPoint',
     'CTxIn',
@@ -928,7 +933,7 @@ __all__ = (
     'CMutableTxOutWitness',
     'CTxInWitness',
     'CTxOutWitness',
-    'CoreChainParams',
+    'CoreChainParamsBase',
     'CoreMainParams',
     'CoreTestNetParams',
     'CoreRegTestParams',

@@ -78,6 +78,8 @@ class Test_CBitcoinExtKey(unittest.TestCase):
         def T(base58_xprivkey, expected_hex_xprivkey):
             key = CBitcoinExtKey(base58_xprivkey)
             self.assertEqual(b2x(key), expected_hex_xprivkey)
+            key2 = CBitcoinExtKey.from_bytes(x(expected_hex_xprivkey))
+            self.assertEqual(b2x(key), b2x(key2))
 
         T('xprv9s21ZrQH143K25QhxbucbDDuQ4naNntJRi4KUfWT7xo4EKsHt2QJDu7KXp1A3u7Bi1j8ph3EGsZ9Xvz9dGuVrtHHs7pXeTzjuxBrCmmhgC6',
           '00000000000000000001d28a3e53cffa419ec122c968b3259e16b65076495494d97cae10bbfec3c36f0000ddb80b067e0d4993197fe10f2657a844a384589847602d56f0c629c81aae32')
@@ -132,6 +134,8 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
         def T(base58_xpubkey, expected_hex_xpubkey):
             key = CBitcoinExtPubKey(base58_xpubkey)
             self.assertEqual(b2x(key), expected_hex_xpubkey)
+            key2 = CBitcoinExtPubKey.from_bytes(x(expected_hex_xpubkey))
+            self.assertEqual(b2x(key), b2x(key2))
 
         T('xpub661MyMwAqRbcFMfe2ZGFSPef9xMXWrZUDta7RXKPbtxuNyepg8ewAWVV5qME4omB67Ek4eDrpyFtMcUcznxCf8sV8DCnsZeWj6Z2N3RXqPo',
           '00000000000000000051cba4db213938e74101b4264be4f45a9f3a7b2c0005963331c7a0ffaa5978b903782da1cfa3f03b9ae2bfa3077296410f5f80cf92eaa2f87d738a320b8486f326')

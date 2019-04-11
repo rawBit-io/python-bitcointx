@@ -17,7 +17,18 @@ import unittest
 from bitcointx.core import b2x, x
 from bitcointx.core.script import CScript, IsLowDERSignature
 from bitcointx.core.key import CPubKey
-from bitcointx.wallet import *
+from bitcointx.wallet import (
+    CCoinAddressError as CBitcoinAddressError,
+    CCoinAddress,
+    CBitcoinAddress,
+    CBase58BitcoinAddress,
+    CBech32BitcoinAddress,
+    P2PKHBitcoinAddress,
+    P2SHBitcoinAddress,
+    P2WPKHBitcoinAddress,
+    P2WSHBitcoinAddress,
+    CBitcoinSecret,
+)
 
 
 class Test_CBitcoinAddress(unittest.TestCase):
@@ -25,7 +36,10 @@ class Test_CBitcoinAddress(unittest.TestCase):
         """Create CBitcoinAddress's from strings"""
 
         def T(str_addr, expected_bytes, expected_version, expected_class):
-            addr = CBitcoinAddress(str_addr)
+            addr = CCoinAddress(str_addr)
+            addr2 = CBitcoinAddress(str_addr)
+            self.assertEqual(addr, addr2)
+            self.assertEqual(type(addr), type(addr2))
             self.assertEqual(addr.to_bytes(), expected_bytes)
             self.assertEqual(addr.__class__, expected_class)
             if isinstance(addr, CBase58BitcoinAddress):

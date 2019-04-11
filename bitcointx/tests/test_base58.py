@@ -46,9 +46,7 @@ class Test_CBase58Data(unittest.TestCase):
 
             class MockBase58Address(CBase58PrefixedData):
                 @classmethod
-                def from_bytes(cls, data, _prefix):
-                    assert prefix == _prefix
-                    cls.check_base58_prefix_correct(prefix)
+                def from_bytes(cls, data):
                     return super(MockBase58Address, cls).from_bytes(data)
 
             b = CBase58RawData.from_bytes(prefix + data)

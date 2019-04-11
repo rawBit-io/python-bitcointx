@@ -31,7 +31,6 @@ from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
 from .util import _disable_boolean_use
 
 _script_class_params = {}  # to be filled by _SetScriptClassParams()
-_raw_signature_hash_func = None  # to be set by _SetScriptClassParams()
 
 MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
@@ -873,6 +872,18 @@ class CScriptBase(bytes):
             lastOpcode = opcode
         return n
 
+    def sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+        """Calculate a signature hash
+
+        'Cooked' version that checks if inIdx is out of bounds - this is *not*
+        consensus-correct behavior, but is what you probably want for general
+        wallet use.
+        """
+        (h, err) = self.raw_sighash(txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
+        if err is not None:
+            raise ValueError(err)
+        return h
+
 
 class CScriptWitness(ImmutableSerializable):
     """An encoding of the data elements on the initial stack for (segregated
@@ -985,11 +996,6 @@ def CompareBigEndian(c1, c2):
     return 0
 
 
-def RawSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
-    return _raw_signature_hash_func(script, txTo, inIdx, hashtype,
-                                    amount=amount, sigversion=sigversion)
-
-
 def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
     """Consensus-correct SignatureHash
 
@@ -1093,6 +1099,18 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
     return (hash, None)
 
 
+def RawSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+    """Consensus-correct SignatureHash
+
+    Returns (hash, err) to precisely match the consensus-critical behavior of
+    the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
+
+    If you're just writing wallet software you probably want SignatureHash()
+    instead.
+    """
+    return script.raw_sighash(txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
+
+
 def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
     """Calculate a signature hash
 
@@ -1127,17 +1145,22 @@ class CScript(metaclass=_ScriptClassParamsMeta):
 
 
 class CBitcoinScript(CScriptBase):
-    pass
+    def raw_sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+        """Consensus-correct SignatureHash
+
+        Returns (hash, err) to precisely match the consensus-critical behavior of
+        the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
+
+        If you're just writing wallet software you probably want sighash() method instead."""
+        return RawBitcoinSignatureHash(self, txTo, inIdx, hashtype,
+                                       amount=amount, sigversion=sigversion)
 
 
-def _SetScriptClassParams(script_cls, subst_funcs):
-    global _raw_signature_hash_func
+def _SetScriptClassParams(script_cls):
     _script_class_params[CScript] = script_cls
-    _raw_signature_hash_func = subst_funcs['RawSignatureHash']
 
 
-_SetScriptClassParams(CBitcoinScript,
-                      {'RawSignatureHash': RawBitcoinSignatureHash})
+_SetScriptClassParams(CBitcoinScript)
 
 __all__ = (
     'MAX_SCRIPT_SIZE',

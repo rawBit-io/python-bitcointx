@@ -21,7 +21,7 @@ import bitcointx.core
 B58_DIGITS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 
-class Base58Error(Exception):
+class Base58Error(bitcointx.core.AddressEncodingError):
     pass
 
 
@@ -102,31 +102,18 @@ class Base58ChecksumError(Base58Error):
 class CBase58RawData(bytes):
     """Base58-encoded data
 
-    Includes a prefix and checksum.
+    Includes prefix and checksum.
     """
-    base58_prefix_required = False
-    base58_prefix = b''
 
     def __new__(cls, s):
-        prefix_len = len(cls.base58_prefix)
-        if cls.base58_prefix_required:
-            assert prefix_len, "base58 prefix cannot be empty"
-        else:
-            assert not prefix_len, "base58 prefix must be empty for raw data"
         k = decode(s)
-        if len(k) < prefix_len + 4:
+        if len(k) < 4:
             raise Base58Error('data too short')
         data, check0 = k[0:-4], k[-4:]
         check1 = bitcointx.core.Hash(data)[:4]
         if check0 != check1:
             raise Base58ChecksumError('Checksum mismatch: expected %r, calculated %r' % (check0, check1))
-
-        prefix, data = data[:prefix_len], data[prefix_len:]
-
-        if prefix_len:
-            return cls.from_bytes(data, prefix)
-
-        return cls.from_bytes(data)
+        return cls.from_bytes_with_prefix(data)
 
     def __init__(self, s):
         """Initialize from base58-encoded string
@@ -137,10 +124,17 @@ class CBase58RawData(bytes):
         """
 
     @classmethod
-    def from_bytes(cls, data, prefix=b''):
+    def from_bytes_with_prefix(cls, data):
+        """Instantiate from data with prefix.
+        prefix is empty, so it is the same as from_bytes()"""
+        return cls.from_bytes(cls, data)
+
+    @classmethod
+    def from_bytes(cls, data):
         """Instantiate from data"""
-        assert len(prefix) == 0
-        return bytes.__new__(cls, data)
+        self = bytes.__new__(cls, data)
+        self.__init__(None)
+        return self
 
     def to_bytes(self):
         """Convert to bytes instance
@@ -152,37 +146,40 @@ class CBase58RawData(bytes):
 
     def __str__(self):
         """Convert to string"""
-        check = bitcointx.core.Hash(self.base58_prefix + self)[0:4]
-        return encode(self.base58_prefix + self + check)
+        check = bitcointx.core.Hash(self)[0:4]
+        return encode(self + check)
 
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, str(self))
 
 
 class CBase58PrefixedData(CBase58RawData):
-    base58_prefix_required = True
-    base58_prefix_check_always = True
+
+    def __str__(self):
+        """Convert to string"""
+        check = bitcointx.core.Hash(self.base58_prefix + self)[0:4]
+        return encode(self.base58_prefix + self + check)
 
     @classmethod
-    def from_bytes(cls, data, prefix=None):
-        if prefix is not None and len(prefix) < len(cls.base58_prefix):
-            raise UnexpectedBase58PrefixError(
-                'base58 prefix length must be >= {}'.format(len(cls.base58_prefix)))
-        self = super(CBase58PrefixedData, cls).from_bytes(data)
-        if cls.base58_prefix_check_always:
-            cls.check_base58_prefix_correct(prefix)
-        return self
-
-    @classmethod
-    def check_base58_prefix_correct(cls, prefix):
-        if prefix is None or cls.base58_prefix[0] is None:
-            return
+    def from_bytes_with_prefix(cls, data):
+        """Instantiate from data with prefix."""
+        pfx_len = len(cls.base58_prefix)
+        prefix, data = data[:pfx_len], data[pfx_len:]
         if prefix != cls.base58_prefix:
             raise UnexpectedBase58PrefixError(
                 'Incorrect prefix bytes for {}: {}, expected {}'
                 .format(cls.__name__,
                         bitcointx.core.b2x(prefix),
                         bitcointx.core.b2x(cls.base58_prefix)))
+        return cls.from_bytes(data)
+
+    @classmethod
+    def match_base58_classes(cls, data, candidates):
+        for candidate in candidates:
+            pfx = candidate.base58_prefix
+            if data[:len(pfx)] == pfx:
+                return candidate.from_bytes(data[len(pfx):])
+        raise UnexpectedBase58PrefixError("Base58 prefix for {} not recognized")
 
 
 __all__ = (

@@ -10,15 +10,16 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-import sys
+from contextlib import contextmanager
 
 import bitcointx.core
 import bitcointx.sidechain
+import bitcointx.wallet
 
 # Note that setup.py can break if __init__.py imports any external
 # dependencies, as these might not be installed when setup.py runs. In this
 # case __version__ could be moved to a separate version.py and imported here.
-__version__ = '0.10.4.dev0'
+__version__ = '0.11.0.dev0'
 
 
 class _ParamsTag():
@@ -27,32 +28,24 @@ class _ParamsTag():
 
 class MainParams(bitcointx.core.CoreMainParams, _ParamsTag):
     RPC_PORT = 8332
-    BASE58_PREFIXES = {'PUBKEY_ADDR': 0,
-                       'SCRIPT_ADDR': 5,
-                       'SECRET_KEY':  128,
-                       'EXTENDED_PUBKEY': b'\x04\x88\xB2\x1E',
-                       'EXTENDED_PRIVKEY': b'\x04\x88\xAD\xE4'}
-    BECH32_HRP = 'bc'
+    ADDRESS_CLASS = bitcointx.wallet.CBitcoinAddress
+    SECRET_CLASS = bitcointx.wallet.CBitcoinSecret
+    EXT_SECRET_CLASS = bitcointx.wallet.CBitcoinExtSecret
 
 
 class TestNetParams(bitcointx.core.CoreTestNetParams, _ParamsTag):
     RPC_PORT = 18332
-    BASE58_PREFIXES = {'PUBKEY_ADDR': 111,
-                       'SCRIPT_ADDR': 196,
-                       'SECRET_KEY':  239,
-                       'EXTENDED_PUBKEY': b'\x04\x35\x87\xCF',
-                       'EXTENDED_PRIVKEY': b'\x04\x35\x83\x94'}
-    BECH32_HRP = 'tb'
+    ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
+    SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetSecret
+    EXT_SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetExtSecret
 
 
 class RegTestParams(bitcointx.core.CoreRegTestParams, _ParamsTag):
     RPC_PORT = 18443
-    BASE58_PREFIXES = {'PUBKEY_ADDR': 111,
-                       'SCRIPT_ADDR': 196,
-                       'SECRET_KEY':  239,
-                       'EXTENDED_PUBKEY': b'\x04\x35\x87\xCF',
-                       'EXTENDED_PRIVKEY': b'\x04\x35\x83\x94'}
-    BECH32_HRP = 'bcrt'
+    ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
+    SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetSecret
+    EXT_SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetExtSecret
+
 
 """Master global setting for what chain params we're using.
 
@@ -63,10 +56,26 @@ bitcointx.core.params correctly too.
 params = MainParams()
 
 
+@contextmanager
+def ChainParams(name):
+    """Context manager to temporarily switch chain parameters.
+
+    Switching chain parameters involves setting global variables
+    and parameters of certain classes. NOT thread-safe.
+    """
+    global params
+    prev_params_name = params.NAME
+    SelectParams(name)
+    try:
+        yield
+    finally:
+        SelectParams(prev_params_name)
+
+
 def SelectAlternativeParams(alt_core_params, alt_main_params):
     """Select alternative chain parameters to use
 
-    alt_core_params should be a subclass of core.CoreChainParams,
+    alt_core_params should be a subclass of core.CoreChainParamsBase,
     but redefine all fields
 
     alt_main_params should be a subclass of alt_core_params,
@@ -76,14 +85,13 @@ def SelectAlternativeParams(alt_core_params, alt_main_params):
     global params
 
     bitcointx.core._SelectAlternativeCoreParams(alt_core_params)
+    bitcointx.wallet._SetAddressClassParams(alt_main_params.ADDRESS_CLASS,
+                                            alt_main_params.SECRET_CLASS,
+                                            alt_main_params.EXT_SECRET_CLASS)
 
     assert(issubclass(alt_main_params, alt_core_params))
 
     params = alt_main_params()
-
-    if 'bitcointx.wallet' in sys.modules:
-        bitcointx.wallet._SetBase58Prefixes(
-            getattr(params, 'EXTRA_BASE58_ADDRESS_CLASS_MAP', None))
 
 
 def SelectParams(name):
@@ -92,11 +100,15 @@ def SelectParams(name):
     name is one of 'mainnet', 'testnet', or 'regtest'
 
     Default chain is 'mainnet'
+
+    Switching chain parameters involves setting global variables
+    and parameters of certain classes. NOT thread-safe.
     """
     if name.startswith('sidechain/'):
         params_pair = bitcointx.sidechain.get_chain_params(name)
         assert len(params_pair) == 2
-        return SelectAlternativeParams(*params_pair)
+        SelectAlternativeParams(*params_pair)
+        return
 
     coreparams = bitcointx.core._CoreParamsByName(name)
 

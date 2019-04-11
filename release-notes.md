@@ -2,6 +2,8 @@
 
 ## v0.11.0.dev0
 
+XXX  examples/litecoin-alt-p2sh-prefix.py not working due to breaking changes
+
 BREAKING CHANGES:
 
     CPubKey's is_valid, is_fullyvalid, is_compressed
@@ -31,6 +33,10 @@ BREAKING CHANGES:
 
     For details, see _disable_boolean_use() decorator in
     bitcointx/core/util.py
+
+    ----
+
+    CBitcoinAddressError is removed, CCoinAddressError should be used instead
 
 
 * Elements sidechain support:

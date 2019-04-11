@@ -37,11 +37,12 @@ from bitcointx.sidechain.elements import (
     CAsset, CConfidentialValue, CConfidentialAsset, CConfidentialNonce,
     calculate_asset, generate_asset_entropy, calculate_reissuance_token,
     CElementsSidechainTransaction, CElementsSidechainMutableTransaction,
-    BlindingInputDescriptor
+    BlindingInputDescriptor,
+    P2PKHElementsSidechainAddress, P2SHElementsSidechainAddress
 )
 from bitcointx.wallet import (
-    CBitcoinAddress, CBitcoinSecret,
-    P2PKHBitcoinAddress, P2SHBitcoinAddress
+    CCoinAddress, CCoinSecret,
+    P2PKHCoinAddressCommon, P2SHCoinAddressCommon
 )
 from bitcointx.core.secp256k1 import secp256k1_has_zkp
 
@@ -218,7 +219,7 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
                         genesis_hash, pegout_scriptpubkey = tx.vout[n].scriptPubKey.get_pegout_data()
                         if spk['pegout_type'] != 'nonstandard':
                             assert spk['pegout_type'] in ('pubkeyhash', 'scripthash')
-                            addr = CBitcoinAddress.from_scriptPubKey(pegout_scriptpubkey)
+                            addr = CCoinAddress.from_scriptPubKey(pegout_scriptpubkey)
                             self.assertEqual(len(spk['pegout_addresses']), 1)
                             self.assertEqual(spk['pegout_addresses'][0], str(addr))
                         self.assertEqual(spk['pegout_hex'], b2x(pegout_scriptpubkey))
@@ -226,7 +227,7 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
 
                     if spk['type'] in ('pubkeyhash', 'scripthash'):
                         self.assertEqual(len(spk['addresses']), 1)
-                        addr = CBitcoinAddress.from_scriptPubKey(tx.vout[n].scriptPubKey)
+                        addr = CCoinAddress.from_scriptPubKey(tx.vout[n].scriptPubKey)
                         self.assertEqual(spk['addresses'][0], str(addr))
                     elif spk['type'] == 'nulldata':
                         self.assertEqual(tx.vout[n].scriptPubKey, x(spk['hex']))
@@ -465,27 +466,27 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
             amount = int(round(utxo['amount']*COIN))
 
             scriptPubKey = CScript(x(utxo['scriptPubKey']))
-            a = CBitcoinAddress(utxo['address'])
+            a = CCoinAddress(utxo['address'])
             if 'privkey' in utxo:
-                privkey = CBitcoinSecret(utxo['privkey'])
-                assert isinstance(a, P2PKHBitcoinAddress),\
+                privkey = CCoinSecret(utxo['privkey'])
+                assert isinstance(a, P2PKHCoinAddressCommon),\
                     "only P2PKH is supported for single-sig"
-                assert a == P2PKHBitcoinAddress.from_pubkey(privkey.pub)
+                assert a == P2PKHElementsSidechainAddress.from_pubkey(privkey.pub)
                 assert scriptPubKey == a.to_scriptPubKey()
                 sighash = SignatureHash(scriptPubKey, tx_to_sign, n, SIGHASH_ALL,
                                         amount=amount, sigversion=SIGVERSION_BASE)
                 sig = privkey.sign(sighash) + bytes([SIGHASH_ALL])
                 tx_to_sign.vin[n].scriptSig = CScript([CScript(sig), CScript(privkey.pub)])
             else:
-                pk_list = [CBitcoinSecret(pk) for pk in utxo['privkey_list']]
+                pk_list = [CCoinSecret(pk) for pk in utxo['privkey_list']]
                 redeem_script = [utxo['num_p2sh_participants']]
                 redeem_script.extend([pk.pub for pk in pk_list])
                 redeem_script.extend([len(pk_list), OP_CHECKMULTISIG])
                 redeem_script = CScript(redeem_script)
-                assert isinstance(a, P2SHBitcoinAddress),\
+                assert isinstance(a, P2SHCoinAddressCommon),\
                     "only P2SH is supported for multi-sig."
                 assert scriptPubKey == redeem_script.to_p2sh_scriptPubKey()
-                assert a == P2SHBitcoinAddress.from_scriptPubKey(
+                assert a == P2SHElementsSidechainAddress.from_scriptPubKey(
                     redeem_script.to_p2sh_scriptPubKey())
                 sighash = SignatureHash(redeem_script, tx_to_sign, n, SIGHASH_ALL,
                                         amount=amount, sigversion=SIGVERSION_BASE)
