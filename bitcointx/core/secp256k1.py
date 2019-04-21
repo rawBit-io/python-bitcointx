@@ -146,10 +146,10 @@ def _set_zkp_func_types():
         ctypes.c_size_t,  # size_t extra_commit_len,
         ctypes.c_char_p   # const secp256k1_generator* gen
     ]
-    secp256k1.secp256k1_surjectionproof_initialize.restype = ctypes.c_int
-    secp256k1.secp256k1_surjectionproof_initialize.argtypes = [
+    secp256k1.secp256k1_surjectionproof_allocate_initialized.restype = ctypes.c_int
+    secp256k1.secp256k1_surjectionproof_allocate_initialized.argtypes = [
         ctypes.c_void_p,  # const secp256k1_context* ctx
-        ctypes.c_char_p,  # secp256k1_surjectionproof* proof // proof size in bytes is not specified
+        ctypes.POINTER(ctypes.c_void_p),  # secp256k1_surjectionproof** proof_out_p
         ctypes.POINTER(ctypes.c_size_t),  # size_t *input_index
         #                   NOTE: use build_aligned_data_array()
         ctypes.c_char_p,  # const secp256k1_fixed_asset_tag* fixed_input_tags
@@ -159,11 +159,15 @@ def _set_zkp_func_types():
         ctypes.c_size_t,  # const size_t n_max_iterations
         ctypes.c_char_p   # const unsigned char *random_seed32
     ]
+    secp256k1.secp256k1_surjectionproof_destroy.restype = None
+    secp256k1.secp256k1_surjectionproof_destroy.argtypes = [
+        ctypes.c_void_p,  # const secp256k1_surjectionproof* proof
+    ]
 
     secp256k1.secp256k1_surjectionproof_generate.restype = ctypes.c_int
     secp256k1.secp256k1_surjectionproof_generate.argtypes = [
         ctypes.c_void_p,  # const secp256k1_context* ctx
-        ctypes.c_char_p,  # secp256k1_surjectionproof* proof
+        ctypes.c_void_p,  # secp256k1_surjectionproof* proof
         #                   NOTE: use build_aligned_data_array()
         ctypes.c_char_p,  # const secp256k1_generator* ephemeral_input_tags
         ctypes.c_size_t,  # size_t n_ephemeral_input_tags
@@ -176,14 +180,14 @@ def _set_zkp_func_types():
     secp256k1.secp256k1_surjectionproof_verify.restype = ctypes.c_int
     secp256k1.secp256k1_surjectionproof_verify.argtypes = [
         ctypes.c_void_p,  # const secp256k1_context* ctx
-        ctypes.c_char_p,  # const secp256k1_surjectionproof* proof
+        ctypes.c_void_p,  # const secp256k1_surjectionproof* proof
         #                   NOTE: use build_aligned_data_array()
         ctypes.c_char_p,  # const secp256k1_generator* ephemeral_input_tags
         ctypes.c_size_t,  # size_t n_ephemeral_input_tags
         ctypes.c_char_p   # const secp256k1_generator* ephemeral_output_tag
     ]
     secp256k1.secp256k1_surjectionproof_serialized_size.restype = ctypes.c_int
-    secp256k1.secp256k1_surjectionproof_serialized_size.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    secp256k1.secp256k1_surjectionproof_serialized_size.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 
     secp256k1.secp256k1_ec_pubkey_serialize.restype = ctypes.c_int
     secp256k1.secp256k1_ec_pubkey_serialize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p, ctypes.c_uint]
@@ -193,8 +197,9 @@ def _set_zkp_func_types():
         ctypes.c_void_p,  # const secp256k1_context* ctx
         ctypes.c_char_p,  # unsigned char *output
         ctypes.POINTER(ctypes.c_size_t),  # size_t *outputlen
-        ctypes.c_char_p   # const secp256k1_surjectionproof *proof
+        ctypes.c_void_p   # const secp256k1_surjectionproof *proof
     ]
+
 
 secp256k1_has_pubkey_recovery = False
 if getattr(secp256k1, 'secp256k1_ecdsa_sign_recoverable', None):
@@ -275,6 +280,7 @@ def _set_error_callback(ctx):
     secp256k1.secp256k1_context_set_error_callback(ctx, _secp256k1_error_callback_fn, 0)
     secp256k1.secp256k1_context_set_illegal_callback(ctx, _secp256k1_illegal_callback_fn, 0)
 
+
 _set_error_callback(secp256k1_context_sign)
 _set_error_callback(secp256k1_context_verify)
 
@@ -282,6 +288,7 @@ _set_error_callback(secp256k1_context_verify)
 def randomize_context(ctx):
     seed = os.urandom(32)
     assert(secp256k1.secp256k1_context_randomize(ctx, seed) == 1)
+
 
 randomize_context(secp256k1_context_sign)
 
@@ -305,6 +312,7 @@ def build_aligned_data_array(data_list, expected_len):
     assert len(buf) // expected_len == len(data_list)
 
     return buf
+
 
 SECP256K1_GENERATOR_SIZE = 64
 SECP256K1_PEDERSEN_COMMITMENT_SIZE = 64

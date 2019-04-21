@@ -1534,11 +1534,11 @@ def surject_output(txoutwit, surjectionTargets, targetAssetGenerators, targetAss
     randseed = _rand_func(32)
 
     input_index = ctypes.c_size_t()
-    proof_size = ctypes.c_int.in_dll(secp256k1, 'SECP256K1_SURJECTIONPROOF_RAW_SIZE').value
-    proof = ctypes.create_string_buffer(proof_size)
+    proof = ctypes.c_void_p()
 
-    ret = secp256k1.secp256k1_surjectionproof_initialize(
-        secp256k1_blind_context, proof, ctypes.byref(input_index),
+    ret = secp256k1.secp256k1_surjectionproof_allocate_initialized(
+        secp256k1_blind_context,
+        ctypes.byref(proof), ctypes.byref(input_index),
         build_aligned_data_array([st.data for st in surjectionTargets], 32),
         len(surjectionTargets),
         nInputsToSelect, asset.data, 100, randseed)
@@ -1547,28 +1547,31 @@ def surject_output(txoutwit, surjectionTargets, targetAssetGenerators, targetAss
         # probably asset did not match any surjectionTargets
         return False
 
-    ephemeral_input_tags_buf = build_aligned_data_array(targetAssetGenerators, 64)
+    try:
+        ephemeral_input_tags_buf = build_aligned_data_array(targetAssetGenerators, 64)
 
-    ret = secp256k1.secp256k1_surjectionproof_generate(
-        secp256k1_blind_context, proof,
-        ephemeral_input_tags_buf, len(targetAssetGenerators),
-        gen, input_index, targetAssetBlinders[input_index.value].data, assetblinds[-1].data)
+        ret = secp256k1.secp256k1_surjectionproof_generate(
+            secp256k1_blind_context, proof,
+            ephemeral_input_tags_buf, len(targetAssetGenerators),
+            gen, input_index, targetAssetBlinders[input_index.value].data, assetblinds[-1].data)
 
-    assert ret == 1
+        assert ret == 1
 
-    ret = secp256k1.secp256k1_surjectionproof_verify(
-        secp256k1_blind_context, proof,
-        ephemeral_input_tags_buf, len(targetAssetGenerators), gen)
+        ret = secp256k1.secp256k1_surjectionproof_verify(
+            secp256k1_blind_context, proof,
+            ephemeral_input_tags_buf, len(targetAssetGenerators), gen)
 
-    assert ret == 1
+        assert ret == 1
 
-    expected_output_len = secp256k1.secp256k1_surjectionproof_serialized_size(
-        secp256k1_blind_context, proof)
-    output_len = ctypes.c_size_t(expected_output_len)
-    serialized_proof = ctypes.create_string_buffer(output_len.value)
-    secp256k1.secp256k1_surjectionproof_serialize(
-        secp256k1_blind_context, serialized_proof, ctypes.byref(output_len), proof)
-    assert output_len.value == expected_output_len
+        expected_output_len = secp256k1.secp256k1_surjectionproof_serialized_size(
+            secp256k1_blind_context, proof)
+        output_len = ctypes.c_size_t(expected_output_len)
+        serialized_proof = ctypes.create_string_buffer(output_len.value)
+        secp256k1.secp256k1_surjectionproof_serialize(
+            secp256k1_blind_context, serialized_proof, ctypes.byref(output_len), proof)
+        assert output_len.value == expected_output_len
+    finally:
+        secp256k1.secp256k1_surjectionproof_destroy(proof)
 
     txoutwit.surjectionproof = serialized_proof.raw
 
@@ -1718,6 +1721,7 @@ BlindingInputDescriptor = namedtuple('BlindingInputDescriptor',
 def get_chain_params(name):
     assert name == CoreElementsSidechainParams.NAME
     return CoreElementsSidechainParams, ElementsSidechainParams
+
 
 __all__ = (
     'get_chain_params',
