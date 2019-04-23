@@ -1,6 +1,37 @@
 # python-bitcointx release notes
 
-## v0.10.4.dev0
+## v0.11.0.dev0
+
+BREAKING CHANGES:
+
+    CPubKey's is_valid, is_fullyvalid, is_compressed
+    CKeyMixin's is_compressed
+
+    Cannot be used as a properties anymore.
+    You have to use `pub.is_valid()`, `pub.is_compressed()`, etc.
+
+    If pub.is_valid is used without `()` in boolean context, like:
+
+    ```
+        if pub.is_valid:
+            do_someting()
+    ```
+
+    TypeError will be raised.
+
+    Now, all `is_*` methods of all classes are consistent in that
+    they always have to be called as method, not used as property.
+
+    All `is_*` other methods will throw Type error, too, if used
+    as property in a boolean context.
+
+    It could have been done the other way around - convert other
+    `is_*` methods to properties. But because there was a lot more
+    non-property `is_*` methods, this would break more code.
+
+    For details, see _disable_boolean_use() decorator in
+    bitcointx/core/util.py
+
 
 * Elements sidechain support:
 

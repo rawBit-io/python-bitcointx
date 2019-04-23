@@ -36,7 +36,7 @@ def SignMessage(key, message):
     sig, i = key.sign_compact(message.GetHash())
 
     meta = 27 + i
-    if key.is_compressed:
+    if key.is_compressed():
         meta += 4
 
     return base64.b64encode(bytes([meta]) + sig)

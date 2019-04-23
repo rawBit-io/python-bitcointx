@@ -255,7 +255,7 @@ class Test_CBitcoinSecret(unittest.TestCase):
         def T(base58_privkey, expected_hex_pubkey, expected_is_compressed_value):
             key = CBitcoinSecret(base58_privkey)
             self.assertEqual(b2x(key.pub), expected_hex_pubkey)
-            self.assertEqual(key.is_compressed, expected_is_compressed_value)
+            self.assertEqual(key.is_compressed(), expected_is_compressed_value)
 
         T('5KJvsngHeMpm884wtkJNzQGaCErckhHJBGFsvd3VyK5qMZXj3hS',
           '0478d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71a1518063243acd4dfe96b66e3f2ec8013c8e072cd09b3834a19f81f659cc3455',
@@ -295,27 +295,27 @@ class Test_CBitcoinSecret(unittest.TestCase):
             k = CBitcoinSecret.from_secret_bytes(x(keydata))
             k_u = CBitcoinSecret.from_secret_bytes(x(keydata), False)
 
-            self.assertTrue(k.is_compressed)
+            self.assertTrue(k.is_compressed())
             self.assertEqual(k.pub, x(compressed))
 
             k2 = CBitcoinSecret(str(k))
-            self.assertTrue(k2.is_compressed)
+            self.assertTrue(k2.is_compressed())
             self.assertEqual(k, k2)
 
             k = k.to_uncompressed()
             self.assertEqual(k, k_u)
             self.assertEqual(len(k), 32)
-            self.assertFalse(k.is_compressed)
+            self.assertFalse(k.is_compressed())
             self.assertEqual(k.pub, x(uncompressed))
 
             k2 = CBitcoinSecret(str(k))
-            self.assertFalse(k2.is_compressed)
+            self.assertFalse(k2.is_compressed())
             self.assertEqual(k, k2)
 
             k = k.to_compressed()
             self.assertEqual(len(k), 33)
             self.assertEqual(k[-1], 1)
-            self.assertTrue(k.is_compressed)
+            self.assertTrue(k.is_compressed())
             self.assertEqual(k.pub, x(compressed))
 
         T('0de5306487851213f0aae1454f4e4449949a755802b60f6eb47906149395d080',

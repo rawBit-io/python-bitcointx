@@ -211,7 +211,7 @@ class P2PKHBitcoinAddress(CBase58BitcoinAddress):
         if not accept_invalid:
             if not isinstance(pubkey, bitcointx.core.key.CPubKey):
                 pubkey = bitcointx.core.key.CPubKey(pubkey)
-            if not pubkey.is_fullyvalid:
+            if not pubkey.is_fullyvalid():
                 raise CBitcoinAddressError('invalid pubkey')
 
         pubkey_hash = bitcointx.core.Hash160(pubkey)
@@ -337,7 +337,7 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
     pub           - The corresponding CPubKey for this private key
     secret_bytes  - Secret data, 32 bytes
 
-    is_compressed - True if compressed
+    is_compressed() - True if compressed
 
     Note that CBitcoinSecret instance is 33 bytes long if compressed, 32 bytes otherwise
     (due to WIF format that states b'\x01' should be appended for compressed keys).
@@ -364,12 +364,12 @@ class CBitcoinSecret(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CK
         return self
 
     def to_compressed(self):
-        if self.is_compressed:
+        if self.is_compressed():
             return self
         return self.__class__.from_secret_bytes(self[:32], True)
 
     def to_uncompressed(self):
-        if not self.is_compressed:
+        if not self.is_compressed():
             return self
         return self.__class__.from_secret_bytes(self[:32], False)
 

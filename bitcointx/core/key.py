@@ -26,6 +26,7 @@ import ctypes.util
 import hashlib
 
 from bitcointx.core import Hash160
+from bitcointx.core.util import _disable_boolean_use
 from bitcointx.core.secp256k1 import (
     secp256k1, secp256k1_context_sign, secp256k1_context_verify,
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
@@ -98,7 +99,7 @@ class CKeyMixin():
     pub           - The corresponding CPubKey for this private key
     secret_bytes  - Secret data, 32 bytes (needed because subclasses may have trailing data)
 
-    is_compressed - True if compressed
+    is_compressed() - True if compressed
 
     """
 
@@ -121,9 +122,9 @@ class CKeyMixin():
 
         self.pub = CPubKey._from_raw(raw_pubkey, compressed=compressed)
 
-    @property
+    @_disable_boolean_use
     def is_compressed(self):
-        return self.pub.is_compressed
+        return self.pub.is_compressed()
 
     @property
     def secret_bytes(self):
@@ -191,7 +192,7 @@ class CKeyMixin():
         if pub is None:
             pub = self.pub
 
-        if not pub.is_fullyvalid:
+        if not pub.is_fullyvalid():
             raise ValueError('supplied pubkey is not valid')
 
         result_data = ctypes.create_string_buffer(32)
@@ -215,9 +216,9 @@ class CKeyMixin():
 
     @classmethod
     def add(cls, a, b):
-        assert a.is_compressed == b.is_compressed,\
+        assert a.is_compressed() == b.is_compressed(),\
             "compressed attributes must match on privkey addition/substraction"
-        return cls.combine(a, b, compressed=a.is_compressed)
+        return cls.combine(a, b, compressed=a.is_compressed())
 
     @classmethod
     def sub(cls, a, b):
@@ -231,7 +232,7 @@ class CKeyMixin():
         key_buf = ctypes.create_string_buffer(self.secret_bytes)
         ret = secp256k1.secp256k1_ec_privkey_negate(secp256k1_context_sign, key_buf)
         assert ret == 1
-        return self.__class__.from_secret_bytes(key_buf[:32], compressed=self.is_compressed)
+        return self.__class__.from_secret_bytes(key_buf[:32], compressed=self.is_compressed())
 
 
 class CKey(bytes, CKeyMixin):
@@ -252,11 +253,11 @@ class CPubKey(bytes):
 
     Attributes:
 
-    is_valid      - Corresponds to CPubKey.IsValid()
+    is_valid()      - Corresponds to CPubKey.IsValid()
 
-    is_fullyvalid - Corresponds to CPubKey.IsFullyValid()
+    is_fullyvalid() - Corresponds to CPubKey.IsFullyValid()
 
-    is_compressed - Corresponds to CPubKey.IsCompressed()
+    is_compressed() - Corresponds to CPubKey.IsCompressed()
 
     key_id        - Hash160(pubkey)
     """
@@ -264,12 +265,12 @@ class CPubKey(bytes):
     def __new__(cls, buf=b''):
         self = super(CPubKey, cls).__new__(cls, buf)
 
-        self.is_fullyvalid = False
-        if self.is_valid:
+        self._fullyvalid = False
+        if self.is_valid():
             tmp_pub = ctypes.create_string_buffer(64)
             result = secp256k1.secp256k1_ec_pubkey_parse(
                 secp256k1_context_verify, tmp_pub, self, len(self))
-            self.is_fullyvalid = (result == 1)
+            self._fullyvalid = (result == 1)
 
         self.key_id = Hash160(self)
 
@@ -290,7 +291,7 @@ class CPubKey(bytes):
         return CPubKey(bytes(pub)[:pub_size0.value])
 
     def _to_raw(self):
-        assert self.is_fullyvalid
+        assert self.is_fullyvalid()
         raw_pub = ctypes.create_string_buffer(64)
         result = secp256k1.secp256k1_ec_pubkey_parse(
             secp256k1_context_verify, raw_pub, self, len(self))
@@ -330,28 +331,15 @@ class CPubKey(bytes):
 
         return cls._from_raw(raw_pubkey, compressed=compressed)
 
-    # NOTE: other classes have is_valid() as method, but here it
-    # (and other is_ attributes) is a @property. This is inconsistent,
-    # but fixing this is dangerous: If we make is_valid here a method,
-    # and some old code that expects is_valid to be a property,
-    # will do 'if pub.is_valid:' -- this condition will always be true.
-    # This will lead to bugs.
-    # Changing is_* methods in other classes to @property is also bad option:
-    # it will probably break a lot of code unnecessary, and may introduce
-    # same subtle bugs: if the code that is adapted for the case where
-    # all is_* is a @property, is then used with other libraries derived
-    # from python-bitcoinlib, where were no such changes.
-    #
-    # Status quo is less dangerous: pub.is_valid() will just throw TypeError.
-    #
-    # One option may be to return a wrapped bool object that will also act
-    # as callable, but the scale of this problem with inconsistent interface
-    # for CPubKey seems to be not that huge to require such hacky fix.
-    @property
+    @_disable_boolean_use
     def is_valid(self):
         return len(self) > 0
 
-    @property
+    @_disable_boolean_use
+    def is_fullyvalid(self):
+        return self._fullyvalid
+
+    @_disable_boolean_use
     def is_compressed(self):
         return len(self) == COMPRESSED_PUBLIC_KEY_SIZE
 
@@ -370,7 +358,7 @@ class CPubKey(bytes):
         if not sig:
             return False
 
-        if not self.is_fullyvalid:
+        if not self.is_fullyvalid():
             return False
 
         raw_sig = ctypes.create_string_buffer(64)
@@ -462,13 +450,13 @@ class CPubKey(bytes):
         pubkey_buf = self._to_raw()
         ret = secp256k1.secp256k1_ec_pubkey_negate(secp256k1_context_verify, pubkey_buf)
         assert ret == 1
-        return self.__class__._from_raw(pubkey_buf, compressed=self.is_compressed)
+        return self.__class__._from_raw(pubkey_buf, compressed=self.is_compressed())
 
     @classmethod
     def add(cls, a, b):
-        assert a.is_compressed == b.is_compressed,\
+        assert a.is_compressed() == b.is_compressed(),\
             "compressed attributes must match on pubkey addition/substraction"
-        return cls.combine(a, b, compressed=a.is_compressed)
+        return cls.combine(a, b, compressed=a.is_compressed())
 
     @classmethod
     def sub(cls, a, b):
@@ -600,7 +588,7 @@ class CExtPubKeyMixin(CExtKeyBase):
         self._check_length()
 
         self.pub = CPubKey(self.key_bytes)
-        if not self.pub.is_fullyvalid:
+        if not self.pub.is_fullyvalid():
             raise ValueError('pubkey part of xpubkey is not valid')
 
     @classmethod
@@ -615,8 +603,8 @@ class CExtPubKeyMixin(CExtKeyBase):
                 raise ValueError('Hardened derivation not possible')
         if self.depth >= 255:
             raise ValueError('Maximum derivation path length is reached')
-        assert self.pub.is_fullyvalid
-        assert self.pub.is_compressed
+        assert self.pub.is_fullyvalid()
+        assert self.pub.is_compressed()
 
         child_number_packed = struct.pack(">L", child_number)
 

@@ -38,8 +38,9 @@ from bitcointx.core import (
     bytes_for_repr, ReprOrStrMixin, b2x,
     CTxWitnessBase, CTxInWitnessBase, CTxOutWitnessBase,
     CTxInBase, CTxOutBase, COutPoint, CMutableOutPoint,
-    CImmutableTransactionBase, CMutableTransactionBase
+    CImmutableTransactionBase, CMutableTransactionBase,
 )
+from bitcointx.core.util import _disable_boolean_use
 from bitcointx.core.key import CKey, CKeyMixin, CPubKey
 from bitcointx.core.script import (
     CScript, CScriptBase, CScriptWitness,
@@ -108,7 +109,7 @@ class CConfidentialAddress(CBase58BitcoinAddress):
             raise TypeError('blinding_pubkey must be bytes instance; got %r' % blinding_pubkey.__class__)
         if not isinstance(blinding_pubkey, CPubKey):
             blinding_pubkey = CPubKey(blinding_pubkey)
-        if not blinding_pubkey.is_fullyvalid:
+        if not blinding_pubkey.is_fullyvalid():
             raise CBitcoinAddressError('invalid blinding pubkey')
 
         if not isinstance(unconfidential_adr, CBase58BitcoinAddress):
@@ -183,17 +184,21 @@ class CConfidentialCommitmentBase(ImmutableSerializable):
         else:
             f.write(bytes([0]))
 
+    @_disable_boolean_use
     def is_null(self):
         return not len(self.commitment)
 
+    @_disable_boolean_use
     def is_explicit(self):
         return (len(self.commitment) == self._explicitSize
                 and self.commitment[0] == 1)
 
+    @_disable_boolean_use
     def is_commitment(self):
         return (len(self.commitment) == self._committedSize
                 and self.commitment[0] in (self._prefixA, self._prefixB))
 
+    @_disable_boolean_use
     def is_valid(self):
         return self.is_null() or self.is_explicit() or self.is_commitment()
 
@@ -316,6 +321,7 @@ class CElementsSidechainTxInWitness(CTxInWitnessBase, ReprOrStrMixin):
         # exists in reference client code, and is retained here.
         object.__setattr__(self, 'pegin_witness', pegin_witness)
 
+    @_disable_boolean_use
     def is_null(self):
         return (not len(self.issuanceAmountRangeproof)
                 and not len(self.inflationKeysRangeproof)
@@ -378,6 +384,7 @@ class CElementsSidechainTxOutWitness(CTxOutWitnessBase):
         object.__setattr__(self, 'surjectionproof', CScript(surjectionproof))
         object.__setattr__(self, 'rangeproof', CScript(rangeproof))
 
+    @_disable_boolean_use
     def is_null(self):
         return not len(self.surjectionproof) and not len(self.rangeproof)
 
@@ -456,6 +463,7 @@ class CElementsSidechainTxWitness(CTxWitnessBase, ReprOrStrMixin):
                                  else self._txout_witness_class.from_txout_witness(w)
                                  for w in vtxoutwit))
 
+    @_disable_boolean_use
     def is_null(self):
         for n in range(len(self.vtxinwit)):
             if not self.vtxinwit[n].is_null():
@@ -531,6 +539,7 @@ class CAssetIssuance(ImmutableSerializable, ReprOrStrMixin):
         object.__setattr__(self, 'nAmount', nAmount)
         object.__setattr__(self, 'nInflationKeys', nInflationKeys)
 
+    @_disable_boolean_use
     def is_null(self):
         return self.nAmount.is_null() and self.nInflationKeys.is_null()
 
@@ -693,10 +702,12 @@ class CElementsSidechainTxOut(CTxOutBase, ReprOrStrMixin):
         self.nNonce.stream_serialize(f)
         BytesSerializer.stream_serialize(self.scriptPubKey, f)
 
+    @_disable_boolean_use
     def is_null(self):
         return (self.nAsset.is_null() and self.nValue.is_null()
                 and self.nNonce.is_null() and not len(self.scriptPubKey))
 
+    @_disable_boolean_use
     def is_fee(self):
         return (not len(self.scriptPubKey)
                 and self.nValue.is_explicit()
@@ -1042,9 +1053,9 @@ class CElementsSidechainMutableTransaction(CElementsSidechainTransactionCommon, 
                                        'but inflationKeysRangeproof is already in place')
 
         for nOut, out_pub in enumerate(output_pubkeys):
-            if out_pub.is_valid:
+            if out_pub.is_valid():
                 # Keys must be valid and outputs completely unblinded or else call fails
-                if not out_pub.is_fullyvalid:
+                if not out_pub.is_fullyvalid():
                     return False, 'blinding pubkey for output %d is not valid' % nOut
                 if not self.vout[nOut].nValue.is_explicit():
                     return False, ('valid blinding pubkey specified for output %d, '
@@ -1163,7 +1174,7 @@ class CElementsSidechainMutableTransaction(CElementsSidechainTransactionCommon, 
         # This section of code *only* deals with unblinded outputs
         # that we want to blind
         for nOut, out_pub in enumerate(output_pubkeys):
-            if out_pub.is_fullyvalid:
+            if out_pub.is_fullyvalid():
                 out = self.vout[nOut]
                 nBlindAttempts += 1
                 explicitValue = out.nValue
@@ -1291,6 +1302,7 @@ class CElementsSidechainScript(CScriptBase):
     def derive_blinding_key(self, blinding_derivation_key):
         return derive_blinding_key(blinding_derivation_key, self)
 
+    @_disable_boolean_use
     def is_unspendable(self):
         if len(self) == 0:
             return True
@@ -1599,7 +1611,7 @@ def unblind_confidential_pair(key, confValue, confAsset, nNonce, committedScript
     assert isinstance(rangeproof, bytes)
 
     # NOTE: we do not allow creation of invalid CKey instances,
-    # so no key.is_valid check needed
+    # so no key.is_valid() check needed
 
     if len(rangeproof) == 0:
         return False, 'rangeproof is empty'
@@ -1608,7 +1620,7 @@ def unblind_confidential_pair(key, confValue, confAsset, nNonce, committedScript
 
     # ECDH or not depending on if nonce commitment is non-empty
     if len(nNonce.commitment) > 0:
-        if not ephemeral_key.is_fullyvalid:
+        if not ephemeral_key.is_fullyvalid():
             return False, 'nNonce.commitment is not a valid pubkey'
         nonce = hashlib.sha256(key.ECDH(ephemeral_key)).digest()
     else:

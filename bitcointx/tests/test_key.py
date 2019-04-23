@@ -21,9 +21,9 @@ class Test_CPubKey(unittest.TestCase):
     def test(self):
         def T(hex_pubkey, is_valid, is_fullyvalid, is_compressed):
             key = CPubKey(x(hex_pubkey))
-            self.assertEqual(key.is_valid, is_valid)
-            self.assertEqual(key.is_fullyvalid, is_fullyvalid)
-            self.assertEqual(key.is_compressed, is_compressed)
+            self.assertEqual(key.is_valid(), is_valid)
+            self.assertEqual(key.is_fullyvalid(), is_fullyvalid)
+            self.assertEqual(key.is_compressed(), is_compressed)
 
         T('', False, False, False)
         T('00', True, False, False)  # Note: deemed valid by OpenSSL for some reason
