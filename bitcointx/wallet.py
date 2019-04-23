@@ -54,6 +54,7 @@ class CCoinAddress(metaclass=_WalletClassParamsMeta):
 class CCoinAddressBase():
 
     _address_encoding_classes = None
+    _script_class = None
 
     def __new__(cls, s):
         for enc_class in cls._address_encoding_classes:
@@ -206,7 +207,8 @@ class P2SHCoinAddressCommon():
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        return script.CScript([script.OP_HASH160, self, script.OP_EQUAL])
+        return self.__class__._script_class(
+            [script.OP_HASH160, self, script.OP_EQUAL])
 
     def to_redeemScript(self):
         raise NotImplementedError("not enough data in p2sh address to reconstruct redeem script")
@@ -252,11 +254,11 @@ class P2PKHCoinAddressCommon():
             # Canonicalize script pushes
 
             # in case it's not a CScript instance yet
-            scriptPubKey = script.CScript(scriptPubKey)
+            scriptPubKey = cls._script_class(scriptPubKey)
 
             try:
                 # canonicalize
-                scriptPubKey = script.CScript(tuple(scriptPubKey))
+                scriptPubKey = cls._script_class(tuple(scriptPubKey))
             except bitcointx.core.script.CScriptInvalidError:
                 raise P2PKHCoinAddressError(
                     'not a P2PKH scriptPubKey: script is invalid')
@@ -297,8 +299,9 @@ class P2PKHCoinAddressCommon():
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        return script.CScript([script.OP_DUP, script.OP_HASH160, self,
-                               script.OP_EQUALVERIFY, script.OP_CHECKSIG])
+        return self.__class__._script_class(
+            [script.OP_DUP, script.OP_HASH160, self,
+             script.OP_EQUALVERIFY, script.OP_CHECKSIG])
 
     def to_redeemScript(self):
         return self.to_scriptPubKey()
@@ -430,6 +433,7 @@ class P2WPKHBitcoinTestnetAddress(P2WPKHCoinAddressCommon,
     ...
 
 
+CBitcoinAddress._script_class = script.CBitcoinScript
 CBitcoinAddress._address_encoding_classes = (
     CBech32BitcoinAddress, CBase58BitcoinAddress
 )

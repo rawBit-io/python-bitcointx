@@ -89,6 +89,62 @@ OP_CHECKSIGFROMSTACK = CScriptOp(0xc1)
 OP_CHECKSIGFROMSTACKVERIFY = CScriptOp(0xc2)
 
 
+class CElementsSidechainScript(CScriptBase):
+
+    def derive_blinding_key(self, blinding_derivation_key):
+        return derive_blinding_key(blinding_derivation_key, self)
+
+    @_disable_boolean_use
+    def is_unspendable(self):
+        if len(self) == 0:
+            return True
+        return super(CElementsSidechainScript, self).is_unspendable()
+
+    def raw_sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+        """Consensus-correct SignatureHash
+
+        Returns (hash, err) to precisely match the consensus-critical behavior of
+        the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
+
+        If you're just writing wallet software you probably want sighash() method instead."""
+        return RawElementsSidechainSignatureHash(self, txTo, inIdx, hashtype,
+                                                 amount=amount, sigversion=sigversion)
+
+    def get_pegout_data(self):
+        try:
+            op_iter = self.raw_iter()
+            op, _, _ = next(op_iter)
+            if op != OP_RETURN:
+                return None
+
+            op, op_data, _ = next(op_iter)
+            if len(op_data) != 32:
+                return None
+
+            genesis_hash = op_data
+
+            op, op_data, _ = next(op_iter)
+
+            if len(op_data) == 0:
+                return False
+
+            pegout_scriptpubkey = self.__class__(op_data)
+
+            # The code in reference client does not check if there
+            # is more data after pegout_scriptpubkey.
+
+        except CScriptInvalidError:
+            return None
+        except StopIteration:
+            return None
+
+        return (genesis_hash, pegout_scriptpubkey)
+
+    @_disable_boolean_use
+    def is_pegout(self):
+        return self.get_pegout_data() is not None
+
+
 class WitnessSerializationError(SerializationError):
     pass
 
@@ -193,6 +249,7 @@ class P2SHElementsSidechainConfidentialAddress(CConfidentialAddressCommon,
     _unconfidential_address_class = P2SHElementsSidechainAddress
 
 
+CElementsSidechainAddress._script_class = CElementsSidechainScript
 CElementsSidechainAddress._address_encoding_classes = (
     CBech32ElementsSidechainConfidentialAddress,
     CBech32ElementsSidechainAddress,
@@ -229,62 +286,6 @@ class CElementsSidechainExtKey(CElementsSidechainExtSecret):
     _key_mixin_class = CExtKeyMixin
     _xpub_class = CElementsSidechainExtPubKey
     _key_class = CElementsSidechainSecret
-
-
-class CElementsSidechainScript(CScriptBase):
-
-    def derive_blinding_key(self, blinding_derivation_key):
-        return derive_blinding_key(blinding_derivation_key, self)
-
-    @_disable_boolean_use
-    def is_unspendable(self):
-        if len(self) == 0:
-            return True
-        return super(CElementsSidechainScript, self).is_unspendable()
-
-    def raw_sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
-        """Consensus-correct SignatureHash
-
-        Returns (hash, err) to precisely match the consensus-critical behavior of
-        the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
-
-        If you're just writing wallet software you probably want sighash() method instead."""
-        return RawElementsSidechainSignatureHash(self, txTo, inIdx, hashtype,
-                                                 amount=amount, sigversion=sigversion)
-
-    def get_pegout_data(self):
-        try:
-            op_iter = self.raw_iter()
-            op, _, _ = next(op_iter)
-            if op != OP_RETURN:
-                return None
-
-            op, op_data, _ = next(op_iter)
-            if len(op_data) != 32:
-                return None
-
-            genesis_hash = op_data
-
-            op, op_data, _ = next(op_iter)
-
-            if len(op_data) == 0:
-                return False
-
-            pegout_scriptpubkey = self.__class__(op_data)
-
-            # The code in reference client does not check if there
-            # is more data after pegout_scriptpubkey.
-
-        except CScriptInvalidError:
-            return None
-        except StopIteration:
-            return None
-
-        return (genesis_hash, pegout_scriptpubkey)
-
-    @_disable_boolean_use
-    def is_pegout(self):
-        return self.get_pegout_data() is not None
 
 
 class CConfidentialCommitmentBase(ImmutableSerializable):
@@ -1520,7 +1521,6 @@ def RawElementsSidechainSignatureHash(script, txTo, inIdx, hashtype, amount=0,
 class CoreElementsSidechainParams(CoreMainParams):
     NAME = 'sidechain/elements'
     TRANSACTION_CLASS = CElementsSidechainTransaction
-    SCRIPT_CLASS = CElementsSidechainScript
 
     ct_exponent = 0
     ct_bits = 32

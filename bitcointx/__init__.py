@@ -13,6 +13,7 @@
 from contextlib import contextmanager
 
 import bitcointx.core
+import bitcointx.core.script
 import bitcointx.sidechain
 import bitcointx.wallet
 
@@ -85,6 +86,8 @@ def SelectAlternativeParams(alt_core_params, alt_main_params):
     global params
 
     bitcointx.core._SelectAlternativeCoreParams(alt_core_params)
+    bitcointx.core.script._SetScriptClassParams(
+        alt_main_params.ADDRESS_CLASS._script_class)
     bitcointx.wallet._SetAddressClassParams(alt_main_params.ADDRESS_CLASS,
                                             alt_main_params.SECRET_CLASS,
                                             alt_main_params.EXT_SECRET_CLASS)

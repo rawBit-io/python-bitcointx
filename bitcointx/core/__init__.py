@@ -724,7 +724,6 @@ class CoreChainParamsBase(object):
     MAX_MONEY = None
     NAME = None
     TRANSACTION_CLASS = None
-    SCRIPT_CLASS = None
 
 
 class CoreMainParams(CoreChainParamsBase, _ParamsTag):
@@ -732,7 +731,6 @@ class CoreMainParams(CoreChainParamsBase, _ParamsTag):
     NAME = 'bitcoin'
     READABLE_NAME = 'Bitcoin'
     TRANSACTION_CLASS = CBitcoinTransaction
-    SCRIPT_CLASS = script.CBitcoinScript
 
 
 class CoreTestNetParams(CoreMainParams, _ParamsTag):
@@ -761,7 +759,6 @@ def _SelectAlternativeCoreParams(alt_core_params):
     coreparams = alt_core_params()
 
     _SetTransactionClassParams(coreparams.TRANSACTION_CLASS)
-    script._SetScriptClassParams(coreparams.SCRIPT_CLASS)
 
 
 def _CoreParamsByName(name):
