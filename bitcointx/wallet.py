@@ -319,6 +319,15 @@ class P2WSHCoinAddressCommon():
         else:
             raise P2WSHCoinAddressError('not a P2WSH scriptPubKey')
 
+    @classmethod
+    def from_redeemScript(cls, redeemScript):
+        """Convert a redeemScript to a P2WSH address
+
+        Convenience function: equivalent to
+        P2WSHBitcoinAddress.from_scriptPubKey(redeemScript.to_p2wsh_scriptPubKey())
+        """
+        return cls.from_scriptPubKey(redeemScript.to_p2wsh_scriptPubKey())
+
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
         assert self.witver == 0

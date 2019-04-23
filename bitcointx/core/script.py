@@ -18,9 +18,8 @@ Functionality to build scripts, as well as SignatureHash(). Script evaluation
 is in bitcointx.core.scripteval
 """
 
-from __future__ import absolute_import, division, print_function
-
 import struct
+import hashlib
 from io import BytesIO
 
 import bitcointx.core
@@ -851,6 +850,22 @@ class CScriptBase(bytes):
         if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
         return CScript([OP_HASH160, bitcointx.core.Hash160(self), OP_EQUAL])
+
+    def to_p2wsh_scriptPubKey(self, checksize=True):
+        """Create P2WSH scriptPubKey from this redeemScript
+
+        That is, create the P2WSH scriptPubKey that requires this script as a
+        redeemScript to spend.
+
+        checksize - Check if the redeemScript is larger than the 520-byte max
+        pushdata limit; raise ValueError if limit exceeded.
+
+        Since a >520-byte PUSHDATA makes EvalScript() fail, it's not actually
+        possible to redeem P2WSH outputs with redeem scripts >520 bytes.
+        """
+        if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
+            raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
+        return CScript([0, hashlib.sha256(self).digest()])
 
     def GetSigOpCount(self, fAccurate):
         """Get the SigOp count.
