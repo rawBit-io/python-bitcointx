@@ -258,7 +258,7 @@ class CTxInBase(ImmutableSerializable):
     """
     __slots__ = ['prevout', 'scriptSig', 'nSequence']
 
-    def __init__(self, prevout=None, scriptSig=script.CScript(), nSequence=0xffffffff):
+    def __init__(self, prevout=None, scriptSig=None, nSequence=0xffffffff):
         if not (0 <= nSequence <= 0xffffffff):
             raise ValueError('CTxIn: nSequence must be an integer between 0x0 and 0xffffffff; got %x' % nSequence)
         if prevout is None:
@@ -272,7 +272,7 @@ class CTxInBase(ImmutableSerializable):
     @classmethod
     def stream_deserialize(cls, f):
         prevout = cls._outpoint_class.stream_deserialize(f)
-        scriptSig = script.CScript(BytesSerializer.stream_deserialize(f))
+        scriptSig = BytesSerializer.stream_deserialize(f)
         nSequence = struct.unpack(b"<I", ser_read(f, 4))[0]
         return cls(prevout, scriptSig, nSequence)
 
@@ -288,6 +288,13 @@ class CTxInBase(ImmutableSerializable):
 
 class CBitcoinTxIn(CTxInBase):
     _outpoint_class = COutPoint
+
+    def __init__(self, prevout=None, scriptSig=script.CBitcoinScript(),
+                 nSequence=0xffffffff):
+        if not isinstance(scriptSig, script.CBitcoinScript):
+            assert isinstance(scriptSig, (bytes, bytearray))
+            scriptSig = script.CBitcoinScript(scriptSig)
+        super(CBitcoinTxIn, self).__init__(prevout, scriptSig, nSequence)
 
     @classmethod
     def from_txin(cls, txin):
@@ -333,14 +340,17 @@ class CBitcoinTxOut(CTxOutBase):
     """
     __slots__ = ['nValue', 'scriptPubKey']
 
-    def __init__(self, nValue=-1, scriptPubKey=script.CScript()):
+    def __init__(self, nValue=-1, scriptPubKey=script.CBitcoinScript()):
+        if not isinstance(scriptPubKey, script.CBitcoinScript):
+            assert isinstance(scriptPubKey, (bytes, bytearray))
+            scriptPubKey = script.CBitcoinScript(scriptPubKey)
         object.__setattr__(self, 'nValue', int(nValue))
         object.__setattr__(self, 'scriptPubKey', scriptPubKey)
 
     @classmethod
     def stream_deserialize(cls, f):
         nValue = struct.unpack(b"<q", ser_read(f, 8))[0]
-        scriptPubKey = script.CScript(BytesSerializer.stream_deserialize(f))
+        scriptPubKey = BytesSerializer.stream_deserialize(f)
         return cls(nValue, scriptPubKey)
 
     def stream_serialize(self, f):
@@ -766,7 +776,7 @@ class CheckTransactionError(ValidationError):
     pass
 
 
-def CheckTransaction(tx):
+def CheckTransaction(tx):  # noqa
     """Basic transaction checks that don't depend on any context.
 
     Raises CheckTransactionError

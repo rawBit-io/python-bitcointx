@@ -720,6 +720,9 @@ class CElementsSidechainTxInBase(CTxInBase, ReprOrStrMixin):
 
     def __init__(self, prevout=None, scriptSig=CElementsSidechainScript(), nSequence=0xffffffff,
                  assetIssuance=CAssetIssuance(), is_pegin=False):
+        if not isinstance(scriptSig, CElementsSidechainScript):
+            assert isinstance(scriptSig, (bytes, bytearray))
+            scriptSig = CElementsSidechainScript(scriptSig)
         super(CElementsSidechainTxInBase, self).__init__(prevout, scriptSig, nSequence)
         object.__setattr__(self, 'assetIssuance', assetIssuance)
         object.__setattr__(self, 'is_pegin', is_pegin)
@@ -826,6 +829,9 @@ class CElementsSidechainTxOut(CTxOutBase, ReprOrStrMixin):
         assert isinstance(nValue, CConfidentialValue)
         assert isinstance(nAsset, CConfidentialAsset)
         assert isinstance(nNonce, CConfidentialNonce)
+        if not isinstance(scriptPubKey, CElementsSidechainScript):
+            assert isinstance(scriptPubKey, (bytes, bytearray))
+            scriptPubKey = CElementsSidechainScript(scriptPubKey)
         object.__setattr__(self, 'nAsset', nAsset)
         object.__setattr__(self, 'nValue', nValue)
         object.__setattr__(self, 'nNonce', nNonce)
