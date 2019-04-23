@@ -11,18 +11,21 @@
 
 
 class _NoBoolCallable():
-    def __init__(self, value):
+    __slots__ = ['method_name', 'value']
+
+    def __init__(self, name, value):
+        self.method_name = name
         self.value = value
 
     def __int__(self):
         raise TypeError(
             'Using this attribute as integer property is disabled. '
-            'please use <obj>.{}()')
+            'please use {}()'.format(self.method_name))
 
     def __bool__(self):
         raise TypeError(
             'Using this attribute as boolean property is disabled. '
-            'please use <obj>.{}()')
+            'please use {}()'.format(self.method_name))
 
     def __call__(self):
         return self.value
@@ -34,5 +37,6 @@ def _disable_boolean_use(f):
     @property
     def wrapper(self, *args, **kwargs):
         value = f(self, *args, **kwargs)
-        return _NoBoolCallable(value)
+        name = '{}().{}'.format(self.__class__.__name__, f.__name__)
+        return _NoBoolCallable(name, value)
     return wrapper
