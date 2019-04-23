@@ -19,8 +19,6 @@ unlikely to match Satoshi Bitcoin exactly. Think carefully before using this
 module.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import hashlib
 
 import bitcointx.core
@@ -28,9 +26,28 @@ import bitcointx.core._bignum
 import bitcointx.core.key
 import bitcointx.core.serialize
 
-# Importing everything for simplicity; note that we use __all__ at the end so
-# we're not exporting the whole contents of the script module.
-from bitcointx.core.script import *
+from bitcointx.core.script import (
+    CScriptBase, OPCODE_NAMES,
+    SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
+    SIGHASH_ALL, SIGHASH_SINGLE, SIGHASH_ANYONECANPAY,
+    MAX_SCRIPT_ELEMENT_SIZE, MAX_SCRIPT_OPCODES, MAX_SCRIPT_SIZE,
+    IsLowDERSignature, FindAndDelete, DISABLED_OPCODES,
+    CScriptInvalidError, CScriptWitness,
+
+    OP_CHECKMULTISIGVERIFY, OP_CHECKMULTISIG, OP_CHECKSIG, OP_CHECKSIGVERIFY,
+    OP_1ADD, OP_1SUB, OP_1NEGATE, OP_NEGATE, OP_ABS, OP_ADD, OP_SUB,
+    OP_BOOLAND, OP_BOOLOR, OP_NOT, OP_0NOTEQUAL, OP_EQUAL, OP_EQUALVERIFY,
+    OP_NUMEQUAL, OP_NUMEQUALVERIFY, OP_LESSTHAN, OP_LESSTHANOREQUAL,
+    OP_NUMNOTEQUAL, OP_GREATERTHAN, OP_GREATERTHANOREQUAL,
+    OP_MIN, OP_MAX, OP_PUSHDATA4,
+    OP_1, OP_16,
+    OP_IF, OP_ENDIF, OP_ELSE, OP_DROP, OP_DUP, OP_2DROP, OP_2DUP, OP_2OVER,
+    OP_2ROT, OP_2SWAP, OP_3DUP, OP_CODESEPARATOR, OP_DEPTH,
+    OP_FROMALTSTACK, OP_HASH160, OP_HASH256, OP_NOTIF, OP_IFDUP, OP_NIP,
+    OP_NOP, OP_NOP1, OP_NOP10, OP_OVER, OP_PICK, OP_ROLL, OP_RETURN,
+    OP_RIPEMD160, OP_ROT, OP_SIZE, OP_SHA1, OP_SHA256, OP_SWAP, OP_TOALTSTACK,
+    OP_TUCK, OP_VERIFY, OP_WITHIN,
+)
 
 MAX_NUM_SIZE = 4
 MAX_STACK_ITEMS = 1000
@@ -177,7 +194,7 @@ class VerifyOpFailedError(EvalScriptError):
 #
 # ported from bitcoind's src/script/interpreter.cpp
 #
-def _IsValidSignatureEncoding(sig):
+def _IsValidSignatureEncoding(sig):  # noqa
     # Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S] [sighash]
     # * total-length: 1-byte length descriptor of everything that follows,
     #   excluding the sighash byte.
@@ -289,7 +306,11 @@ def _IsCompressedPubKey(pubkey):
     return True
 
 
-def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(), amount=0):
+def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(),
+                         amount=0, script_class=None):
+
+    assert script_class is not None, "script class must be specified"
+
     sigversion = None
 
     if witversion == 0:
@@ -310,7 +331,8 @@ def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(), am
             if len(stack) != 2:
                 raise VerifyScriptError("witness program mismatch")  # 2 items in witness
 
-            scriptPubKey = CScript([OP_DUP, OP_HASH160, program, OP_EQUALVERIFY, OP_CHECKSIG])
+            scriptPubKey = script_class([OP_DUP, OP_HASH160, program,
+                                         OP_EQUALVERIFY, OP_CHECKSIG])
         else:
             raise VerifyScriptError("wrong length for witness program")
     elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
@@ -397,13 +419,13 @@ def _CheckSig(sig, pubkey, script, txTo, inIdx, flags, err_raiser,
     # imply the scriptSig being checked doesn't correspond to a valid txout -
     # that should cause other validation machinery to fail long before we ever
     # got here.
-    (h, err) = RawSignatureHash(script, txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
+    (h, err) = script.raw_sighash(txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
 
     return verify_fn(h, sig[:-1])
 
 
-def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCount,
-                   amount=0, sigversion=SIGVERSION_BASE):
+def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags,  # noqa
+                   err_raiser, nOpCount, amount=0, sigversion=SIGVERSION_BASE):
     i = 1
     if len(stack) < i:
         err_raiser(MissingOpArgumentsError, opcode, stack, i)
@@ -439,7 +461,7 @@ def _CheckMultiSig(opcode, script, stack, txTo, inIdx, flags, err_raiser, nOpCou
         # Drop the signature in pre-segwit scripts but not segwit scripts
         for k in range(sigs_count):
             sig = stack[-isig - k]
-            script = FindAndDelete(script, CScript([sig]))
+            script = FindAndDelete(script, script.__class__([sig]))
 
     success = True
 
@@ -551,7 +573,7 @@ _ISA_BINOP = {
 }
 
 
-def _BinOp(opcode, stack, err_raiser):
+def _BinOp(opcode, stack, err_raiser):  # noqa
     if len(stack) < 2:
         err_raiser(MissingOpArgumentsError, opcode, stack, 2)
 
@@ -628,7 +650,8 @@ def _CheckExec(vfExec):
     return True
 
 
-def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(), amount=0, sigversion=SIGVERSION_BASE):
+def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(),  # noqa
+                amount=0, sigversion=SIGVERSION_BASE):
     """Evaluate a script
 
     """
@@ -746,7 +769,7 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(), amount=0, sigversion=SIG
                 stack.append(v3)
 
             elif sop == OP_CHECKMULTISIG or sop == OP_CHECKMULTISIGVERIFY:
-                tmpScript = CScript(scriptIn[pbegincodehash:])
+                tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
                 _CheckMultiSig(sop, tmpScript, stack, txTo, inIdx, flags, err_raiser, nOpCount,
                                amount=amount, sigversion=sigversion)
 
@@ -756,11 +779,12 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(), amount=0, sigversion=SIG
                 vchSig = stack[-2]
 
                 # Subset of script starting at the most recent codeseparator
-                tmpScript = CScript(scriptIn[pbegincodehash:])
+                tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
 
                 if sigversion == SIGVERSION_BASE:
                     # Drop the signature in pre-segwit scripts but not segwit scripts
-                    tmpScript = FindAndDelete(tmpScript, CScript([vchSig]))
+                    tmpScript = FindAndDelete(tmpScript,
+                                              scriptIn.__class__([vchSig]))
 
                 ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
                                err_raiser, amount=amount, sigversion=sigversion)
@@ -1016,7 +1040,8 @@ class VerifyScriptError(bitcointx.core.ValidationError):
     pass
 
 
-def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=None, amount=0, witness=None):
+def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
+                 flags=None, amount=0, witness=None):
     """Verify a scriptSig satisfies a scriptPubKey
 
     scriptSig    - Signature
@@ -1029,6 +1054,12 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=None, amount=0, wit
 
     Raises a ValidationError subclass if the validation fails.
     """
+
+    assert isinstance(scriptSig, CScriptBase)
+    assert type(scriptSig) == type(scriptPubKey),\
+        "scriptSig and scriptPubKey must be of the same script class"
+
+    script_class = scriptSig.__class__
 
     if flags is None:
         flags = STANDARD_SCRIPT_VERIFY_FLAGS - UNHANDLED_SCRIPT_VERIFY_FLAGS
@@ -1062,7 +1093,8 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=None, amount=0, wit
         VerifyWitnessProgram(witness,
                              scriptPubKey.witness_version(),
                              scriptPubKey.witness_program(),
-                             txTo, inIdx, flags=flags, amount=amount)
+                             txTo, inIdx, flags=flags, amount=amount,
+                             script_class=script_class)
 
         # Bypass the cleanstack check at the end. The actual stack is obviously not clean
         # for witness programs.
@@ -1081,7 +1113,7 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=None, amount=0, wit
         # an empty stack and the EvalScript above would return false.
         assert len(stack)
 
-        pubKey2 = CScript(stack.pop())
+        pubKey2 = script_class(stack.pop())
 
         EvalScript(stack, pubKey2, txTo, inIdx, flags=flags)
 
@@ -1095,13 +1127,14 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx, flags=None, amount=0, wit
         if SCRIPT_VERIFY_WITNESS in flags and pubKey2.is_witness_scriptpubkey():
             hadWitness = True
 
-            if scriptSig != CScript([pubKey2]):
+            if scriptSig != script_class([pubKey2]):
                 raise VerifyScriptError("scriptSig is not exactly a single push of the redeemScript")
 
             VerifyWitnessProgram(witness,
                                  pubKey2.witness_version(),
                                  pubKey2.witness_program(),
-                                 txTo, inIdx, flags=flags, amount=amount)
+                                 txTo, inIdx, flags=flags, amount=amount,
+                                 script_class=script_class)
 
             # Bypass the cleanstack check at the end. The actual stack is obviously not clean
             # for witness programs.
@@ -1152,8 +1185,8 @@ def VerifySignature(txFrom, txTo, inIdx):
         raise VerifySignatureError("prevout hash does not match txFrom")
 
     witness = None
-    if txFrom.wit:
-        witness = ctx.wit.vtxinwit[vin_index].scriptWitness
+    if txTo.wit:
+        witness = txTo.wit.vtxinwit[inIdx].scriptWitness
 
     VerifyScript(txin.scriptSig, txout.scriptPubKey, txTo, inIdx,
                  amount=txout.nValue, witness=witness or CScriptWitness([]))
