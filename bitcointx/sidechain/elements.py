@@ -77,6 +77,12 @@ OUTPOINT_PEGIN_FLAG = (1 << 30)
 OUTPOINT_INDEX_MASK = 0x3fffffff
 
 
+# We do not register these extra opcodes in script.OPCODE_NAMES
+# and script.OPCODE_BY_NAME. If we do so, we will pollute these
+# bitcoin-specific tables with Elements opcodes. Proper way would be
+# to have CBitcoinScriptOp and CElementsSidechainScriptOp, but
+# this is too heavy for this small issue. These opcodes are useable as-is,
+# the only proble is that they will be shown as UNKNOWN for repr(script).
 OP_DETERMINISTICRANDOM = CScriptOp(0xc1)
 OP_CHECKSIGFROMSTACK = CScriptOp(0xc1)
 OP_CHECKSIGFROMSTACKVERIFY = CScriptOp(0xc2)
