@@ -334,7 +334,7 @@ class P2WSHCoinAddressCommon():
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
         assert self.witver == 0
-        return script.CScript([0, self])
+        return self.__class__._script_class([0, self])
 
     def to_redeemScript(self):
         raise NotImplementedError(
@@ -359,11 +359,12 @@ class P2WPKHCoinAddressCommon():
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
         assert self.witver == 0
-        return script.CScript([0, self])
+        return self.__class__._script_class([0, self])
 
     def to_redeemScript(self):
-        return script.CScript([script.OP_DUP, script.OP_HASH160, self,
-                               script.OP_EQUALVERIFY, script.OP_CHECKSIG])
+        return self.__class__._script_class(
+            [script.OP_DUP, script.OP_HASH160, self,
+             script.OP_EQUALVERIFY, script.OP_CHECKSIG])
 
 
 class CBitcoinAddress(CCoinAddressBase):
