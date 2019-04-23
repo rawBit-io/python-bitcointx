@@ -233,8 +233,8 @@ class P2PKHCoinAddressCommon():
 
         The pubkey must be a bytes instance;
         """
-        if not isinstance(pubkey, bytes):
-            raise TypeError('pubkey must be bytes instance; got %r'
+        if not isinstance(pubkey, (bytes, bytearray)):
+            raise TypeError('pubkey must be bytes or bytearray instance; got %r'
                             % pubkey.__class__)
 
         if not accept_invalid:
@@ -361,8 +361,8 @@ class P2WPKHCoinAddressCommon():
 
         The pubkey must be a bytes instance;
         """
-        if not isinstance(pubkey, bytes):
-            raise TypeError('pubkey must be bytes instance; got %r'
+        if not isinstance(pubkey, (bytes, bytearray)):
+            raise TypeError('pubkey must be bytes or bytearray instance; got %r'
                             % pubkey.__class__)
 
         if not accept_invalid:

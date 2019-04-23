@@ -182,7 +182,7 @@ class Serializer(object):
 
     @classmethod
     def deserialize(cls, buf):
-        if isinstance(buf, str) or isinstance(buf, bytes):
+        if isinstance(buf, str) or isinstance(buf, (bytes, bytearray)):
             buf = BytesIO(buf)
         return cls.stream_deserialize(buf)
 

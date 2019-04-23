@@ -143,12 +143,12 @@ class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
     def __init__(self, data=None):
         if data is None:
             data = b'\x00'*self._UINT_WIDTH_BYTES
-        if not isinstance(data, bytes):
+        if not isinstance(data, (bytes, bytearray)):
             raise TypeError('invalid data type, should be bytes')
         if len(data) != self._UINT_WIDTH_BYTES:
             raise ValueError('invalid data length, should be {}'
                              .format(self._UINT_WIDTH_BYTES))
-        object.__setattr__(self, 'data', data)
+        object.__setattr__(self, 'data', bytes(data))
 
     @_disable_boolean_use
     def is_null(self):

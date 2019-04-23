@@ -203,9 +203,10 @@ class CConfidentialAddressCommon():
         unconfidential_adr can be string or CBase58CoinAddressCommon
         instance. blinding_pubkey must be a bytes instance
         """
-        if not isinstance(blinding_pubkey, bytes):
-            raise TypeError('blinding_pubkey must be bytes instance; got %r'
-                            % blinding_pubkey.__class__)
+        if not isinstance(blinding_pubkey, (bytes, bytearray)):
+            raise TypeError(
+                'blinding_pubkey must be bytes or bytearray instance; got %r'
+                % blinding_pubkey.__class__)
         if not isinstance(blinding_pubkey, CPubKey):
             blinding_pubkey = CPubKey(blinding_pubkey)
         if not blinding_pubkey.is_fullyvalid():
@@ -298,7 +299,7 @@ class CConfidentialCommitmentBase(ImmutableSerializable):
     __slots__ = ['commitment']
 
     def __init__(self, commitment=b''):
-        object.__setattr__(self, 'commitment', commitment)
+        object.__setattr__(self, 'commitment', bytes(commitment))
 
     @classmethod
     def stream_deserialize(cls, f):
@@ -385,7 +386,7 @@ class CConfidentialAsset(CConfidentialCommitmentBase):
     _prefixB = 11
 
     def __init__(self, asset_or_commitment=b''):
-        assert(isinstance(asset_or_commitment, (CAsset, bytes)))
+        assert(isinstance(asset_or_commitment, (CAsset, bytes, bytearray)))
         if isinstance(asset_or_commitment, CAsset):
             commitment = bytes([1]) + asset_or_commitment.data
         else:
@@ -411,7 +412,7 @@ class CConfidentialValue(CConfidentialCommitmentBase):
     _prefixB = 9
 
     def __init__(self, value_or_commitment=b''):
-        assert isinstance(value_or_commitment, (int, bytes))
+        assert isinstance(value_or_commitment, (int, bytes, bytearray))
         if isinstance(value_or_commitment, int):
             commitment = bytes([1]) + struct.pack(b">q", value_or_commitment)
         else:
@@ -454,8 +455,8 @@ class CElementsSidechainTxInWitness(CTxInWitnessBase, ReprOrStrMixin):
     def __init__(self, scriptWitness=CScriptWitness(),
                  issuanceAmountRangeproof=b'', inflationKeysRangeproof=b'',
                  pegin_witness=CScriptWitness()):
-        assert isinstance(issuanceAmountRangeproof, bytes)
-        assert isinstance(inflationKeysRangeproof, bytes)
+        assert isinstance(issuanceAmountRangeproof, (bytes, bytearray))
+        assert isinstance(inflationKeysRangeproof, (bytes, bytearray))
         object.__setattr__(self, 'scriptWitness', scriptWitness)
         object.__setattr__(self, 'issuanceAmountRangeproof',
                            CElementsSidechainScript(issuanceAmountRangeproof))
@@ -523,8 +524,8 @@ class CElementsSidechainTxOutWitness(CTxOutWitnessBase):
     __slots__ = ['surjectionproof', 'rangeproof']
 
     def __init__(self, surjectionproof=b'', rangeproof=b''):
-        assert isinstance(surjectionproof, bytes)
-        assert isinstance(rangeproof, bytes)
+        assert isinstance(surjectionproof, (bytes, bytearray))
+        assert isinstance(rangeproof, (bytes, bytearray))
         object.__setattr__(self, 'surjectionproof', CElementsSidechainScript(surjectionproof))
         object.__setattr__(self, 'rangeproof', CElementsSidechainScript(rangeproof))
 
@@ -1030,7 +1031,8 @@ class CElementsSidechainMutableTransaction(CElementsSidechainTransactionCommon, 
             # but the Elements Core API requires all assetcommitments to be
             # specified ad 33-byte chunks.
             # We do the same, to be close to the originial.
-            assert all(isinstance(ag, bytes) for ag in auxiliary_generators)
+            assert all(isinstance(ag, (bytes, bytearray))
+                       for ag in auxiliary_generators)
             assert all(len(ag) == 33 for ag in auxiliary_generators)
 
             # auxiliary_generators beyond the length of the input array
@@ -1535,7 +1537,7 @@ class ElementsSidechainParams(CoreElementsSidechainParams):
 
 def generate_asset_entropy(prevout, contracthash):
     assert isinstance(prevout, COutPoint)
-    assert isinstance(contracthash, (bytes, Uint256))
+    assert isinstance(contracthash, (bytes, bytearray, Uint256))
     if isinstance(contracthash, Uint256):
         contracthash = contracthash.data
     assert len(contracthash) == 32
@@ -1543,7 +1545,7 @@ def generate_asset_entropy(prevout, contracthash):
 
 
 def calculate_asset(entropy):
-    assert isinstance(entropy, (bytes, Uint256))
+    assert isinstance(entropy, (bytes, bytearray, Uint256))
     if isinstance(entropy, Uint256):
         entropy = entropy.data
     assert len(entropy) == 32
@@ -1551,7 +1553,7 @@ def calculate_asset(entropy):
 
 
 def calculate_reissuance_token(entropy, is_confidential):
-    assert isinstance(entropy, (bytes, Uint256))
+    assert isinstance(entropy, (bytes, bytearray, Uint256))
     if isinstance(entropy, Uint256):
         entropy = entropy.data
     assert len(entropy) == 32
@@ -1605,10 +1607,10 @@ def generate_rangeproof(in_blinds, nonce, amount, scriptPubKey, commit, gen, ass
     assert isinstance(nonce, Uint256)
     assert isinstance(amount, int)
     assert isinstance(scriptPubKey, CElementsSidechainScript)
-    assert isinstance(commit, bytes)
+    assert isinstance(commit, (bytes, bytearray))
     assert len(commit) == SECP256K1_PEDERSEN_COMMITMENT_SIZE
     assert isinstance(asset, CAsset)
-    assert isinstance(gen, bytes)
+    assert isinstance(gen, (bytes, bytearray))
     assert len(gen) == SECP256K1_GENERATOR_SIZE
 
     # Note: the code only uses the single last elements of blinds and
@@ -1728,7 +1730,7 @@ def unblind_confidential_pair(key, confValue, confAsset, nNonce,  # noqa
     assert isinstance(confAsset, CConfidentialAsset)
     assert isinstance(nNonce, CConfidentialNonce)
     assert isinstance(committedScript, CElementsSidechainScript)
-    assert isinstance(rangeproof, bytes)
+    assert isinstance(rangeproof, (bytes, bytearray))
 
     # NOTE: we do not allow creation of invalid CKey instances,
     # so no key.is_valid() check needed

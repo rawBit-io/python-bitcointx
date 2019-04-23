@@ -131,8 +131,9 @@ class CKeyMixin():
         return self[:32]
 
     def sign(self, hash):
-        if not isinstance(hash, bytes):
-            raise TypeError('Hash must be bytes instance; got %r' % hash.__class__)
+        if not isinstance(hash, (bytes, bytearray)):
+            raise TypeError('Hash must be bytes or bytearray instance; got %r'
+                            % hash.__class__)
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
 
@@ -151,7 +152,7 @@ class CKeyMixin():
         return mb_sig.raw[:sig_size0.value]
 
     def sign_compact(self, hash): # pylint: disable=redefined-builtin
-        if not isinstance(hash, bytes):
+        if not isinstance(hash, (bytes, bytearray)):
             raise TypeError('Hash must be bytes instance; got %r' % hash.__class__)
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
@@ -352,8 +353,8 @@ class CPubKey(bytes):
     def verify(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a DER signature"""
 
-        assert isinstance(sig, bytes), type(sig)
-        assert isinstance(hash, bytes), type(hash)
+        assert isinstance(sig, (bytes, bytearray)), type(sig)
+        assert isinstance(hash, (bytes, bytearray)), type(hash)
 
         if not sig:
             return False
@@ -384,8 +385,8 @@ class CPubKey(bytes):
         if not _ssl:
             raise RuntimeError('openssl library is not available. verify_nonstrict is not functional.')
 
-        assert isinstance(sig, bytes), type(sig)
-        assert isinstance(hash, bytes), type(hash)
+        assert isinstance(sig, (bytes, bytearray)), type(sig)
+        assert isinstance(hash, (bytes, bytearray)), type(hash)
 
         if not sig:
             return False

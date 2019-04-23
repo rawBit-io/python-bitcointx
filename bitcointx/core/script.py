@@ -558,7 +558,7 @@ class CScriptBase(bytes):
         raise NotImplementedError
 
     def __new__(cls, value=b''):
-        if isinstance(value, bytes) or isinstance(value, bytearray):
+        if isinstance(value, (bytes, bytearray)):
             return super(CScriptBase, cls).__new__(cls, value)
         else:
             def coerce_iterable(iterable):
@@ -650,7 +650,7 @@ class CScriptBase(bytes):
         # For Python3 compatibility add b before strings so testcases don't
         # need to change
         def _repr(o):
-            if isinstance(o, bytes):
+            if isinstance(o, (bytes, bytearray)):
                 return "x('%s')" % bitcointx.core.b2x(o)
             else:
                 return repr(o)

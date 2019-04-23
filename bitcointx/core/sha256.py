@@ -72,7 +72,7 @@ class CSHA256():
     # Perform a number of SHA-256 transformations, processing 64-byte chunks.
     def Transform(self, chunk, blocks):
         assert isinstance(blocks, int)
-        assert isinstance(chunk, bytes)
+        assert isinstance(chunk, (bytes, bytearray))
         s = self.s
         while blocks:
             blocks -= 1
@@ -221,7 +221,7 @@ class CSHA256():
             chunk = chunk[64:]
 
     def Write(self, data):
-        assert isinstance(data, bytes)
+        assert isinstance(data, (bytes, bytearray))
 
         bufsize = self.bytes_count % 64
         assert len(self.buf) == bufsize
@@ -286,5 +286,6 @@ class CSHA256():
                   0x1f83d9ab,
                   0x5be0cd19]
         return self
+
 
 __all__ = ('CSHA256',)
