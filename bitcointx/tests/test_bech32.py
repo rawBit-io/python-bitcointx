@@ -62,7 +62,8 @@ class MockBech32Data(CBech32Data):
 
 class Test_CBech32Data(unittest.TestCase):
     def test_from_data(self):
-        b = MockBech32Data.from_bytes(0, unhexlify('751e76e8199196d454941c45d1b3a323f1433bd6'))
+        b = MockBech32Data.from_bytes(unhexlify('751e76e8199196d454941c45d1b3a323f1433bd6'),
+                                      witver=0)
         self.assertEqual(b.witver, 0)
         self.assertEqual(str(b).upper(), 'BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4')
 

@@ -104,23 +104,30 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
 
     _address_classes = None
     _data_length = None
+    _witness_version = None
 
     @classmethod
-    def from_bytes(cls, witver, witprog):
+    def from_bytes(cls, witprog, witver=None):
 
-        assert witver == 0
-        self = super(CBech32CoinAddressCommon, cls).from_bytes(
-            witver, bytes(witprog)
-        )
-
-        for candidate in cls._address_classes:
-            if len(self) == candidate._data_length:
-                self.__class__ = candidate
-                break
+        if cls._witness_version is None:
+            assert witver is not None, \
+                ("witver must be specified for {}.from_bytes()"
+                 .format(cls.__name__))
+            for candidate in cls._address_classes:
+                if len(witprog) == candidate._data_length and\
+                        witver == candidate._witness_version:
+                    break
+            else:
+                raise CCoinAddressError(
+                    'witness program does not match any known Bech32 '
+                    'address length')
         else:
-            raise CCoinAddressError(
-                'witness program does not match any known Bech32 '
-                'address length')
+            candidate = cls
+
+        self = super(CBech32CoinAddressCommon, cls).from_bytes(
+            bytes(witprog), witver=candidate._witness_version
+        )
+        self.__class__ = candidate
 
         return self
 
@@ -309,6 +316,7 @@ class P2PKHCoinAddressCommon():
 
 class P2WSHCoinAddressCommon():
     _data_length = 32
+    _witness_version = 0
 
     @classmethod
     def from_scriptPubKey(cls, scriptPubKey):
@@ -318,7 +326,7 @@ class P2WSHCoinAddressCommon():
         form.
         """
         if scriptPubKey.is_witness_v0_scripthash():
-            return cls.from_bytes(0, scriptPubKey[2:34])
+            return cls.from_bytes(scriptPubKey[2:34])
         else:
             raise P2WSHCoinAddressError('not a P2WSH scriptPubKey')
 
@@ -333,7 +341,6 @@ class P2WSHCoinAddressCommon():
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        assert self.witver == 0
         return self.__class__._script_class([0, self])
 
     def to_redeemScript(self):
@@ -343,6 +350,29 @@ class P2WSHCoinAddressCommon():
 
 class P2WPKHCoinAddressCommon():
     _data_length = 20
+    _witness_version = 0
+
+    @classmethod
+    def from_pubkey(cls, pubkey, accept_invalid=False):
+        """Create a P2WPKH address from a pubkey
+
+        Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
+        is True.
+
+        The pubkey must be a bytes instance;
+        """
+        if not isinstance(pubkey, bytes):
+            raise TypeError('pubkey must be bytes instance; got %r'
+                            % pubkey.__class__)
+
+        if not accept_invalid:
+            if not isinstance(pubkey, bitcointx.core.key.CPubKey):
+                pubkey = bitcointx.core.key.CPubKey(pubkey)
+            if not pubkey.is_fullyvalid():
+                raise P2PKHCoinAddressError('invalid pubkey')
+
+        pubkey_hash = bitcointx.core.Hash160(pubkey)
+        return cls.from_bytes(pubkey_hash)
 
     @classmethod
     def from_scriptPubKey(cls, scriptPubKey):
@@ -352,13 +382,12 @@ class P2WPKHCoinAddressCommon():
         form.
         """
         if scriptPubKey.is_witness_v0_keyhash():
-            return cls.from_bytes(0, scriptPubKey[2:22])
+            return cls.from_bytes(scriptPubKey[2:22])
         else:
             raise P2WPKHCoinAddressError('not a P2WPKH scriptPubKey')
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        assert self.witver == 0
         return self.__class__._script_class([0, self])
 
     def to_redeemScript(self):
@@ -434,6 +463,16 @@ class P2WPKHBitcoinTestnetAddress(P2WPKHCoinAddressCommon,
     ...
 
 
+class P2WSHBitcoinRegtestAddress(P2WSHCoinAddressCommon,
+                                 CBech32BitcoinRegtestAddress):
+    ...
+
+
+class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddressCommon,
+                                  CBech32BitcoinRegtestAddress):
+    ...
+
+
 CBitcoinAddress._script_class = script.CBitcoinScript
 CBitcoinAddress._address_encoding_classes = (
     CBech32BitcoinAddress, CBase58BitcoinAddress
@@ -454,6 +493,9 @@ CBase58BitcoinTestnetAddress._address_classes = (
 )
 CBech32BitcoinTestnetAddress._address_classes = (
     P2WSHBitcoinTestnetAddress, P2WPKHBitcoinTestnetAddress
+)
+CBech32BitcoinRegtestAddress._address_classes = (
+    P2WSHBitcoinRegtestAddress, P2WPKHBitcoinRegtestAddress
 )
 
 

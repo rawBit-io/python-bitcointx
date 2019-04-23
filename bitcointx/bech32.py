@@ -40,7 +40,7 @@ class CBech32Data(bytes):
         if witver is None and data is None:
             raise Bech32Error('Bech32 decoding error')
 
-        return cls.from_bytes(witver, data)
+        return cls.from_bytes(data, witver=witver)
 
     def __init__(self, s):
         """Initialize from bech32-encoded string
@@ -51,11 +51,11 @@ class CBech32Data(bytes):
         """
 
     @classmethod
-    def from_bytes(cls, witver, witprog):
+    def from_bytes(cls, witprog, witver=None):
         """Instantiate from witver and data"""
-        if not (0 <= witver <= 16):
+        if witver is None or not (0 <= witver <= 16):
             raise ValueError(
-                'witver must be in range 0 to 16 inclusive; got %d' % witver)
+                'witver must be in range 0 to 16 inclusive; got %r' % witver)
         self = bytes.__new__(cls, witprog)
         self.witver = witver
 

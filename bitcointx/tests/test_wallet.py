@@ -14,9 +14,11 @@
 import hashlib
 import unittest
 
-from bitcointx.core import b2x, x
+import bitcointx
+from bitcointx.core import b2x, x, Hash160
 from bitcointx.core.script import CScript, IsLowDERSignature
 from bitcointx.core.key import CPubKey
+from bitcointx.sidechain.elements import ElementsSidechainParams
 from bitcointx.wallet import (
     CCoinAddressError as CBitcoinAddressError,
     CCoinAddress,
@@ -29,6 +31,42 @@ from bitcointx.wallet import (
     P2WSHBitcoinAddress,
     CBitcoinSecret,
 )
+
+
+class Test_CCoinAddress(unittest.TestCase):
+
+    def test_address_implementations(self):
+        pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
+        paramclasses = list(bitcointx._ParamsTag.__subclasses__())
+        paramclasses.append(ElementsSidechainParams)
+        for paramclass in paramclasses:
+            top_aclass = paramclass.ADDRESS_CLASS
+            script_class = top_aclass._script_class
+            for enclass in top_aclass._address_encoding_classes:
+                for aclass in enclass._address_classes:
+                    caclass = None
+                    if getattr(aclass, 'from_unconfidential', None):
+                        caclass = aclass
+                        aclass = aclass._unconfidential_address_class
+                    if getattr(aclass, 'from_pubkey', None):
+                        a = aclass.from_pubkey(pub)
+                    else:
+                        a = aclass.from_redeemScript(
+                            script_class(b'\xa9' + Hash160(pub) + b'\x87'))
+
+                    if caclass:
+                        ca = caclass.from_unconfidential(a, pub)
+                        self.assertEqual(ca.blinding_pubkey, pub)
+                        self.assertEqual(ca.to_unconfidential(), a)
+                    else:
+                        spk = a.to_scriptPubKey()
+                        self.assertEqual(a, aclass.from_scriptPubKey(spk))
+                        a2 = aclass.from_bytes(a)
+                        self.assertEqual(bytes(a), bytes(a2))
+                        self.assertEqual(str(a), str(a2))
+                        a3 = aclass(str(a))
+                        self.assertEqual(bytes(a), bytes(a3))
+                        self.assertEqual(str(a), str(a3))
 
 
 class Test_CBitcoinAddress(unittest.TestCase):
