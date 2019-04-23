@@ -532,7 +532,7 @@ class CScriptBase(bytes):
         # Coerce other into bytes
         if isinstance(other, CScriptOp):
             other = bytes([other])
-        elif isinstance(other, (int, int)):
+        elif isinstance(other, int):
             if 0 <= other <= 16:
                 other = bytes([CScriptOp.encode_op_n(other)])
             elif other == -1:
