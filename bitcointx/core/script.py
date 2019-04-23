@@ -549,7 +549,7 @@ class CScriptBase(bytes):
 
         try:
             # bytes.__add__ always returns bytes instances unfortunately
-            return CScript(super(CScriptBase, self).__add__(other))
+            return self.__class__(super(CScriptBase, self).__add__(other))
         except TypeError:
             raise TypeError('Can not add a %r instance to a CScript' % other.__class__)
 
@@ -801,40 +801,6 @@ class CScriptBase(bytes):
             return False
         return True
 
-    def get_pegout_data(self):
-        try:
-            op_iter = self.raw_iter()
-            op, _, _ = next(op_iter)
-            if op != OP_RETURN:
-                return None
-
-            op, op_data, _ = next(op_iter)
-            if len(op_data) != 32:
-                return None
-
-            genesis_hash = op_data
-
-            op, op_data, _ = next(op_iter)
-
-            if len(op_data) == 0:
-                return False
-
-            pegout_scriptpubkey = CScript(op_data)
-
-            # The code in reference client does not check if there
-            # is more data after pegout_scriptpubkey.
-
-        except CScriptInvalidError:
-            return None
-        except StopIteration:
-            return None
-
-        return (genesis_hash, pegout_scriptpubkey)
-
-    @_disable_boolean_use
-    def is_pegout(self):
-        return self.get_pegout_data() is not None
-
     def to_p2sh_scriptPubKey(self, checksize=True):
         """Create P2SH scriptPubKey from this redeemScript
 
@@ -849,7 +815,7 @@ class CScriptBase(bytes):
         """
         if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
-        return CScript([OP_HASH160, bitcointx.core.Hash160(self), OP_EQUAL])
+        return self.__class__([OP_HASH160, bitcointx.core.Hash160(self), OP_EQUAL])
 
     def to_p2wsh_scriptPubKey(self, checksize=True):
         """Create P2WSH scriptPubKey from this redeemScript
@@ -865,7 +831,7 @@ class CScriptBase(bytes):
         """
         if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
-        return CScript([0, hashlib.sha256(self).digest()])
+        return self.__class__([0, hashlib.sha256(self).digest()])
 
     def GetSigOpCount(self, fAccurate):
         """Get the SigOp count.
@@ -955,7 +921,7 @@ def FindAndDelete(script, sig):
             skip = False
     if not skip:
         r += script[last_sop_idx:]
-    return CScript(r)
+    return script.__class__(r)
 
 
 def IsLowDERSignature(sig):
@@ -1076,7 +1042,8 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
     for txin in txtmp.vin:
         txin.scriptSig = b''
 
-    txtmp.vin[inIdx].scriptSig = FindAndDelete(script, CScript([OP_CODESEPARATOR]))
+    txtmp.vin[inIdx].scriptSig = FindAndDelete(
+        script, script.__class__([OP_CODESEPARATOR]))
 
     if (hashtype & 0x1f) == SIGHASH_NONE:
         txtmp.vout = []

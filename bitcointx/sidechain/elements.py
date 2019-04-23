@@ -51,7 +51,8 @@ from bitcointx.core.script import (
     SIGHASH_NONE,
     SIGHASH_SINGLE,
     SIGHASH_ANYONECANPAY,
-    CScriptOp
+    CScriptOp, OP_RETURN,
+    CScriptInvalidError
 )
 from bitcointx.core.sha256 import CSHA256
 from bitcointx.core.serialize import (
@@ -250,6 +251,40 @@ class CElementsSidechainScript(CScriptBase):
         If you're just writing wallet software you probably want sighash() method instead."""
         return RawElementsSidechainSignatureHash(self, txTo, inIdx, hashtype,
                                                  amount=amount, sigversion=sigversion)
+
+    def get_pegout_data(self):
+        try:
+            op_iter = self.raw_iter()
+            op, _, _ = next(op_iter)
+            if op != OP_RETURN:
+                return None
+
+            op, op_data, _ = next(op_iter)
+            if len(op_data) != 32:
+                return None
+
+            genesis_hash = op_data
+
+            op, op_data, _ = next(op_iter)
+
+            if len(op_data) == 0:
+                return False
+
+            pegout_scriptpubkey = self.__class__(op_data)
+
+            # The code in reference client does not check if there
+            # is more data after pegout_scriptpubkey.
+
+        except CScriptInvalidError:
+            return None
+        except StopIteration:
+            return None
+
+        return (genesis_hash, pegout_scriptpubkey)
+
+    @_disable_boolean_use
+    def is_pegout(self):
+        return self.get_pegout_data() is not None
 
 
 class CConfidentialCommitmentBase(ImmutableSerializable):
@@ -936,7 +971,7 @@ class CElementsSidechainMutableTransaction(CElementsSidechainTransactionCommon, 
     _txin_class = CElementsSidechainMutableTxIn
     _txout_class = CElementsSidechainMutableTxOut
 
-    def blind(self, input_descriptors=(), output_pubkeys=(),
+    def blind(self, input_descriptors=(), output_pubkeys=(), # noqa
               blind_issuance_asset_keys=(), blind_issuance_token_keys=(),
               auxiliary_generators=(), _rand_func=os.urandom):
 
@@ -1425,7 +1460,7 @@ def RawElementsSidechainSignatureHash(script, txTo, inIdx, hashtype, amount=0,
     hashPrevouts = b'\x00'*32
     hashSequence = b'\x00'*32
     hashIssuance = b'\x00'*32
-    hashOutputs  = b'\x00'*32
+    hashOutputs  = b'\x00'*32  # noqa
 
     if not (hashtype & SIGHASH_ANYONECANPAY):
         serialize_prevouts = bytes()
@@ -1675,7 +1710,8 @@ def surject_output(txoutwit, surjectionTargets, targetAssetGenerators, targetAss
     return True
 
 
-def unblind_confidential_pair(key, confValue, confAsset, nNonce, committedScript, rangeproof):
+def unblind_confidential_pair(key, confValue, confAsset, nNonce,  # noqa
+                              committedScript, rangeproof):
     """Unblinds a pair of confidential value and confidential asset
     given key, nonce, committed script, and rangeproof.
     returns a tuple of (success, result)
