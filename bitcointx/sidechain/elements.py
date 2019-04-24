@@ -484,6 +484,11 @@ class CElementsSidechainTxInWitness(CTxInWitnessBase, ReprOrStrMixin):
 
     @classmethod
     def from_txin_witness(cls, txin_witness):
+        if not isinstance(txin_witness, CElementsSidechainTxInWitness):
+            raise ValueError(
+                'incompatible txin witness class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxInWitness.__name__,
+                        txin_witness.__class__.__name__))
         if not txin_witness._immutable_restriction_lifted:
             # txin_witness is immutable, therefore returning same txin_witness is OK
             return txin_witness
@@ -506,6 +511,11 @@ class CElementsSidechainTxInWitness(CTxInWitnessBase, ReprOrStrMixin):
 class CElementsSidechainMutableTxInWitness(CElementsSidechainTxInWitness):
     @classmethod
     def from_txin_witness(cls, txin_witness):
+        if not isinstance(txin_witness, CElementsSidechainTxInWitness):
+            raise ValueError(
+                'incompatible txin witness class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxInWitness.__name__,
+                        txin_witness.__class__.__name__))
         """Create a mutable copy of an existing COutPoint"""
         return cls(scriptWitness=txin_witness.scriptWitness,
                    issuanceAmountRangeproof=txin_witness.issuanceAmountRangeproof,
@@ -561,6 +571,11 @@ class CElementsSidechainTxOutWitness(CTxOutWitnessBase):
 
     @classmethod
     def from_txout_witness(cls, txout_witness):
+        if not isinstance(txout_witness, CElementsSidechainTxOutWitness):
+            raise ValueError(
+                'incompatible txout witness class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxOutWitness.__name__,
+                        txout_witness.__class__.__name__))
         if not txout_witness._immutable_restriction_lifted:
             # txout_witness is immutable, therefore returning same txout_witness is OK
             return txout_witness
@@ -582,6 +597,11 @@ class CElementsSidechainMutableTxOutWitness(CElementsSidechainTxOutWitness):
 
     @classmethod
     def from_txout_witness(cls, txout_witness):
+        if not isinstance(txout_witness, CElementsSidechainTxOutWitness):
+            raise ValueError(
+                'incompatible txout witness class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxOutWitness.__name__,
+                        txout_witness.__class__.__name__))
         return cls(surjectionproof=txout_witness.surjectionproof,
                    rangeproof=txout_witness.rangeproof)
 
@@ -629,6 +649,11 @@ class CElementsSidechainTxWitness(CTxWitnessBase, ReprOrStrMixin):
 
     @classmethod
     def from_witness(cls, witness):
+        if not isinstance(witness, CElementsSidechainTxWitness):
+            raise ValueError(
+                'incompatible tx witness class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxWitness.__name__,
+                        witness.__class__.__name__))
         if not witness.__class__._immutable_restriction_lifted:
             return witness
         vtxinwit = (cls._txin_witness_class.from_txin_witness(txinwit)
@@ -661,6 +686,11 @@ class CElementsSidechainMutableTxWitness(CElementsSidechainTxWitness):
 
     @classmethod
     def from_witness(cls, witness):
+        if not isinstance(witness, CElementsSidechainTxWitness):
+            raise ValueError(
+                'incompatible tx witness class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxWitness.__name__,
+                        witness.__class__.__name__))
         vtxinwit = (cls._txin_witness_class.from_txin_witness(txinwit)
                     for txinwit in witness.vtxinwit)
         vtxoutwit = (cls._txout_witness_class.from_txout_witness(txoutwit)
@@ -793,6 +823,11 @@ class CElementsSidechainTxIn(CElementsSidechainTxInBase):
 
         If txin is already immutable, it is returned directly.
         """
+        if not isinstance(txin, CElementsSidechainTxIn):
+            raise ValueError(
+                'incompatible txin class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxIn.__name__,
+                        txin.__class__.__name__))
         if not txin._immutable_restriction_lifted:
             # txin is immutable, therefore returning same txin is OK
             return txin
@@ -802,7 +837,7 @@ class CElementsSidechainTxIn(CElementsSidechainTxInBase):
 
 
 @make_mutable
-class CElementsSidechainMutableTxIn(CElementsSidechainTxInBase):
+class CElementsSidechainMutableTxIn(CElementsSidechainTxIn):
     """A mutable Elements sidechain CTxIn"""
     __slots__ = []
     _outpoint_class = CMutableOutPoint
@@ -810,6 +845,11 @@ class CElementsSidechainMutableTxIn(CElementsSidechainTxInBase):
     @classmethod
     def from_txin(cls, txin):
         """Create a fully mutable copy of an existing Elements sidechain TxIn"""
+        if not isinstance(txin, CElementsSidechainTxIn):
+            raise ValueError(
+                'incompatible txin class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxIn.__name__,
+                        txin.__class__.__name__))
         return cls(txin.prevout, txin.scriptSig, txin.nSequence, txin.assetIssuance, txin.is_pegin)
 
 
@@ -879,6 +919,11 @@ class CElementsSidechainTxOut(CTxOutBase, ReprOrStrMixin):
 
         If txout is already immutable, then it will be returned directly.
         """
+        if not isinstance(txout, CElementsSidechainTxOut):
+            raise ValueError(
+                'incompatible txout class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxOut.__name__,
+                        txout.__class__.__name__))
         if not txout._immutable_restriction_lifted:
             return txout
         else:
@@ -893,6 +938,11 @@ class CElementsSidechainMutableTxOut(CElementsSidechainTxOut):
     @classmethod
     def from_txout(cls, txout):
         """Create a fullly mutable copy of an existing Elements sidechain TxOut"""
+        if not isinstance(txout, CElementsSidechainTxOut):
+            raise ValueError(
+                'incompatible txout class: expected instance of {}, got {}'
+                .format(CElementsSidechainTxOut.__name__,
+                        txout.__class__.__name__))
         return cls(txout.nValue, txout.scriptPubKey,
                    txout.nAsset, txout.nNonce)
 
@@ -965,6 +1015,15 @@ class CElementsSidechainTransactionCommon():
                     numIssuances += 1
 
         return numIssuances
+
+    @classmethod
+    def from_tx(cls, tx):
+        if not isinstance(tx, CElementsSidechainTransactionCommon):
+            raise ValueError(
+                'incompatible tx class: expected instance of {}, got {}'
+                .format(CElementsSidechainTransactionCommon.__name__,
+                        tx.__class__.__name__))
+        return super(CElementsSidechainTransactionCommon, cls).from_tx(tx)
 
 
 class CElementsSidechainMutableTransaction(CElementsSidechainTransactionCommon, CMutableTransactionBase):
