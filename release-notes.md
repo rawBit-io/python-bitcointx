@@ -38,6 +38,9 @@ BREAKING CHANGES:
 
     CBitcoinAddressError is removed, CCoinAddressError should be used instead
 
+    Chain params for bitcoin is renamed, instead of mainnet, testnet, regtest
+    it is now bitcoin, bitcoin/testnet, bitcoin/mainnet
+
 
 * Elements sidechain support:
 
