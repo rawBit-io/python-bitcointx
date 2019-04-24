@@ -62,10 +62,11 @@ from bitcointx.core.serialize import (
 )
 from bitcointx.wallet import (
     CBase58CoinAddressCommon, CBech32CoinAddressCommon,
-    CCoinAddressError, CCoinAddressBase,
+    CConfidentialAddressError, CCoinAddressBase,
     P2SHCoinAddressCommon, P2PKHCoinAddressCommon,
     P2WSHCoinAddressCommon, P2WPKHCoinAddressCommon,
-    CCoinSecretBase, CCoinExtSecretBase
+    CCoinSecretBase, CCoinExtSecretBase,
+    CConfidentialAddressBase
 )
 
 # If this flag is set, the CTxIn including this COutPoint has a CAssetIssuance object.
@@ -145,54 +146,7 @@ class CElementsSidechainScript(CScriptBase):
         return self.get_pegout_data() is not None
 
 
-class WitnessSerializationError(SerializationError):
-    pass
-
-
-class TxInSerializationError(SerializationError):
-    pass
-
-
-class CConfidentialAddressError(CCoinAddressError):
-    """Raised when an invalid confidential address is encountered"""
-
-
-class CElementsSidechainAddress(CCoinAddressBase):
-    ...
-
-
-class CBase58ElementsSidechainAddress(CBase58CoinAddressCommon,
-                                      CElementsSidechainAddress):
-    ...
-
-
-class CBech32ElementsSidechainAddress(CBech32CoinAddressCommon,
-                                      CElementsSidechainAddress):
-    bech32_hrp = 'ert'
-
-
-class CBech32ElementsSidechainConfidentialAddress(CBech32CoinAddressCommon,
-                                                  CElementsSidechainAddress):
-    bech32_hrp = 'el'
-
-
-class P2SHElementsSidechainAddress(P2SHCoinAddressCommon, CBase58ElementsSidechainAddress):
-    base58_prefix = bytes([75])
-
-
-class P2PKHElementsSidechainAddress(P2PKHCoinAddressCommon, CBase58ElementsSidechainAddress):
-    base58_prefix = bytes([235])
-
-
-class P2WSHElementsSidechainAddress(P2WSHCoinAddressCommon, CBech32ElementsSidechainAddress):
-    ...
-
-
-class P2WPKHElementsSidechainAddress(P2WPKHCoinAddressCommon, CBech32ElementsSidechainAddress):
-    ...
-
-
-class CConfidentialAddressCommon():
+class CElementsSidechainConfidentialAddressCommon():
 
     @classmethod
     def from_unconfidential(cls, unconfidential_adr, blinding_pubkey):
@@ -231,20 +185,60 @@ class CConfidentialAddressCommon():
     def blinding_pubkey(self):
         return CPubKey(self[0:33])
 
-    def to_scriptPubKey(self):
-        return self.to_unconfidential().to_scriptPubKey()
 
-    def to_redeemScript(self):
-        return self.to_unconfidential().to_scriptPubKey()
+class WitnessSerializationError(SerializationError):
+    pass
 
 
-class P2PKHElementsSidechainConfidentialAddress(CConfidentialAddressCommon,
+class TxInSerializationError(SerializationError):
+    pass
+
+
+class CElementsSidechainAddress(CCoinAddressBase):
+    ...
+
+
+class CBase58ElementsSidechainAddress(CBase58CoinAddressCommon,
+                                      CElementsSidechainAddress):
+    ...
+
+
+class CBech32ElementsSidechainAddress(CBech32CoinAddressCommon,
+                                      CElementsSidechainAddress):
+    bech32_hrp = 'ert'
+
+
+class CBech32ElementsSidechainConfidentialAddress(CConfidentialAddressBase,
+                                                  CElementsSidechainConfidentialAddressCommon,
+                                                  CBech32ElementsSidechainAddress):
+    bech32_hrp = 'el'
+
+
+class P2SHElementsSidechainAddress(P2SHCoinAddressCommon, CBase58ElementsSidechainAddress):
+    base58_prefix = bytes([75])
+
+
+class P2PKHElementsSidechainAddress(P2PKHCoinAddressCommon, CBase58ElementsSidechainAddress):
+    base58_prefix = bytes([235])
+
+
+class P2WSHElementsSidechainAddress(P2WSHCoinAddressCommon, CBech32ElementsSidechainAddress):
+    ...
+
+
+class P2WPKHElementsSidechainAddress(P2WPKHCoinAddressCommon, CBech32ElementsSidechainAddress):
+    ...
+
+
+class P2PKHElementsSidechainConfidentialAddress(CConfidentialAddressBase,
+                                                CElementsSidechainConfidentialAddressCommon,
                                                 CBase58ElementsSidechainAddress):
     base58_prefix = b'\x04\xEB'
     _unconfidential_address_class = P2PKHElementsSidechainAddress
 
 
-class P2SHElementsSidechainConfidentialAddress(CConfidentialAddressCommon,
+class P2SHElementsSidechainConfidentialAddress(CConfidentialAddressBase,
+                                               CElementsSidechainConfidentialAddressCommon,
                                                CBase58ElementsSidechainAddress):
     base58_prefix = b'\x04\x4B'
     _unconfidential_address_class = P2SHElementsSidechainAddress

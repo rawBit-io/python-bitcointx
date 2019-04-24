@@ -79,8 +79,22 @@ class CCoinAddressBase():
             'scriptPubKey is not in a recognized address format')
 
 
+class CConfidentialAddressBase():
+    """Base class for all confidential addresses"""
+
+    def to_scriptPubKey(self):
+        return self.to_unconfidential().to_scriptPubKey()
+
+    def to_redeemScript(self):
+        return self.to_unconfidential().to_scriptPubKey()
+
+
 class CCoinAddressError(Exception):
     """Raised when an invalid coin address is encountered"""
+
+
+class CConfidentialAddressError(CCoinAddressError):
+    """Raised when an invalid confidential address is encountered"""
 
 
 class P2SHCoinAddressError(CCoinAddressError):
