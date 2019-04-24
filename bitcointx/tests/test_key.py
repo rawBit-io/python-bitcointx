@@ -76,6 +76,15 @@ class Test_CKey(unittest.TestCase):
             self.assertEqual(k2.pub.negated(), CPubKey.sub(pub_diff, k1.pub))
             self.assertEqual(CPubKey.add(k2.pub, k2.pub),
                              CPubKey.sub(pub_sum, pub_diff))
+            with self.assertRaises(ValueError):
+                CKey.sub(k1, k1)
+            with self.assertRaises(ValueError):
+                CKey.combine(k1, k2, k1.negated(), k2.negated())
+            with self.assertRaises(ValueError):
+                CPubKey.sub(k1.pub, k1.pub)
+            with self.assertRaises(ValueError):
+                CPubKey.combine(k1.pub, k2.pub,
+                                k1.pub.negated(), k2.pub.negated())
         else:
             logging.basicConfig()
             log = logging.getLogger("Test_CKey")

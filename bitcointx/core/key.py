@@ -212,17 +212,23 @@ class CKeyMixin():
         for p in privkeys[1:]:
             ret = secp256k1.secp256k1_ec_privkey_tweak_add(
                 secp256k1_context_sign, result_data, p.secret_bytes)
-            assert ret == 1
+            if ret != 1:
+                assert ret == 0
+                raise ValueError('Combining the keys failed')
         return cls.from_secret_bytes(result_data[:32], compressed=compressed)
 
     @classmethod
     def add(cls, a, b):
-        assert a.is_compressed() == b.is_compressed(),\
-            "compressed attributes must match on privkey addition/substraction"
+        if a.is_compressed() != b.is_compressed():
+            raise ValueError("compressed attributes must match on "
+                             "privkey addition/substraction")
         return cls.combine(a, b, compressed=a.is_compressed())
 
     @classmethod
     def sub(cls, a, b):
+        if a == b:
+            raise ValueError('Values are equal, result would be zero, and '
+                             'thus an invalid key.')
         return cls.add(a, b.negated())
 
     def negated(self):
@@ -439,7 +445,9 @@ class CPubKey(bytes):
         result_data = ctypes.create_string_buffer(64)
         ret = secp256k1.secp256k1_ec_pubkey_combine(
             secp256k1_context_verify, result_data, pubkey_arr, len(pubkeys))
-        assert ret == 1
+        if ret != 1:
+            assert ret == 0
+            raise ValueError('Combining the public keys failed')
 
         return cls._from_raw(result_data, compressed=compressed)
 
@@ -455,12 +463,17 @@ class CPubKey(bytes):
 
     @classmethod
     def add(cls, a, b):
-        assert a.is_compressed() == b.is_compressed(),\
-            "compressed attributes must match on pubkey addition/substraction"
+        if a.is_compressed() != b.is_compressed():
+            raise ValueError(
+                "compressed attributes must match on pubkey "
+                "addition/substraction")
         return cls.combine(a, b, compressed=a.is_compressed())
 
     @classmethod
     def sub(cls, a, b):
+        if a == b:
+            raise ValueError('Values are equal, result would be zero, and '
+                             'thus an invalid public key.')
         return cls.add(a, b.negated())
 
 
