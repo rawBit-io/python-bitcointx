@@ -63,7 +63,7 @@ from bitcointx.core.serialize import (
 )
 from bitcointx.wallet import (
     CBase58CoinAddressCommon, CBech32CoinAddressCommon,
-    CConfidentialAddressError, CCoinAddressBase,
+    CConfidentialAddressError, CCoinAddressCommon,
     P2SHCoinAddressCommon, P2PKHCoinAddressCommon,
     P2WSHCoinAddressCommon, P2WPKHCoinAddressCommon,
     CCoinSecretBase, CCoinExtSecretBase,
@@ -195,7 +195,7 @@ class TxInSerializationError(SerializationError):
     pass
 
 
-class CElementsSidechainAddress(CCoinAddressBase):
+class CElementsSidechainAddress(CCoinAddressCommon):
     ...
 
 

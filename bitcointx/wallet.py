@@ -18,6 +18,8 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 
 # pylama:ignore=E501,E221
 
+from abc import ABCMeta
+
 import bitcointx
 import bitcointx.base58
 import bitcointx.bech32
@@ -35,14 +37,22 @@ class _WalletClassParamsBase():
         return real_class(*args, **kwargs)
 
 
-class _WalletClassParamsMeta(type):
+class _WalletClassParamsMeta(ABCMeta):
     def __new__(cls, name, bases, dct):
+        if cls not in _wallet_class_params:
+            raise TypeError(
+                'Concrete implementation for {} is not defined for current '
+                'chain parameters'.format(cls.__name__))
         bases = [_WalletClassParamsBase] + list(bases)
         return super(
             _WalletClassParamsMeta, cls
         ).__new__(cls, name, tuple(bases), dct)
 
     def __getattr__(cls, name):
+        if cls not in _wallet_class_params:
+            raise TypeError(
+                'Concrete implementation for {} is not defined for current '
+                'chain parameters'.format(cls.__name__))
         real_class = _wallet_class_params[cls]
         return getattr(real_class, name)
 
@@ -51,7 +61,23 @@ class CCoinAddress(metaclass=_WalletClassParamsMeta):
     pass
 
 
-class CCoinAddressBase():
+class P2SHCoinAddress(CCoinAddress):
+    pass
+
+
+class P2PKHCoinAddress(CCoinAddress):
+    pass
+
+
+class P2WSHCoinAddress(CCoinAddress):
+    pass
+
+
+class P2WPKHCoinAddress(CCoinAddress):
+    pass
+
+
+class CCoinAddressCommon():
 
     _address_encoding_classes = None
     _script_class = None
@@ -93,23 +119,33 @@ class CCoinAddressError(Exception):
     """Raised when an invalid coin address is encountered"""
 
 
+class CBase58AddressError(CCoinAddressError):
+    """Raised when an invalid base58-encoded address is encountered
+    (error is not necessary related to encoding)"""
+
+
+class CBech32AddressError(CCoinAddressError):
+    """Raised when an invalid bech32-encoded address is encountered
+    (error is not necessary related to encoding)"""
+
+
 class CConfidentialAddressError(CCoinAddressError):
     """Raised when an invalid confidential address is encountered"""
 
 
-class P2SHCoinAddressError(CCoinAddressError):
+class P2SHCoinAddressError(CBase58AddressError):
     """Raised when an invalid P2SH address is encountered"""
 
 
-class P2PKHCoinAddressError(CCoinAddressError):
+class P2PKHCoinAddressError(CBase58AddressError):
     """Raised when an invalid P2PKH address is encountered"""
 
 
-class P2WSHCoinAddressError(CCoinAddressError):
+class P2WSHCoinAddressError(CBech32AddressError):
     """Raised when an invalid P2SH address is encountered"""
 
 
-class P2WPKHCoinAddressError(CCoinAddressError):
+class P2WPKHCoinAddressError(CBech32AddressError):
     """Raised when an invalid P2PKH address is encountered"""
 
 
@@ -132,7 +168,7 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
                         witver == candidate._witness_version:
                     break
             else:
-                raise CCoinAddressError(
+                raise CBech32AddressError(
                     'witness program does not match any known Bech32 '
                     'address length')
         else:
@@ -158,7 +194,7 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
             except CCoinAddressError:
                 pass
 
-        raise CCoinAddressError(
+        raise CBech32AddressError(
             'scriptPubKey not a valid bech32-encoded address')
 
 
@@ -198,7 +234,7 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
             except CCoinAddressError:
                 pass
 
-        raise CCoinAddressError(
+        raise CBase58AddressError(
             'scriptPubKey not a valid base58-encoded address')
 
 
@@ -410,7 +446,7 @@ class P2WPKHCoinAddressCommon():
              script.OP_EQUALVERIFY, script.OP_CHECKSIG])
 
 
-class CBitcoinAddress(CCoinAddressBase):
+class CBitcoinAddress(CCoinAddressCommon):
     ...
 
 
@@ -487,29 +523,25 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddressCommon,
     ...
 
 
-CBitcoinAddress._script_class = script.CBitcoinScript
-CBitcoinAddress._address_encoding_classes = (
-    CBech32BitcoinAddress, CBase58BitcoinAddress
-)
-CBase58BitcoinAddress._address_classes = (
-    P2SHBitcoinAddress, P2PKHBitcoinAddress
-)
-CBech32BitcoinAddress._address_classes = (
-    P2WSHBitcoinAddress, P2WPKHBitcoinAddress
+CCoinAddress.register(CBitcoinAddress)
+
+CBitcoinAddress.register_classes(
+    script=script.CBitcoinScript,
+    bech32=([CBech32BitcoinAddress,
+             (P2WSHBitcoinAddress, P2WPKHBitcoinAddress)]),
+    base58=([CBase58BitcoinAddress,
+             (P2SHBitcoinAddress, P2PKHBitcoinAddress)])
 )
 
-CBitcoinTestnetAddress._address_encoding_classes = (
-    CBech32BitcoinTestnetAddress, CBech32BitcoinRegtestAddress,
-    CBase58BitcoinTestnetAddress
-)
-CBase58BitcoinTestnetAddress._address_classes = (
-    P2SHBitcoinTestnetAddress, P2PKHBitcoinTestnetAddress
-)
-CBech32BitcoinTestnetAddress._address_classes = (
-    P2WSHBitcoinTestnetAddress, P2WPKHBitcoinTestnetAddress
-)
-CBech32BitcoinRegtestAddress._address_classes = (
-    P2WSHBitcoinRegtestAddress, P2WPKHBitcoinRegtestAddress
+CBitcoinTestnetAddress.register_classes(
+    # CBitcoinTestnetAddress is a subclass of CBitcoinAddress,
+    # this means script class is already registered, no specify here
+    bech32=([CBech32BitcoinTestnetAddress,
+             (P2WSHBitcoinTestnetAddress, P2WPKHBitcoinTestnetAddress)],
+            [CBech32BitcoinRegtestAddress,
+             (P2WSHBitcoinRegtestAddress, P2WPKHBitcoinRegtestAddress)]),
+    base58=([CBase58BitcoinTestnetAddress,
+             (P2SHBitcoinTestnetAddress, P2PKHBitcoinTestnetAddress)])
 )
 
 
