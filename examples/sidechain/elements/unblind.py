@@ -18,13 +18,14 @@
 import sys
 
 from bitcointx import SelectParams
-from bitcointx.core import x, b2x, CTransaction, COIN
+from bitcointx.core import x, CTransaction, COIN
 from bitcointx.wallet import CBitcoinSecret, CBitcoinAddress
 from bitcointx.sidechain.elements import CConfidentialAddress
 
 
 def satoshi_to_btc(amount):
     return float(float(amount) / COIN)
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
@@ -73,10 +74,11 @@ if __name__ == '__main__':
                       CBitcoinAddress.from_scriptPubKey(tx.vout[n].scriptPubKey))
                 if not tx.wit.is_null():
                     rpinfo = tx.wit.vtxoutwit[n].get_rangeproof_info()
-                    print('  ct-exponent', rpinfo.exp)
-                    print('  ct-bits', rpinfo.mantissa)
-                    print('  value-minimum', satoshi_to_btc(rpinfo.value_min))
-                    print('  value-maximum', satoshi_to_btc(rpinfo.value_max))
+                    if rpinfo:
+                        print('  ct-exponent', rpinfo.exp)
+                        print('  ct-bits', rpinfo.mantissa)
+                        print('  value-minimum', satoshi_to_btc(rpinfo.value_min))
+                        print('  value-maximum', satoshi_to_btc(rpinfo.value_max))
             else:
                 # Successfully unblinded the output !
                 print("vout {}: unblinded".format(n))
