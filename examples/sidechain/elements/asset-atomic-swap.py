@@ -166,12 +166,12 @@ def alice(say, recv, send, die, rpc):
         die('unexpected number of outputs in tx from Bob: expected 1, got {}'
             .format(len(partial_tx.vout)))
 
-    ok, result = partial_tx.vout[0].unblind(
+    result = partial_tx.vout[0].unblind(
         blinding_key, partial_tx.wit.vtxoutwit[0].rangeproof)
 
-    if not ok:
+    if result.error:
         die('cannot unblind output that should have been directed to us: {}'
-            .format(result))
+            .format(result.error))
 
     if result.asset.to_hex() != bob_offer.asset:
         die("asset in partial transaction from Bob {} is not the same "
@@ -300,13 +300,13 @@ def alice(say, recv, send, die, rpc):
     tx.wit.vtxoutwit.append(CMutableTxOutWitness())
 
     # And blind the combined transaction
-    ok, blind_result = tx.blind(input_descriptors=input_descriptors,
-                                output_pubkeys=output_pubkeys,
-                                auxiliary_generators=assetcommitments)
+    blind_result = tx.blind(input_descriptors=input_descriptors,
+                            output_pubkeys=output_pubkeys,
+                            auxiliary_generators=assetcommitments)
 
     # The blinding must succeed!
-    if not ok:
-        die('blind failed: {}'.format(blind_result))
+    if blind_result.error:
+        die('blind failed: {}'.format(blind_result.error))
 
     # And must blind exactly three outputs (two to Bob, one fee asset change)
     if blind_result.num_successfully_blinded != 3:
@@ -457,7 +457,7 @@ def bob(say, recv, send, die, rpc):
     # that does the unblinding itself, and uses the unblinded values
     # to create a spending transaction.
 
-    ok, blind_result = partial_tx.blind(
+    blind_result = partial_tx.blind(
         input_descriptors=[
             BlindingInputDescriptor(
                 asset=CAsset(lx(asset_utxo['asset'])),
@@ -469,8 +469,8 @@ def bob(say, recv, send, die, rpc):
         auxiliary_generators=assetcommitments)
 
     # The blinding must succeed!
-    if not ok:
-        die('blind failed: {}'.format(blind_result))
+    if blind_result.error:
+        die('blind failed: {}'.format(blind_result.error))
 
     # And must blind exactly one output
     if blind_result.num_successfully_blinded != 1:
@@ -517,12 +517,12 @@ def bob(say, recv, send, die, rpc):
     # that they match the offer. We use n+1 as output index
     # because we skip our own output, which is at index 0.
     for n, offer in enumerate(alice_offers):
-        ok, result = semi_signed_tx.vout[n+1].unblind(
+        result = semi_signed_tx.vout[n+1].unblind(
             blinding_keys[n], semi_signed_tx.wit.vtxoutwit[n+1].rangeproof)
 
-        if not ok:
+        if result.error:
             die('cannot unblind output {} that should have been '
-                'directed to us: {}'.format(n+1, result))
+                'directed to us: {}'.format(n+1, result.error))
 
         if result.asset.to_hex() != offer.asset:
             die("asset at position {} (vout {}) in partial transaction "
@@ -929,10 +929,11 @@ def claim_funds_back(say, utxos, die, rpc):
     tx = tx.to_immutable().to_mutable()
 
     # And blind the combined transaction
-    ok, blind_result = tx.blind(input_descriptors=input_descriptors,
-                                output_pubkeys=output_pubkeys)
+    blind_result = tx.blind(input_descriptors=input_descriptors,
+                            output_pubkeys=output_pubkeys)
 
-    assert ok and blind_result.num_successfully_blinded == len(utxos)
+    assert (not blind_result.error
+            and blind_result.num_successfully_blinded == len(utxos))
 
     for n, utxo in enumerate(utxos):
         sign_input(tx, n, btc_to_satoshi(utxo['amount']), utxo['key'])

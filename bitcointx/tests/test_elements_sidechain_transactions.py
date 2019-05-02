@@ -377,7 +377,7 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
         # In this case, you need to supply the asset commitments for
         # all of the inputs of the final transaction, even if currently
         # blinded transaction template does not contain these inputs.
-        blind_ok, blind_result = tx_to_blind.blind(
+        blind_result = tx_to_blind.blind(
             input_descriptors=input_descriptors,
             output_pubkeys=output_pubkeys,
             blind_issuance_asset_keys=blind_issuance_asset_keys,
@@ -397,12 +397,12 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
             _rand_func=rand_func
         )
 
-        self.assertTrue(blind_ok)
+        self.assertFalse(blind_result.error)
 
         if all(_k is None for _k in blind_issuance_asset_keys):
             random.seed(bundle['rand_seed'])
             tx_to_blind2 = unblinded_tx.to_mutable()
-            blind_ok2, blind_result2 = tx_to_blind2.blind(
+            blind_result2 = tx_to_blind2.blind(
                 input_descriptors=input_descriptors,
                 output_pubkeys=output_pubkeys,
                 blind_issuance_asset_keys=blind_issuance_asset_keys,
@@ -410,7 +410,7 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
                 auxiliary_generators=asset_commitments,
                 _rand_func=rand_func
             )
-            self.assertTrue(blind_ok2)
+            self.assertFalse(blind_result2.error)
             self.assertEqual(blind_result, blind_result2)
             self.assertEqual(tx_to_blind.serialize(), tx_to_blind2.serialize())
 
@@ -443,10 +443,9 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
                 else:
                     blinding_key = uvout.scriptPubKey.derive_blinding_key(blinding_derivation_key)
 
-                unblind_ok, unblind_result = bvout.unblind(blinding_key,
-                                                           blinded_tx.wit.vtxoutwit[n].rangeproof)
+                unblind_result = bvout.unblind(blinding_key, blinded_tx.wit.vtxoutwit[n].rangeproof)
 
-                self.assertTrue(unblind_ok)
+                self.assertFalse(unblind_result.error)
                 self.assertEqual(uvout.nValue.to_amount(), unblind_result.amount)
                 self.assertEqual(uvout.nAsset.to_asset().data, unblind_result.asset.data)
 

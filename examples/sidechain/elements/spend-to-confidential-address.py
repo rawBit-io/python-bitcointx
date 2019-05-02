@@ -112,12 +112,12 @@ if __name__ == '__main__':
         blinding_factor = Uint256()
         asset_blinding_factor = Uint256()
     else:
-        ok, result = utxo.unblind(
+        result = utxo.unblind(
             bkey, input_tx.wit.vtxoutwit[utxo_n].rangeproof)
 
-        if not ok:
+        if result.error:
             sys.stderr.write('Cannot unblind vout {} with provided unblinding key: {}\n'
-                             .format(utxo_n, result))
+                             .format(utxo_n, result.error))
             sys.exit(-1)
 
         amount_to_spend = result.amount
@@ -191,7 +191,7 @@ if __name__ == '__main__':
     # our transaction only have one input.
     # output_pubkeys may contain 2 or 3 elements
     # (3 if we added dummy OP_RETURN above)
-    ok, blind_result = tx.blind(
+    blind_result = tx.blind(
         input_descriptors=[
             BlindingInputDescriptor(
                 asset=asset_to_spend,
@@ -202,8 +202,8 @@ if __name__ == '__main__':
         ],
         output_pubkeys=output_pubkeys)
 
-    if not ok:
-        sys.stderr.write('unable to blind: {}'.format(blind_result))
+    if blind_result.error:
+        sys.stderr.write('unable to blind: {}'.format(blind_result.error))
         sys.exit(-1)
 
     num_expected_to_blind = sum(int(pub.is_valid()) for pub in output_pubkeys)
