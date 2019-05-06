@@ -36,16 +36,16 @@ _wallet_class_params = {}  # to be filled by _SetWalletClassParams()
 
 class _WalletClassParamsBase():
     def __new__(cls, *args, **kwargs):
+        if cls not in _wallet_class_params:
+            raise TypeError(
+                'Concrete implementation for {} is not defined for current '
+                'chain parameters'.format(cls.__name__))
         real_class = _wallet_class_params[cls]
         return real_class(*args, **kwargs)
 
 
 class _WalletClassParamsMeta(ABCMeta):
     def __new__(cls, name, bases, dct):
-        if cls not in _wallet_class_params:
-            raise TypeError(
-                'Concrete implementation for {} is not defined for current '
-                'chain parameters'.format(cls.__name__))
         bases = [_WalletClassParamsBase] + list(bases)
         return super(
             _WalletClassParamsMeta, cls
@@ -55,7 +55,7 @@ class _WalletClassParamsMeta(ABCMeta):
         if cls not in _wallet_class_params:
             raise TypeError(
                 'Concrete implementation for {} is not defined for current '
-                'chain parameters'.format(cls.__name__))
+                'chain parameters'.format(name))
         real_class = _wallet_class_params[cls]
         return getattr(real_class, name)
 
@@ -64,19 +64,19 @@ class CCoinAddress(metaclass=_WalletClassParamsMeta):
     pass
 
 
-class P2SHCoinAddress(CCoinAddress):
+class P2SHCoinAddress(metaclass=_WalletClassParamsMeta):
     pass
 
 
-class P2PKHCoinAddress(CCoinAddress):
+class P2PKHCoinAddress(metaclass=_WalletClassParamsMeta):
     pass
 
 
-class P2WSHCoinAddress(CCoinAddress):
+class P2WSHCoinAddress(metaclass=_WalletClassParamsMeta):
     pass
 
 
-class P2WPKHCoinAddress(CCoinAddress):
+class P2WPKHCoinAddress(metaclass=_WalletClassParamsMeta):
     pass
 
 
@@ -99,10 +99,10 @@ class CCoinAddressCommon():
     def set_class_params(cls, script_class=None, address_classes=()):
         if script_class is None and cls._script_class is not None:
             raise ValueError(
-                '{} has no script class parameter set byits superclasses, '
+                '{} has no script class parameter set by its superclasses, '
                 'therefore it should be specified when calling '
                 'set_class_params'.format(cls.__name__))
-        if not isinstance(script_class, CScript):
+        if not issubclass(script_class, CScript):
             raise ValueError(
                 'script parameter should be a subclass of CScript')
 
@@ -229,6 +229,8 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
     """A Base58-encoded coin address"""
 
     base58_prefix = b''
+
+    _address_subclasses = None
     _data_length = None
 
     @classmethod
@@ -553,6 +555,10 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddressCommon,
 # Make CBitcoinAddress behave like a a subclass of CCoinAddress
 # regarding isinstance(script, CCoinAddress), etc
 CCoinAddress.register(CBitcoinAddress)
+P2SHCoinAddress.register(P2SHBitcoinAddress)
+P2PKHCoinAddress.register(P2PKHBitcoinAddress)
+P2WSHCoinAddress.register(P2WSHBitcoinAddress)
+P2WPKHCoinAddress.register(P2WPKHBitcoinAddress)
 
 CBitcoinAddress.set_class_params(
     script_class=CBitcoinScript,
@@ -565,8 +571,7 @@ CBitcoinAddress.set_class_params(
 )
 
 CBitcoinTestnetAddress.set_class_params(
-    # CBitcoinTestnetAddress is a subclass of CBitcoinAddress,
-    # this means script class is already registered, no specify here
+    script_class=CBitcoinScript,
     address_classes=(
         [CBech32BitcoinTestnetAddress,
          (P2WSHBitcoinTestnetAddress, P2WPKHBitcoinTestnetAddress)],

@@ -62,7 +62,8 @@ from bitcointx.core.serialize import (
     ser_read, make_mutable
 )
 from bitcointx.wallet import (
-    CCoinAddress,
+    CCoinAddress, P2SHCoinAddress, P2WSHCoinAddress,
+    P2PKHCoinAddress, P2WPKHCoinAddress,
     CBase58CoinAddressCommon, CBech32CoinAddressCommon,
     CConfidentialAddressError, CCoinAddressCommon,
     P2SHCoinAddressCommon, P2PKHCoinAddressCommon,
@@ -254,9 +255,13 @@ class P2SHElementsSidechainConfidentialAddress(CConfidentialAddressBase,
 # Make CElementsSidechainAddress behave like a a subclass of CCoinAddress
 # regarding isinstance(script, CCoinAddress), etc
 CCoinAddress.register(CElementsSidechainAddress)
+P2SHCoinAddress.register(P2SHElementsSidechainAddress)
+P2PKHCoinAddress.register(P2PKHElementsSidechainAddress)
+P2WSHCoinAddress.register(P2WSHElementsSidechainAddress)
+P2WPKHCoinAddress.register(P2WPKHElementsSidechainAddress)
 
 CCoinAddress.set_class_params(
-    script=CElementsSidechainScript,
+    script_class=CElementsSidechainScript,
     address_classes=(
         #  [CBlech32ElementsSidechainAddress, ()],  XXX not implemented yet
         [CBech32ElementsSidechainAddress,

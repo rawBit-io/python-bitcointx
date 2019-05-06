@@ -18,6 +18,8 @@ Functionality to build scripts, as well as SignatureHash(). Script evaluation
 is in bitcointx.core.scripteval
 """
 
+from abc import ABCMeta
+
 import struct
 import hashlib
 from io import BytesIO
@@ -1112,7 +1114,7 @@ class _ScriptClassParamsBase():
         return real_class(*args, **kwargs)
 
 
-class _ScriptClassParamsMeta(type):
+class _ScriptClassParamsMeta(ABCMeta):
     def __new__(cls, name, bases, dct):
         bases = [_ScriptClassParamsBase] + list(bases)
         return super(_ScriptClassParamsMeta, cls).__new__(cls, name, tuple(bases), dct)
