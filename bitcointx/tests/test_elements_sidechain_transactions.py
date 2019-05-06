@@ -448,6 +448,16 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
                 self.assertFalse(unblind_result.error)
                 self.assertEqual(uvout.nValue.to_amount(), unblind_result.amount)
                 self.assertEqual(uvout.nAsset.to_asset().data, unblind_result.asset.data)
+                descr = unblind_result.get_descriptor()
+
+                self.assertIsInstance(descr, BlindingInputDescriptor)
+                self.assertEqual(descr.amount, unblind_result.amount)
+                self.assertEqual(descr.asset, unblind_result.asset)
+                self.assertEqual(descr.blinding_factor,
+                                 unblind_result.blinding_factor)
+                self.assertEqual(descr.asset_blinding_factor,
+                                 unblind_result.asset_blinding_factor)
+
 
                 ub_info = bundle['unblinded_vout_info'][n]
                 if len(ub_info):

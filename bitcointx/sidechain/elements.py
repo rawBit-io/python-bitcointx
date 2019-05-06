@@ -260,7 +260,7 @@ P2PKHCoinAddress.register(P2PKHElementsSidechainAddress)
 P2WSHCoinAddress.register(P2WSHElementsSidechainAddress)
 P2WPKHCoinAddress.register(P2WPKHElementsSidechainAddress)
 
-CCoinAddress.set_class_params(
+CElementsSidechainAddress.set_class_params(
     script_class=CElementsSidechainScript,
     address_classes=(
         #  [CBlech32ElementsSidechainAddress, ()],  XXX not implemented yet
@@ -1983,37 +1983,41 @@ class BlindingFailure(BlindingOrUnblindingFailure):
     ...
 
 
-class BlindingSuccess(BlindingOrUnblindingSuccess):
-    def __init__(self, *, num_successfully_blinded=None,
-                 blinding_factors=None, asset_blinding_factors=None):
+class BlindingSuccess(BlindingOrUnblindingSuccess,
+                      namedtuple('BlindingSuccess',
+                                 ('num_successfully_blinded',
+                                  'blinding_factors',
+                                  'asset_blinding_factors'))):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
         # For newer python versions, type annotations can be used to
         # enforce correct types.
         # currently we target python3.4 - maybe if we drop support for older
         # python versions, this could be rewritten to use type annotations.
-        assert isinstance(num_successfully_blinded, int)
-        assert all(isinstance(bf, Uint256) for bf in blinding_factors)
-        assert all(isinstance(bf, Uint256) for bf in asset_blinding_factors)
-        self.num_successfully_blinded = num_successfully_blinded
-        self.blinding_factors = blinding_factors
-        self.asset_blinding_factors = asset_blinding_factors
+        assert isinstance(self.num_successfully_blinded, int)
+        assert all(isinstance(bf, Uint256) for bf in self.blinding_factors)
+        assert all(isinstance(bf, Uint256) for bf in self.asset_blinding_factors)
+        super(BlindingSuccess, self).__init__()
 
 
 class UnblindingFailure(BlindingOrUnblindingFailure):
     ...
 
 
-class UnblindingSuccess(BlindingOrUnblindingSuccess):
-    def __init__(self, *, asset=None, amount=None,
-                 blinding_factor=None, asset_blinding_factor=None):
-        assert isinstance(amount, int)
-        assert MoneyRange(amount)
-        assert isinstance(asset, CAsset)
-        assert isinstance(blinding_factor, Uint256)
-        assert isinstance(asset_blinding_factor, Uint256)
-        self.asset = asset
-        self.amount = amount
-        self.blinding_factor = blinding_factor
-        self.asset_blinding_factor = asset_blinding_factor
+class UnblindingSuccess(BlindingOrUnblindingSuccess,
+                        namedtuple('UnblindingSuccess',
+                                   ('asset',
+                                    'amount',
+                                    'blinding_factor',
+                                    'asset_blinding_factor'))):
+    def __init__(self, *args, **kwargs):
+        assert isinstance(self.amount, int)
+        assert MoneyRange(self.amount)
+        assert isinstance(self.asset, CAsset)
+        assert isinstance(self.blinding_factor, Uint256)
+        assert isinstance(self.asset_blinding_factor, Uint256)
+        super(UnblindingSuccess, self).__init__()
 
     def get_descriptor(self):
         return BlindingInputDescriptor(
@@ -2041,4 +2045,8 @@ __all__ = (
     'P2SHElementsSidechainConfidentialAddress',
     'P2PKHElementsSidechainConfidentialAddress',
     'BlindingInputDescriptor',
+    'BlindingSuccess',
+    'BlindingFailure',
+    'UnblindingSuccess',
+    'UnblindingFailure',
 )
