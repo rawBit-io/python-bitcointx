@@ -41,6 +41,8 @@ BREAKING CHANGES:
     Chain params for bitcoin is renamed, instead of mainnet, testnet, regtest
     it is now bitcoin, bitcoin/testnet, bitcoin/mainnet
 
+    CBitcoinSecret is renamed to CBitcoinKey
+
 
 * Elements sidechain support:
 

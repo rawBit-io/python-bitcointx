@@ -68,8 +68,9 @@ from bitcointx.wallet import (
     CConfidentialAddressError, CCoinAddressCommon,
     P2SHCoinAddressCommon, P2PKHCoinAddressCommon,
     P2WSHCoinAddressCommon, P2WPKHCoinAddressCommon,
-    CCoinSecretBase, CCoinExtSecretBase,
-    CConfidentialAddressBase
+    CCoinKeyCommon, CCoinExtKeyCommon,
+    CConfidentialAddressBase,
+    CCoinKey, CCoinExtKey, CCoinExtPubKey
 )
 
 # If this flag is set, the CTxIn including this COutPoint has a CAssetIssuance object.
@@ -154,7 +155,7 @@ class CElementsSidechainScript(CScriptBase):
 CScript.register(CElementsSidechainScript)
 
 
-class CElementsSidechainConfidentialAddressCommon():
+class CElementsSidechainConfidentialAddressCommon:
 
     @classmethod
     def from_unconfidential(cls, unconfidential_adr, blinding_pubkey):
@@ -216,10 +217,11 @@ class CBech32ElementsSidechainAddress(CBech32CoinAddressCommon,
     bech32_hrp = 'ert'
 
 
-class CBech32ElementsSidechainConfidentialAddress(CConfidentialAddressBase,
-                                                  CElementsSidechainConfidentialAddressCommon,
-                                                  CBech32ElementsSidechainAddress):
-    bech32_hrp = 'el'
+# CBlech32Data is not implemented
+# class CBlech32ElementsSidechainConfidentialAddress(CConfidentialAddressBase,
+#                                                   CElementsSidechainConfidentialAddressCommon,
+#                                                   CElementsSidechainAddress):
+#    bech32_hrp = 'el'
 
 
 class P2SHElementsSidechainAddress(P2SHCoinAddressCommon, CBase58ElementsSidechainAddress):
@@ -274,24 +276,24 @@ CElementsSidechainAddress.set_class_params(
     ))
 
 
-class CElementsSidechainSecret(CCoinSecretBase):
+class CElementsSidechainKey(CCoinKeyCommon):
     base58_prefix = bytes([239])
 
 
-class CElementsSidechainExtSecret(CCoinExtSecretBase):
+class CElementsSidechainExtKey(CCoinExtKeyCommon):
     ...
 
 
-class CElementsSidechainExtPubKey(CElementsSidechainExtSecret):
+class CElementsSidechainExtPubKey(CElementsSidechainExtKey):
     base58_prefix = b'\x04\x35\x87\xCF'
     _key_mixin_class = CExtPubKeyMixin
 
 
-class CElementsSidechainExtKey(CElementsSidechainExtSecret):
+class CElementsSidechainExtKey(CElementsSidechainExtKey):
     base58_prefix = b'\x04\x35\x83\x94'
     _key_mixin_class = CExtKeyMixin
     _xpub_class = CElementsSidechainExtPubKey
-    _key_class = CElementsSidechainSecret
+    _key_class = CElementsSidechainKey
 
 
 class CConfidentialCommitmentBase(ImmutableSerializable):
@@ -1611,8 +1613,8 @@ class CoreElementsSidechainParams(CoreMainParams):
 class ElementsSidechainParams(CoreElementsSidechainParams):
     RPC_PORT = 7041
     ADDRESS_CLASS = CElementsSidechainAddress
-    SECRET_CLASS = CElementsSidechainSecret
-    EXT_SECRET_CLASS = CElementsSidechainExtSecret
+    KEY_CLASS = CElementsSidechainKey
+    EXT_KEY_CLASS = CElementsSidechainExtKey
 
 
 def generate_asset_entropy(prevout, contracthash):
@@ -2030,6 +2032,10 @@ def get_chain_params(name):
     assert name == CoreElementsSidechainParams.NAME
     return CoreElementsSidechainParams, ElementsSidechainParams
 
+
+CCoinKey.register(CElementsSidechainKey)
+CCoinExtKey.register(CElementsSidechainExtKey)
+CCoinExtPubKey.register(CElementsSidechainExtPubKey)
 
 __all__ = (
     'get_chain_params',

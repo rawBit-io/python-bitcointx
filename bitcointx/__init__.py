@@ -30,22 +30,22 @@ class _ParamsTag():
 class MainParams(bitcointx.core.CoreMainParams, _ParamsTag):
     RPC_PORT = 8332
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinAddress
-    SECRET_CLASS = bitcointx.wallet.CBitcoinSecret
-    EXT_SECRET_CLASS = bitcointx.wallet.CBitcoinExtSecret
+    KEY_CLASS = bitcointx.wallet.CBitcoinKey
+    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinExtKey
 
 
 class TestNetParams(bitcointx.core.CoreTestNetParams, _ParamsTag):
     RPC_PORT = 18332
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
-    SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetSecret
-    EXT_SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetExtSecret
+    KEY_CLASS = bitcointx.wallet.CBitcoinTestnetKey
+    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinTestnetExtKey
 
 
 class RegTestParams(bitcointx.core.CoreRegTestParams, _ParamsTag):
     RPC_PORT = 18443
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
-    SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetSecret
-    EXT_SECRET_CLASS = bitcointx.wallet.CBitcoinTestnetExtSecret
+    KEY_CLASS = bitcointx.wallet.CBitcoinTestnetKey
+    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinTestnetExtKey
 
 
 """Master global setting for what chain params we're using.
@@ -89,8 +89,8 @@ def SelectAlternativeParams(alt_core_params, alt_main_params):
     bitcointx.core.script._SetScriptClassParams(
         alt_main_params.ADDRESS_CLASS._script_class)
     bitcointx.wallet._SetAddressClassParams(alt_main_params.ADDRESS_CLASS,
-                                            alt_main_params.SECRET_CLASS,
-                                            alt_main_params.EXT_SECRET_CLASS)
+                                            alt_main_params.KEY_CLASS,
+                                            alt_main_params.EXT_KEY_CLASS)
 
     assert(issubclass(alt_main_params, alt_core_params))
 

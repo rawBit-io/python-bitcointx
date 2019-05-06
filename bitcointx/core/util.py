@@ -40,3 +40,12 @@ def _disable_boolean_use(f):
         name = '{}().{}'.format(self.__class__.__name__, f.__name__)
         return _NoBoolCallable(name, value)
     return wrapper
+
+
+def set_frontend_class(frontend_cls, concrete_cls, frontend_class_map):
+    if not issubclass(concrete_cls, frontend_cls):
+        raise ValueError(
+            '{} is was not registered as {} subclass'
+            .format(concrete_cls.__name__, frontend_cls.__name__))
+
+    frontend_class_map[frontend_cls] = concrete_cls

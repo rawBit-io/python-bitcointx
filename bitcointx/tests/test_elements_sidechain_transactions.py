@@ -41,7 +41,7 @@ from bitcointx.sidechain.elements import (
     P2PKHElementsSidechainAddress, P2SHElementsSidechainAddress
 )
 from bitcointx.wallet import (
-    CCoinAddress, CCoinSecret,
+    CCoinAddress, CCoinKey,
     P2PKHCoinAddressCommon, P2SHCoinAddressCommon
 )
 from bitcointx.core.secp256k1 import secp256k1_has_zkp
@@ -477,7 +477,7 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
             scriptPubKey = CScript(x(utxo['scriptPubKey']))
             a = CCoinAddress(utxo['address'])
             if 'privkey' in utxo:
-                privkey = CCoinSecret(utxo['privkey'])
+                privkey = CCoinKey(utxo['privkey'])
                 assert isinstance(a, P2PKHCoinAddressCommon),\
                     "only P2PKH is supported for single-sig"
                 assert a == P2PKHElementsSidechainAddress.from_pubkey(privkey.pub)
@@ -487,7 +487,7 @@ class Test_Elements_CTransaction(ElementsSidechainTestSetupBase, unittest.TestCa
                 sig = privkey.sign(sighash) + bytes([SIGHASH_ALL])
                 tx_to_sign.vin[n].scriptSig = CScript([CScript(sig), CScript(privkey.pub)])
             else:
-                pk_list = [CCoinSecret(pk) for pk in utxo['privkey_list']]
+                pk_list = [CCoinKey(pk) for pk in utxo['privkey_list']]
                 redeem_script = [utxo['num_p2sh_participants']]
                 redeem_script.extend([pk.pub for pk in pk_list])
                 redeem_script.extend([len(pk_list), OP_CHECKMULTISIG])

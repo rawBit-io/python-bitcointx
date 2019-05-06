@@ -20,11 +20,15 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 
 from abc import ABCMeta
 
+
 import bitcointx
 import bitcointx.base58
 import bitcointx.bech32
 import bitcointx.core
-import bitcointx.core.key
+import bitcointx.core.util as util
+from bitcointx.core.key import (
+    CPubKey, CKeyMixin, CExtKeyMixin, CExtPubKeyMixin
+)
 from bitcointx.core.script import (
     CScript, CBitcoinScript, CScriptInvalidError,
     OP_HASH160, OP_DUP, OP_EQUALVERIFY, OP_CHECKSIG, OP_EQUAL
@@ -132,7 +136,7 @@ class CCoinAddressCommon():
             'scriptPubKey is not in a recognized address format')
 
 
-class CConfidentialAddressBase():
+class CConfidentialAddressBase(metaclass=ABCMeta):
     """Base class for all confidential addresses"""
 
     def to_scriptPubKey(self):
@@ -317,8 +321,8 @@ class P2PKHCoinAddressCommon():
                             % pubkey.__class__)
 
         if not accept_invalid:
-            if not isinstance(pubkey, bitcointx.core.key.CPubKey):
-                pubkey = bitcointx.core.key.CPubKey(pubkey)
+            if not isinstance(pubkey, CPubKey):
+                pubkey = CPubKey(pubkey)
             if not pubkey.is_fullyvalid():
                 raise P2PKHCoinAddressError('invalid pubkey')
 
@@ -445,8 +449,8 @@ class P2WPKHCoinAddressCommon():
                             % pubkey.__class__)
 
         if not accept_invalid:
-            if not isinstance(pubkey, bitcointx.core.key.CPubKey):
-                pubkey = bitcointx.core.key.CPubKey(pubkey)
+            if not isinstance(pubkey, CPubKey):
+                pubkey = CPubKey(pubkey)
             if not pubkey.is_fullyvalid():
                 raise P2PKHCoinAddressError('invalid pubkey')
 
@@ -555,6 +559,7 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddressCommon,
 # Make CBitcoinAddress behave like a a subclass of CCoinAddress
 # regarding isinstance(script, CCoinAddress), etc
 CCoinAddress.register(CBitcoinAddress)
+# do the same for more specific front-end classes
 P2SHCoinAddress.register(P2SHBitcoinAddress)
 P2PKHCoinAddress.register(P2PKHBitcoinAddress)
 P2WSHCoinAddress.register(P2WSHBitcoinAddress)
@@ -583,12 +588,11 @@ CBitcoinTestnetAddress.set_class_params(
 )
 
 
-class CCoinSecret(metaclass=_WalletClassParamsMeta):
+class CCoinKey(metaclass=_WalletClassParamsMeta):
     pass
 
 
-class CCoinSecretBase(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.CKeyMixin):
-
+class CCoinKeyCommon(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
     """A base58-encoded secret key
 
     Attributes: (inherited from CKeyMixin):
@@ -598,7 +602,7 @@ class CCoinSecretBase(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.C
 
     is_compressed() - True if compressed
 
-    Note that CCoinSecretBase instance is 33 bytes long if compressed, 32 bytes otherwise
+    Note that CCoinKeyCommon instance is 33 bytes long if compressed, 32 bytes otherwise
     (due to WIF format that states b'\x01' should be appended for compressed keys).
     secret_bytes property is 32 bytes long in both cases.
 
@@ -609,8 +613,8 @@ class CCoinSecretBase(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.C
         if len(data) > 33:
             raise ValueError('data size must not exceed 33 bytes')
         compressed = (len(data) > 32 and data[32] == 1)
-        self = super(CCoinSecretBase, cls).from_bytes(data)
-        bitcointx.core.key.CKeyMixin.__init__(self, None, compressed=compressed)
+        self = super(CCoinKeyCommon, cls).from_bytes(data)
+        CKeyMixin.__init__(self, None, compressed=compressed)
         return self
 
     @classmethod
@@ -618,8 +622,8 @@ class CCoinSecretBase(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.C
         """Create a secret key from a 32-byte secret"""
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
-        self = super(CCoinSecretBase, cls).from_bytes(secret + (b'\x01' if compressed else b''))
-        bitcointx.core.key.CKeyMixin.__init__(self, None, compressed=compressed)
+        self = super(CCoinKeyCommon, cls).from_bytes(secret + (b'\x01' if compressed else b''))
+        CKeyMixin.__init__(self, None, compressed=compressed)
         return self
 
     def to_compressed(self):
@@ -633,99 +637,95 @@ class CCoinSecretBase(bitcointx.base58.CBase58PrefixedData, bitcointx.core.key.C
         return self.__class__.from_secret_bytes(self[:32], False)
 
 
-class CBitcoinSecret(CCoinSecretBase):
+class CBitcoinKey(CCoinKeyCommon):
     base58_prefix = bytes([128])
 
 
-class CBitcoinTestnetSecret(CBitcoinSecret):
+class CBitcoinTestnetKey(CBitcoinKey):
     base58_prefix = bytes([239])
 
 
-class CCoinExtSecret(metaclass=_WalletClassParamsMeta):
+class CCoinExtKey(metaclass=_WalletClassParamsMeta):
     pass
 
 
-class CCoinExtSecretBase(bitcointx.base58.CBase58PrefixedData):
+class CCoinExtPubKey(metaclass=_WalletClassParamsMeta):
+    pass
+
+
+class CCoinExtPubKeyCommon(bitcointx.base58.CBase58PrefixedData,
+                           CExtPubKeyMixin):
+
+    def __init__(self, _s):
+        assert isinstance(self, CExtPubKeyMixin)
+        CExtPubKeyMixin.__init__(self, None)
+
+
+class CCoinExtKeyCommon(bitcointx.base58.CBase58PrefixedData,
+                        CExtKeyMixin):
+
+    def __init__(self, _s):
+        assert isinstance(self, CExtKeyMixin)
+        CExtKeyMixin.__init__(self, None)
+
+
+class CBitcoinExtPubKey(CCoinExtPubKeyCommon):
+    """A base58-encoded extended public key
+
+    Attributes (inherited from CExtPubKeyMixin):
+
+    pub           - The corresponding CPubKey for extended pubkey
+    """
+
+    base58_prefix = b'\x04\x88\xB2\x1E'
+
+
+class CBitcoinExtKey(CCoinExtKeyCommon):
     """A base58-encoded extended key
 
     Attributes (inherited from key mixin class):
 
     pub           - The corresponding CPubKey for extended pubkey
-    priv          - The corresponding CBitcoinSecret for extended privkey
-                    (only present for extended private key class)
+    priv          - The corresponding CBitcoinKey for extended privkey
     """
 
-    base58_prefix = b''
-
-    @classmethod
-    def from_bytes_with_prefix(cls, data):
-        if not cls.base58_prefix:
-            return cls.match_base58_classes(data, (cls._xpriv_class,
-                                                   cls._xpub_class))
-        return super(CCoinExtSecretBase, cls).from_bytes_with_prefix(data)
-
-    @classmethod
-    def from_bytes(cls, data):
-        if not cls.base58_prefix:
-            raise TypeError('from_bytes() method cannot be called on {}, '
-                            'because base58_prefix is not defined for it'
-                            .format(cls.__name__))
-        return super(CCoinExtSecretBase, cls).from_bytes(data)
-
-    def __init__(self, _s):
-        assert isinstance(self, self.__class__._key_mixin_class)
-        self.__class__._key_mixin_class.__init__(self, None)
+    base58_prefix = b'\x04\x88\xAD\xE4'
+    _xpub_class = CBitcoinExtPubKey
+    _key_class = CBitcoinKey
 
 
-class CCoinExtPubKeyCommon(bitcointx.core.key.CExtPubKeyMixin):
-    _key_mixin_class = bitcointx.core.key.CExtPubKeyMixin
-
-
-class CCoinExtKeyCommon(bitcointx.core.key.CExtKeyMixin):
-    _key_mixin_class = bitcointx.core.key.CExtKeyMixin
-
-
-class CBitcoinExtSecret(CCoinExtSecretBase):
-    ...
-
-
-class CBitcoinTestnetExtSecret(CBitcoinExtSecret):
-    ...
-
-
-class CBitcoinExtPubKey(CBitcoinExtSecret, CCoinExtPubKeyCommon):
-    base58_prefix = b'\x04\x88\xB2\x1E'
-
-
-class CBitcoinTestnetExtPubKey(CBitcoinTestnetExtSecret, CCoinExtPubKeyCommon):
+class CBitcoinTestnetExtPubKey(CBitcoinExtPubKey):
     base58_prefix = b'\x04\x35\x87\xCF'
 
 
-class CBitcoinExtKey(CBitcoinExtSecret, CCoinExtKeyCommon):
-    base58_prefix = b'\x04\x88\xAD\xE4'
-
-
-CBitcoinExtSecret._xpriv_class = CBitcoinExtKey
-CBitcoinExtSecret._xpub_class = CBitcoinExtPubKey
-CBitcoinExtSecret._key_class = CBitcoinSecret
-
-
-class CBitcoinTestnetExtKey(CBitcoinTestnetExtSecret):
+class CBitcoinTestnetExtKey(CBitcoinExtKey):
     base58_prefix = b'\x04\x35\x83\x94'
+    _xpub_class = CBitcoinTestnetExtPubKey
+    _key_class = CBitcoinTestnetKey
 
 
-CBitcoinTestnetExtSecret._xpriv_class = CBitcoinTestnetExtKey
-CBitcoinTestnetExtSecret._xpub_class = CBitcoinTestnetExtPubKey
-CBitcoinTestnetExtSecret._key_class = CBitcoinTestnetSecret
+CCoinKey.register(CBitcoinKey)
+CCoinKey.register(CBitcoinTestnetKey)
+CCoinExtKey.register(CBitcoinExtKey)
+CCoinExtKey.register(CBitcoinTestnetExtKey)
+CCoinExtPubKey.register(CBitcoinExtPubKey)
+CCoinExtPubKey.register(CBitcoinTestnetExtPubKey)
+
+CBitcoinSecret = CBitcoinKey
 
 
-def _SetAddressClassParams(address_cls, secret_cls, ext_secret_cls):
-    _wallet_class_params[CCoinAddress] = address_cls
-    _wallet_class_params[CCoinSecret] = secret_cls
-    _wallet_class_params[CCoinExtSecret] = ext_secret_cls
+def _SetAddressClassParams(address_cls, key_cls, xpriv_cls):
+    def set_frontend_class(frontend_cls, concrete_cls):
+        util.set_frontend_class(frontend_cls, concrete_cls,
+                                _wallet_class_params)
+
+    set_frontend_class(CCoinAddress, address_cls)
+    set_frontend_class(CCoinKey, key_cls)
+    set_frontend_class(CCoinExtKey, xpriv_cls)
+    set_frontend_class(CCoinExtPubKey, xpriv_cls._xpub_class)
 
 
-_SetAddressClassParams(CBitcoinAddress, CBitcoinSecret, CBitcoinExtSecret)
+_SetAddressClassParams(CBitcoinAddress, CBitcoinKey, CBitcoinExtKey)
 
 __all__ = (
     'CCoinAddressError',
@@ -754,7 +754,11 @@ __all__ = (
     'P2PKHBitcoinTestnetAddress',
     'P2WSHBitcoinTestnetAddress',
     'P2WPKHBitcoinTestnetAddress',
-    'CBitcoinSecret',
+    'CBitcoinSecret',  # for compatibility
+    'CBitcoinKey',
     'CBitcoinExtKey',
     'CBitcoinExtPubKey',
+    'CBitcoinTestnetKey',
+    'CBitcoinTestnetExtKey',
+    'CBitcoinTestnetExtPubKey',
 )

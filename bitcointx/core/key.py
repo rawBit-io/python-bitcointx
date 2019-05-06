@@ -527,9 +527,9 @@ class CExtKeyMixin(CExtKeyBase):
             raise ValueError('The byte before private key data should be 0')
         raw_priv = self.key_bytes[1:]
 
-        # NOTE: cannot make self.priv a @property method
-        # because we need to check if the privkey is valid
-        # CKey() will do this for us.
+        # NOTE: no need to make self.priv a @property method
+        # because we need to pre-check if the privkey is valid now, anyway
+        # CKey() will do this for us, and we can just set the priv attribute.
         self.priv = self._key_class.from_secret_bytes(raw_priv)
 
     @property
