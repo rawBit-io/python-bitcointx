@@ -46,7 +46,7 @@ from bitcointx.core.key import (
     CKey, CKeyMixin, CPubKey, CExtPubKeyMixin, CExtKeyMixin
 )
 from bitcointx.core.script import (
-    CScriptBase, CScriptWitness,
+    CScript, CScriptBase, CScriptWitness,
     SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
     RawBitcoinSignatureHash,
     SIGHASH_NONE,
@@ -62,6 +62,7 @@ from bitcointx.core.serialize import (
     ser_read, make_mutable
 )
 from bitcointx.wallet import (
+    CCoinAddress,
     CBase58CoinAddressCommon, CBech32CoinAddressCommon,
     CConfidentialAddressError, CCoinAddressCommon,
     P2SHCoinAddressCommon, P2PKHCoinAddressCommon,
@@ -145,6 +146,11 @@ class CElementsSidechainScript(CScriptBase):
     @_disable_boolean_use
     def is_pegout(self):
         return self.get_pegout_data() is not None
+
+
+# Make CElementsSidechainScript behave like a a subclass of CScript
+# regarding isinstance(script, CScript), etc
+CScript.register(CElementsSidechainScript)
 
 
 class CElementsSidechainConfidentialAddressCommon():
@@ -245,23 +251,22 @@ class P2SHElementsSidechainConfidentialAddress(CConfidentialAddressBase,
     _unconfidential_address_class = P2SHElementsSidechainAddress
 
 
-CElementsSidechainAddress._script_class = CElementsSidechainScript
-CElementsSidechainAddress._address_encoding_classes = (
-    CBech32ElementsSidechainConfidentialAddress,
-    CBech32ElementsSidechainAddress,
-    CBase58ElementsSidechainAddress
-)
-CBase58ElementsSidechainAddress._address_classes = (
-    P2SHElementsSidechainAddress, P2PKHElementsSidechainAddress,
-    P2SHElementsSidechainConfidentialAddress,
-    P2PKHElementsSidechainConfidentialAddress
-)
-CBech32ElementsSidechainAddress._address_classes = (
-    P2WSHElementsSidechainAddress, P2WPKHElementsSidechainAddress
-)
-CBech32ElementsSidechainConfidentialAddress._address_classes = (
-    # XXX not implemented yet
-)
+# Make CElementsSidechainAddress behave like a a subclass of CCoinAddress
+# regarding isinstance(script, CCoinAddress), etc
+CCoinAddress.register(CElementsSidechainAddress)
+
+CCoinAddress.set_class_params(
+    script=CElementsSidechainScript,
+    address_classes=(
+        #  [CBlech32ElementsSidechainAddress, ()],  XXX not implemented yet
+        [CBech32ElementsSidechainAddress,
+         (P2WSHElementsSidechainAddress, P2WPKHElementsSidechainAddress)],
+        [CBase58ElementsSidechainAddress,
+         (P2SHElementsSidechainAddress,
+          P2PKHElementsSidechainAddress,
+          P2SHElementsSidechainConfidentialAddress,
+          P2PKHElementsSidechainConfidentialAddress)]
+    ))
 
 
 class CElementsSidechainSecret(CCoinSecretBase):

@@ -42,8 +42,10 @@ class Test_CCoinAddress(unittest.TestCase):
         for paramclass in paramclasses:
             top_aclass = paramclass.ADDRESS_CLASS
             script_class = top_aclass._script_class
+            self.assertIsInstance(script_class, CScript)
             for enclass in top_aclass._address_encoding_classes:
-                for aclass in enclass._address_classes:
+                for aclass in enclass._address_subclasses:
+                    self.assertIsInstance(aclass, CCoinAddress)
                     caclass = None
                     if getattr(aclass, 'from_unconfidential', None):
                         caclass = aclass

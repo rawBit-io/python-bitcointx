@@ -1142,6 +1142,10 @@ def _SetScriptClassParams(script_cls):
     _script_class_params[CScript] = script_cls
 
 
+# Make CBitcoinScript behave like a a subclass of CScript
+# regarding isinstance(script, CScript), etc
+CScript.register(CBitcoinScript)
+
 _SetScriptClassParams(CBitcoinScript)
 
 __all__ = (
