@@ -19,7 +19,7 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 # pylama:ignore=E501,E221
 
 from abc import ABCMeta
-
+from threading import local
 
 import bitcointx
 import bitcointx.base58
@@ -35,52 +35,28 @@ from bitcointx.core.script import (
 )
 
 
-_wallet_class_params = {}  # to be filled by _SetWalletClassParams()
+_frontend_class_store = local()
+_frontend_class_meta = util.make_frontend_metaclass('_Wallet',
+                                                    _frontend_class_store)
 
 
-class _WalletClassParamsBase():
-    def __new__(cls, *args, **kwargs):
-        if cls not in _wallet_class_params:
-            raise TypeError(
-                'Concrete implementation for {} is not defined for current '
-                'chain parameters'.format(cls.__name__))
-        real_class = _wallet_class_params[cls]
-        return real_class(*args, **kwargs)
-
-
-class _WalletClassParamsMeta(ABCMeta):
-    def __new__(cls, name, bases, dct):
-        bases = [_WalletClassParamsBase] + list(bases)
-        return super(
-            _WalletClassParamsMeta, cls
-        ).__new__(cls, name, tuple(bases), dct)
-
-    def __getattr__(cls, name):
-        if cls not in _wallet_class_params:
-            raise TypeError(
-                'Concrete implementation for {} is not defined for current '
-                'chain parameters'.format(name))
-        real_class = _wallet_class_params[cls]
-        return getattr(real_class, name)
-
-
-class CCoinAddress(metaclass=_WalletClassParamsMeta):
+class CCoinAddress(metaclass=_frontend_class_meta):
     pass
 
 
-class P2SHCoinAddress(metaclass=_WalletClassParamsMeta):
+class P2SHCoinAddress(metaclass=_frontend_class_meta):
     pass
 
 
-class P2PKHCoinAddress(metaclass=_WalletClassParamsMeta):
+class P2PKHCoinAddress(metaclass=_frontend_class_meta):
     pass
 
 
-class P2WSHCoinAddress(metaclass=_WalletClassParamsMeta):
+class P2WSHCoinAddress(metaclass=_frontend_class_meta):
     pass
 
 
-class P2WPKHCoinAddress(metaclass=_WalletClassParamsMeta):
+class P2WPKHCoinAddress(metaclass=_frontend_class_meta):
     pass
 
 
@@ -588,7 +564,7 @@ CBitcoinTestnetAddress.set_class_params(
 )
 
 
-class CCoinKey(metaclass=_WalletClassParamsMeta):
+class CCoinKey(metaclass=_frontend_class_meta):
     pass
 
 
@@ -645,11 +621,11 @@ class CBitcoinTestnetKey(CBitcoinKey):
     base58_prefix = bytes([239])
 
 
-class CCoinExtKey(metaclass=_WalletClassParamsMeta):
+class CCoinExtKey(metaclass=_frontend_class_meta):
     pass
 
 
-class CCoinExtPubKey(metaclass=_WalletClassParamsMeta):
+class CCoinExtPubKey(metaclass=_frontend_class_meta):
     pass
 
 
@@ -717,7 +693,7 @@ CBitcoinSecret = CBitcoinKey
 def _SetAddressClassParams(address_cls, key_cls, xpriv_cls):
     def set_frontend_class(frontend_cls, concrete_cls):
         util.set_frontend_class(frontend_cls, concrete_cls,
-                                _wallet_class_params)
+                                _frontend_class_store)
 
     set_frontend_class(CCoinAddress, address_cls)
     set_frontend_class(CCoinKey, key_cls)

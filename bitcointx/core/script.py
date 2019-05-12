@@ -18,20 +18,23 @@ Functionality to build scripts, as well as SignatureHash(). Script evaluation
 is in bitcointx.core.scripteval
 """
 
-from abc import ABCMeta
-
 import struct
 import hashlib
 from io import BytesIO
+from threading import local
 
 import bitcointx.core
 import bitcointx.core._bignum
 
 from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
 
-from .util import _disable_boolean_use
+from .util import (
+    make_frontend_metaclass, disable_boolean_use, set_frontend_class
+)
 
-_script_class_params = {}  # to be filled by _SetScriptClassParams()
+_frontend_class_store = local()
+_frontend_class_meta = make_frontend_metaclass('_Script',
+                                               _frontend_class_store)
 
 MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
@@ -84,7 +87,7 @@ class CScriptOp(int):
 
         return int(self - OP_1+1)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_small_int(self):
         """Return true if the op pushes a small integer to the stack"""
         if 0x51 <= self <= 0x60 or self == 0:
@@ -677,7 +680,7 @@ class CScriptBase(bytes):
 
         return "CScript([%s])" % ', '.join(ops)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_p2sh(self):
         """Test if the script is a p2sh scriptPubKey
 
@@ -688,7 +691,7 @@ class CScriptBase(bytes):
                 self[1] == 0x14 and
                 self[22] == OP_EQUAL)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_witness_scriptpubkey(self):
         """Returns true if this is a scriptpubkey signaling segregated witness data.
 
@@ -716,27 +719,27 @@ class CScriptBase(bytes):
         """Returns the witness program"""
         return self[2:]
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_witness_v0_keyhash(self):
         """Returns true if this is a scriptpubkey for V0 P2WPKH. """
         return len(self) == 22 and self[0:2] == b'\x00\x14'
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_witness_v0_nested_keyhash(self):
         """Returns true if this is a scriptSig for V0 P2WPKH embedded in P2SH. """
         return len(self) == 23 and self[0:3] == b'\x16\x00\x14'
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_witness_v0_scripthash(self):
         """Returns true if this is a scriptpubkey for V0 P2WSH. """
         return len(self) == 34 and self[0:2] == b'\x00\x20'
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_witness_v0_nested_scripthash(self):
         """Returns true if this is a scriptSig for V0 P2WSH embedded in P2SH. """
         return len(self) == 35 and self[0:3] == b'\x22\x00\x20'
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_push_only(self):
         """Test if the script only contains pushdata ops
 
@@ -785,12 +788,12 @@ class CScriptBase(bytes):
             return False
         return True
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_unspendable(self):
         """Test if the script is provably unspendable"""
         return (len(self) > 0 and self[0] == OP_RETURN) or len(self) > MAX_SCRIPT_SIZE
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_valid(self):
         """Return True if the script is valid, False otherwise
 
@@ -886,7 +889,7 @@ class CScriptWitness(ImmutableSerializable):
     def __repr__(self):
         return 'CScriptWitness([' + ','.join("x('%s')" % bitcointx.core.b2x(s) for s in self.stack) + '])'
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_null(self):
         return len(self.stack) == 0
 
@@ -1108,23 +1111,7 @@ def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION
     return h
 
 
-class _ScriptClassParamsBase():
-    def __new__(cls, *args, **kwargs):
-        real_class = _script_class_params[cls]
-        return real_class(*args, **kwargs)
-
-
-class _ScriptClassParamsMeta(ABCMeta):
-    def __new__(cls, name, bases, dct):
-        bases = [_ScriptClassParamsBase] + list(bases)
-        return super(_ScriptClassParamsMeta, cls).__new__(cls, name, tuple(bases), dct)
-
-    def __getattr__(cls, name):
-        real_class = _script_class_params[cls]
-        return getattr(real_class, name)
-
-
-class CScript(metaclass=_ScriptClassParamsMeta):
+class CScript(metaclass=_frontend_class_meta):
     pass
 
 
@@ -1141,7 +1128,7 @@ class CBitcoinScript(CScriptBase):
 
 
 def _SetScriptClassParams(script_cls):
-    _script_class_params[CScript] = script_cls
+    set_frontend_class(CScript, script_cls, _frontend_class_store)
 
 
 # Make CBitcoinScript behave like a a subclass of CScript

@@ -41,7 +41,7 @@ from bitcointx.core import (
     CTxInBase, CTxOutBase, COutPoint, CMutableOutPoint,
     CImmutableTransactionBase, CMutableTransactionBase,
 )
-from bitcointx.core.util import _disable_boolean_use
+from bitcointx.core.util import disable_boolean_use
 from bitcointx.core.key import (
     CKey, CKeyMixin, CPubKey, CExtPubKeyMixin, CExtKeyMixin
 )
@@ -99,7 +99,7 @@ class CElementsSidechainScript(CScriptBase):
     def derive_blinding_key(self, blinding_derivation_key):
         return derive_blinding_key(blinding_derivation_key, self)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_unspendable(self):
         if len(self) == 0:
             return True
@@ -145,7 +145,7 @@ class CElementsSidechainScript(CScriptBase):
 
         return (genesis_hash, pegout_scriptpubkey)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_pegout(self):
         return self.get_pegout_data() is not None
 
@@ -334,21 +334,21 @@ class CConfidentialCommitmentBase(ImmutableSerializable):
         else:
             f.write(bytes([0]))
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_null(self):
         return not len(self.commitment)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_explicit(self):
         return (len(self.commitment) == self._explicitSize
                 and self.commitment[0] == 1)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_commitment(self):
         return (len(self.commitment) == self._committedSize
                 and self.commitment[0] in (self._prefixA, self._prefixB))
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_valid(self):
         return self.is_null() or self.is_explicit() or self.is_commitment()
 
@@ -473,7 +473,7 @@ class CElementsSidechainTxInWitness(CTxInWitnessBase, ReprOrStrMixin):
         # exists in reference client code, and is retained here.
         object.__setattr__(self, 'pegin_witness', pegin_witness)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_null(self):
         return (not len(self.issuanceAmountRangeproof)
                 and not len(self.inflationKeysRangeproof)
@@ -546,7 +546,7 @@ class CElementsSidechainTxOutWitness(CTxOutWitnessBase):
         object.__setattr__(self, 'surjectionproof', CElementsSidechainScript(surjectionproof))
         object.__setattr__(self, 'rangeproof', CElementsSidechainScript(rangeproof))
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_null(self):
         return not len(self.surjectionproof) and not len(self.rangeproof)
 
@@ -635,7 +635,7 @@ class CElementsSidechainTxWitness(CTxWitnessBase, ReprOrStrMixin):
                                  else self._txout_witness_class.from_txout_witness(w)
                                  for w in vtxoutwit))
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_null(self):
         for n in range(len(self.vtxinwit)):
             if not self.vtxinwit[n].is_null():
@@ -721,7 +721,7 @@ class CAssetIssuance(ImmutableSerializable, ReprOrStrMixin):
         object.__setattr__(self, 'nAmount', nAmount)
         object.__setattr__(self, 'nInflationKeys', nInflationKeys)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_null(self):
         return self.nAmount.is_null() and self.nInflationKeys.is_null()
 
@@ -900,12 +900,12 @@ class CElementsSidechainTxOut(CTxOutBase, ReprOrStrMixin):
         self.nNonce.stream_serialize(f)
         BytesSerializer.stream_serialize(self.scriptPubKey, f)
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_null(self):
         return (self.nAsset.is_null() and self.nValue.is_null()
                 and self.nNonce.is_null() and not len(self.scriptPubKey))
 
-    @_disable_boolean_use
+    @disable_boolean_use
     def is_fee(self):
         return (not len(self.scriptPubKey)
                 and self.nValue.is_explicit()
