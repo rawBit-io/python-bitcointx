@@ -617,6 +617,11 @@ class CBitcoinKey(CCoinKeyCommon):
     base58_prefix = bytes([128])
 
 
+class CBitcoinSecret(CBitcoinKey):
+    """this class is retained for backward compatibility.
+    might be deprecated in the future."""
+
+
 class CBitcoinTestnetKey(CBitcoinKey):
     base58_prefix = bytes([239])
 
@@ -687,8 +692,6 @@ CCoinExtKey.register(CBitcoinTestnetExtKey)
 CCoinExtPubKey.register(CBitcoinExtPubKey)
 CCoinExtPubKey.register(CBitcoinTestnetExtPubKey)
 
-CBitcoinSecret = CBitcoinKey
-
 
 def _SetAddressClassParams(address_cls, key_cls, xpriv_cls):
     def sfc(frontend_cls, concrete_cls):
@@ -729,7 +732,7 @@ __all__ = (
     'P2PKHBitcoinTestnetAddress',
     'P2WSHBitcoinTestnetAddress',
     'P2WPKHBitcoinTestnetAddress',
-    'CBitcoinSecret',  # for compatibility
+    'CBitcoinSecret',  # for backward compatibility
     'CBitcoinKey',
     'CBitcoinExtKey',
     'CBitcoinExtPubKey',
