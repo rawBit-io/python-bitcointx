@@ -14,6 +14,7 @@
 import binascii
 import struct
 from abc import ABCMeta, abstractmethod
+from threading import local
 
 from . import script
 
@@ -24,7 +25,9 @@ from .serialize import (
     Hash, Hash160, make_mutable
 )
 
-from .util import disable_boolean_use
+from .util import (
+    disable_boolean_use, make_frontend_metaclass, set_frontend_class
+)
 
 # Core definitions
 COIN = 100000000
@@ -36,7 +39,9 @@ BIP32_HARDENED_KEY_LIMIT = 0x80000000
 WITNESS_SCALE_FACTOR = 4
 
 
-_transaction_class_params = {}  # to be filled by _SetTransactionClassParams()
+_frontend_class_store = local()
+_frontend_class_meta = make_frontend_metaclass('_Transaction',
+                                               _frontend_class_store)
 
 
 def MoneyRange(nValue, params=None):
@@ -868,68 +873,67 @@ def GetLegacySigOpCount(tx):
     return nSigOps
 
 
-class _TransactionClassParamsBase():
-    def __new__(cls, *args, **kwargs):
-        real_class = _transaction_class_params[cls]
-        return real_class(*args, **kwargs)
-
-
-class _TransactionClassParamsMeta(type):
-    def __new__(cls, name, bases, dct):
-        bases = [_TransactionClassParamsBase] + list(bases)
-        return super(_TransactionClassParamsMeta, cls).__new__(cls, name, tuple(bases), dct)
-
-    def __getattr__(cls, name):
-        real_class = _transaction_class_params[cls]
-        return getattr(real_class, name)
-
-
-class CTransaction(metaclass=_TransactionClassParamsMeta):
+class CTransaction(metaclass=_frontend_class_meta):
     pass
 
 
-class CMutableTransaction(metaclass=_TransactionClassParamsMeta):
+class CMutableTransaction(metaclass=_frontend_class_meta):
     pass
 
 
-class CTxWitness(metaclass=_TransactionClassParamsMeta):
+class CTxWitness(metaclass=_frontend_class_meta):
     pass
 
 
-class CMutableTxWitness(metaclass=_TransactionClassParamsMeta):
+class CMutableTxWitness(metaclass=_frontend_class_meta):
     pass
 
 
-class CTxInWitness(metaclass=_TransactionClassParamsMeta):
+class CTxInWitness(metaclass=_frontend_class_meta):
     pass
 
 
-class CMutableTxInWitness(metaclass=_TransactionClassParamsMeta):
+class CMutableTxInWitness(metaclass=_frontend_class_meta):
     pass
 
 
-class CTxOutWitness(metaclass=_TransactionClassParamsMeta):
+class CTxOutWitness(metaclass=_frontend_class_meta):
     pass
 
 
-class CMutableTxOutWitness(metaclass=_TransactionClassParamsMeta):
+class CMutableTxOutWitness(metaclass=_frontend_class_meta):
     pass
 
 
-class CTxIn(metaclass=_TransactionClassParamsMeta):
+class CTxIn(metaclass=_frontend_class_meta):
     pass
 
 
-class CMutableTxIn(metaclass=_TransactionClassParamsMeta):
+class CMutableTxIn(metaclass=_frontend_class_meta):
     pass
 
 
-class CTxOut(metaclass=_TransactionClassParamsMeta):
+class CTxOut(metaclass=_frontend_class_meta):
     pass
 
 
-class CMutableTxOut(metaclass=_TransactionClassParamsMeta):
+class CMutableTxOut(metaclass=_frontend_class_meta):
     pass
+
+
+CTransaction.register(CBitcoinTransaction)
+CTxIn.register(CBitcoinTxIn)
+CTxOut.register(CBitcoinTxOut)
+CTxWitness.register(CBitcoinTxWitness)
+CTxInWitness.register(CBitcoinTxInWitness)
+CTxOutWitness.register(_CBitcoinDummyTxOutWitness)
+
+CMutableTransaction.register(CBitcoinMutableTransaction)
+CMutableTxIn.register(CBitcoinMutableTxIn)
+CMutableTxOut.register(CBitcoinMutableTxOut)
+CMutableTxWitness.register(CBitcoinMutableTxWitness)
+CMutableTxInWitness.register(CBitcoinMutableTxInWitness)
+CMutableTxOutWitness.register(_CBitcoinDummyTxOutWitness)
 
 
 def _SetTransactionClassParams(transaction_class):
@@ -937,19 +941,22 @@ def _SetTransactionClassParams(transaction_class):
     mut_class = transaction_class._inverted_mutability_class
     mut_class._inverted_mutability_class = imm_class
 
-    _transaction_class_params[CTransaction] = imm_class
-    _transaction_class_params[CTxIn] = imm_class._txin_class
-    _transaction_class_params[CTxOut] = imm_class._txout_class
-    _transaction_class_params[CTxWitness] = imm_class._witness_class
-    _transaction_class_params[CTxInWitness] = imm_class._witness_class._txin_witness_class
-    _transaction_class_params[CTxOutWitness] = imm_class._witness_class._txout_witness_class
+    def sfc(frontend_cls, concrete_cls):
+        set_frontend_class(frontend_cls, concrete_cls, _frontend_class_store)
 
-    _transaction_class_params[CMutableTransaction] = mut_class
-    _transaction_class_params[CMutableTxIn] = mut_class._txin_class
-    _transaction_class_params[CMutableTxOut] = mut_class._txout_class
-    _transaction_class_params[CMutableTxWitness] = mut_class._witness_class
-    _transaction_class_params[CMutableTxInWitness] = mut_class._witness_class._txin_witness_class
-    _transaction_class_params[CMutableTxOutWitness] = mut_class._witness_class._txout_witness_class
+    sfc(CTransaction, imm_class)
+    sfc(CTxIn, imm_class._txin_class)
+    sfc(CTxOut, imm_class._txout_class)
+    sfc(CTxWitness, imm_class._witness_class)
+    sfc(CTxInWitness, imm_class._witness_class._txin_witness_class)
+    sfc(CTxOutWitness, imm_class._witness_class._txout_witness_class)
+
+    sfc(CMutableTransaction, mut_class)
+    sfc(CMutableTxIn, mut_class._txin_class)
+    sfc(CMutableTxOut, mut_class._txout_class)
+    sfc(CMutableTxWitness, mut_class._witness_class)
+    sfc(CMutableTxInWitness, mut_class._witness_class._txin_witness_class)
+    sfc(CMutableTxOutWitness, mut_class._witness_class._txout_witness_class)
 
 
 _SetTransactionClassParams(CBitcoinTransaction)

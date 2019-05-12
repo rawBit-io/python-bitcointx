@@ -25,7 +25,7 @@ import bitcointx
 import bitcointx.base58
 import bitcointx.bech32
 import bitcointx.core
-import bitcointx.core.util as util
+from bitcointx.core.util import make_frontend_metaclass, set_frontend_class
 from bitcointx.core.key import (
     CPubKey, CKeyMixin, CExtKeyMixin, CExtPubKeyMixin
 )
@@ -36,8 +36,8 @@ from bitcointx.core.script import (
 
 
 _frontend_class_store = local()
-_frontend_class_meta = util.make_frontend_metaclass('_Wallet',
-                                                    _frontend_class_store)
+_frontend_class_meta = make_frontend_metaclass('_Wallet',
+                                               _frontend_class_store)
 
 
 class CCoinAddress(metaclass=_frontend_class_meta):
@@ -691,14 +691,13 @@ CBitcoinSecret = CBitcoinKey
 
 
 def _SetAddressClassParams(address_cls, key_cls, xpriv_cls):
-    def set_frontend_class(frontend_cls, concrete_cls):
-        util.set_frontend_class(frontend_cls, concrete_cls,
-                                _frontend_class_store)
+    def sfc(frontend_cls, concrete_cls):
+        set_frontend_class(frontend_cls, concrete_cls, _frontend_class_store)
 
-    set_frontend_class(CCoinAddress, address_cls)
-    set_frontend_class(CCoinKey, key_cls)
-    set_frontend_class(CCoinExtKey, xpriv_cls)
-    set_frontend_class(CCoinExtPubKey, xpriv_cls._xpub_class)
+    sfc(CCoinAddress, address_cls)
+    sfc(CCoinKey, key_cls)
+    sfc(CCoinExtKey, xpriv_cls)
+    sfc(CCoinExtPubKey, xpriv_cls._xpub_class)
 
 
 _SetAddressClassParams(CBitcoinAddress, CBitcoinKey, CBitcoinExtKey)

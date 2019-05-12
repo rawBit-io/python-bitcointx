@@ -40,6 +40,11 @@ from bitcointx.core import (
     CTxWitnessBase, CTxInWitnessBase, CTxOutWitnessBase,
     CTxInBase, CTxOutBase, COutPoint, CMutableOutPoint,
     CImmutableTransactionBase, CMutableTransactionBase,
+
+    CTransaction, CTxIn, CTxOut, CTxWitness, CTxInWitness, CTxOutWitness,
+
+    CMutableTransaction, CMutableTxIn, CMutableTxOut, CMutableTxWitness,
+    CMutableTxInWitness, CMutableTxOutWitness,
 )
 from bitcointx.core.util import disable_boolean_use
 from bitcointx.core.key import (
@@ -2036,6 +2041,20 @@ def get_chain_params(name):
 CCoinKey.register(CElementsSidechainKey)
 CCoinExtKey.register(CElementsSidechainExtKey)
 CCoinExtPubKey.register(CElementsSidechainExtPubKey)
+
+CTransaction.register(CElementsSidechainTransaction)
+CTxIn.register(CElementsSidechainTxIn)
+CTxOut.register(CElementsSidechainTxOut)
+CTxWitness.register(CElementsSidechainTxWitness)
+CTxInWitness.register(CElementsSidechainTxInWitness)
+CTxOutWitness.register(CElementsSidechainTxOutWitness)
+
+CMutableTransaction.register(CElementsSidechainMutableTransaction)
+CMutableTxIn.register(CElementsSidechainMutableTxIn)
+CMutableTxOut.register(CElementsSidechainMutableTxOut)
+CMutableTxWitness.register(CElementsSidechainMutableTxWitness)
+CMutableTxInWitness.register(CElementsSidechainMutableTxInWitness)
+CMutableTxOutWitness.register(CElementsSidechainTxOutWitness)
 
 __all__ = (
     'get_chain_params',
