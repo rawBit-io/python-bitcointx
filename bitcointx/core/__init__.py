@@ -775,7 +775,7 @@ class CoreChainParamsBase(object):
 
 class CoreMainParams(CoreChainParamsBase, _ParamsTag):
     MAX_MONEY = 21000000 * COIN
-    NAME = 'bitcoin'
+    NAME = 'bitcoin/mainnet'
     READABLE_NAME = 'Bitcoin'
     TRANSACTION_CLASS = CBitcoinTransaction
 
