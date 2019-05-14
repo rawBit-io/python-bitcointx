@@ -32,9 +32,8 @@ from .util import (
     make_frontend_metaclass, disable_boolean_use, set_frontend_class
 )
 
-_frontend_class_store = local()
-_frontend_class_meta = make_frontend_metaclass('_Script',
-                                               _frontend_class_store)
+_thread_local = local()
+_frontend_metaclass = make_frontend_metaclass('_Script', _thread_local)
 
 MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
@@ -1111,7 +1110,7 @@ def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION
     return h
 
 
-class CScript(metaclass=_frontend_class_meta):
+class CScript(metaclass=_frontend_metaclass):
     pass
 
 
@@ -1128,7 +1127,7 @@ class CBitcoinScript(CScriptBase):
 
 
 def _SetScriptClassParams(script_cls):
-    set_frontend_class(CScript, script_cls, _frontend_class_store)
+    set_frontend_class(CScript, script_cls, _thread_local)
 
 
 # Make CBitcoinScript behave like a a subclass of CScript

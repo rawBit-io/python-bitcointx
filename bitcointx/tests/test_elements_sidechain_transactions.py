@@ -74,12 +74,12 @@ class ElementsSidechainTestSetupBase():
     @classmethod
     def setUpClass(cls):
         logging.basicConfig()
-        cls._prev_chain = bitcointx.params.NAME
-        bitcointx.SelectParams('sidechain/elements')
+        cls._prev_chain_params = bitcointx.CurrentChainParams()
+        bitcointx.SelectChainParams('sidechain/elements')
 
     @classmethod
     def tearDownClass(cls):
-        bitcointx.SelectParams(cls._prev_chain)
+        bitcointx.SelectChainParams(cls._prev_chain_params)
 
 
 class Test_CTxIn(ElementsSidechainTestSetupBase, unittest.TestCase):

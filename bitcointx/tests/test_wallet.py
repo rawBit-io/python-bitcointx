@@ -37,8 +37,8 @@ class Test_CCoinAddress(unittest.TestCase):
 
     def test_address_implementations(self):
         pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
-        paramclasses = list(bitcointx._ParamsTag.__subclasses__())
-        paramclasses.append(ElementsSidechainParams)
+        paramclasses = bitcointx.ChainParamsMeta.get_registered_chain_params()
+        assert any(issubclass(p, ElementsSidechainParams) for p in paramclasses)
         for paramclass in paramclasses:
             top_aclass = paramclass.ADDRESS_CLASS
             script_class = top_aclass._script_class

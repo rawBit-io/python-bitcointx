@@ -9,11 +9,13 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+# pylama:ignore=E501,E201
 
 import unittest
 
-from bitcointx.core import *
+from bitcointx import BitcoinMainNetParams
+from bitcointx.core import str_money_value, MoneyRange, COIN
+
 
 class Test_str_value(unittest.TestCase):
     def test(self):
@@ -32,16 +34,17 @@ class Test_str_value(unittest.TestCase):
         T(1001000000, '10.01')
         T(1012345678, '10.12345678')
 
+
 class Test_Money(unittest.TestCase):
     def test_MoneyRange(self):
         self.assertFalse(MoneyRange(-1))
         self.assertTrue(MoneyRange(0))
         self.assertTrue(MoneyRange(100000))
-        self.assertTrue(MoneyRange(21000000 * COIN)) # Maximum money on Bitcoin network
+        self.assertTrue(MoneyRange(21000000 * COIN))  # Maximum money on Bitcoin network
         self.assertFalse(MoneyRange(21000001 * COIN))
 
     def test_MoneyRangeCustomParams(self):
-        highMaxParamsType = type(str('CoreHighMainParams'), (CoreMainParams,object), {'MAX_MONEY': 22000000 * COIN })
+        highMaxParamsType = type(str('CoreHighMainParams'), (BitcoinMainNetParams, object), {'MAX_MONEY': 22000000 * COIN})
         highMaxParams = highMaxParamsType()
         self.assertTrue(MoneyRange(21000001 * COIN, highMaxParams))
         self.assertTrue(MoneyRange(22000000 * COIN, highMaxParams))

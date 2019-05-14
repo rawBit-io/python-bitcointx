@@ -35,28 +35,27 @@ from bitcointx.core.script import (
 )
 
 
-_frontend_class_store = local()
-_frontend_class_meta = make_frontend_metaclass('_Wallet',
-                                               _frontend_class_store)
+_thread_local = local()
+_frontend_metaclass = make_frontend_metaclass('_Wallet', _thread_local)
 
 
-class CCoinAddress(metaclass=_frontend_class_meta):
+class CCoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
-class P2SHCoinAddress(metaclass=_frontend_class_meta):
+class P2SHCoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
-class P2PKHCoinAddress(metaclass=_frontend_class_meta):
+class P2PKHCoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
-class P2WSHCoinAddress(metaclass=_frontend_class_meta):
+class P2WSHCoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
-class P2WPKHCoinAddress(metaclass=_frontend_class_meta):
+class P2WPKHCoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
@@ -564,7 +563,7 @@ CBitcoinTestnetAddress.set_class_params(
 )
 
 
-class CCoinKey(metaclass=_frontend_class_meta):
+class CCoinKey(metaclass=_frontend_metaclass):
     pass
 
 
@@ -626,11 +625,11 @@ class CBitcoinTestnetKey(CBitcoinKey):
     base58_prefix = bytes([239])
 
 
-class CCoinExtKey(metaclass=_frontend_class_meta):
+class CCoinExtKey(metaclass=_frontend_metaclass):
     pass
 
 
-class CCoinExtPubKey(metaclass=_frontend_class_meta):
+class CCoinExtPubKey(metaclass=_frontend_metaclass):
     pass
 
 
@@ -695,7 +694,7 @@ CCoinExtPubKey.register(CBitcoinTestnetExtPubKey)
 
 def _SetAddressClassParams(address_cls, key_cls, xpriv_cls):
     def sfc(frontend_cls, concrete_cls):
-        set_frontend_class(frontend_cls, concrete_cls, _frontend_class_store)
+        set_frontend_class(frontend_cls, concrete_cls, _thread_local)
 
     sfc(CCoinAddress, address_cls)
     sfc(CCoinKey, key_cls)

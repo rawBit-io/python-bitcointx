@@ -39,14 +39,13 @@ BIP32_HARDENED_KEY_LIMIT = 0x80000000
 WITNESS_SCALE_FACTOR = 4
 
 
-_frontend_class_store = local()
-_frontend_class_meta = make_frontend_metaclass('_Transaction',
-                                               _frontend_class_store)
+_thread_local = local()
+_frontend_metaclass = make_frontend_metaclass('_Transaction', _thread_local)
 
 
 def MoneyRange(nValue, params=None):
     if not params:
-        params = coreparams
+        params = _CurrentChainParams()
     return 0 <= nValue <= params.MAX_MONEY
 
 
@@ -762,60 +761,6 @@ class CBitcoinTransaction(CBitcoinTransactionCommon, CImmutableTransactionBase):
     _txout_class = CBitcoinTxOut
 
 
-class _ParamsTag():
-    pass
-
-
-class CoreChainParamsBase(object):
-    """Define consensus-critical parameters of a given instance of the Bitcoin system"""
-    MAX_MONEY = None
-    NAME = None
-    TRANSACTION_CLASS = None
-
-
-class CoreMainParams(CoreChainParamsBase, _ParamsTag):
-    MAX_MONEY = 21000000 * COIN
-    NAME = 'bitcoin/mainnet'
-    READABLE_NAME = 'Bitcoin'
-    TRANSACTION_CLASS = CBitcoinTransaction
-
-
-class CoreTestNetParams(CoreMainParams, _ParamsTag):
-    NAME = 'bitcoin/testnet'
-    READABLE_NAME = 'Bitcoin testnet'
-
-
-class CoreRegTestParams(CoreTestNetParams, _ParamsTag):
-    NAME = 'bitcoin/regtest'
-    READABLE_NAME = 'Bitcoin regtest'
-
-
-"""Master global setting for what core chain params we're using"""
-coreparams = CoreMainParams()
-
-
-def _SelectAlternativeCoreParams(alt_core_params):
-    """Select the core chain parameters to use
-
-    Don't use this directly, use bitcointx.SelectAlternativeParams()
-    """
-    global coreparams
-
-    assert(issubclass(alt_core_params, CoreChainParamsBase))
-
-    coreparams = alt_core_params()
-
-    _SetTransactionClassParams(coreparams.TRANSACTION_CLASS)
-
-
-def _CoreParamsByName(name):
-    for cls in _ParamsTag.__subclasses__():
-        if name == cls.NAME:
-            return cls
-
-    raise ValueError('Unknown chain %r' % name)
-
-
 class CheckTransactionError(ValidationError):
     pass
 
@@ -841,7 +786,7 @@ def CheckTransaction(tx):  # noqa
     for txout in tx.vout:
         if txout.nValue < 0:
             raise CheckTransactionError("CheckTransaction() : txout.nValue negative")
-        if txout.nValue > coreparams.MAX_MONEY:
+        if txout.nValue > _CurrentChainParams().MAX_MONEY:
             raise CheckTransactionError("CheckTransaction() : txout.nValue too high")
         nValueOut += txout.nValue
         if not MoneyRange(nValueOut):
@@ -873,51 +818,51 @@ def GetLegacySigOpCount(tx):
     return nSigOps
 
 
-class CTransaction(metaclass=_frontend_class_meta):
+class CTransaction(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTransaction(metaclass=_frontend_class_meta):
+class CMutableTransaction(metaclass=_frontend_metaclass):
     pass
 
 
-class CTxWitness(metaclass=_frontend_class_meta):
+class CTxWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxWitness(metaclass=_frontend_class_meta):
+class CMutableTxWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CTxInWitness(metaclass=_frontend_class_meta):
+class CTxInWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxInWitness(metaclass=_frontend_class_meta):
+class CMutableTxInWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CTxOutWitness(metaclass=_frontend_class_meta):
+class CTxOutWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxOutWitness(metaclass=_frontend_class_meta):
+class CMutableTxOutWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CTxIn(metaclass=_frontend_class_meta):
+class CTxIn(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxIn(metaclass=_frontend_class_meta):
+class CMutableTxIn(metaclass=_frontend_metaclass):
     pass
 
 
-class CTxOut(metaclass=_frontend_class_meta):
+class CTxOut(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxOut(metaclass=_frontend_class_meta):
+class CMutableTxOut(metaclass=_frontend_metaclass):
     pass
 
 
@@ -942,7 +887,7 @@ def _SetTransactionClassParams(transaction_class):
     mut_class._inverted_mutability_class = imm_class
 
     def sfc(frontend_cls, concrete_cls):
-        set_frontend_class(frontend_cls, concrete_cls, _frontend_class_store)
+        set_frontend_class(frontend_cls, concrete_cls, _thread_local)
 
     sfc(CTransaction, imm_class)
     sfc(CTxIn, imm_class._txin_class)
@@ -957,6 +902,15 @@ def _SetTransactionClassParams(transaction_class):
     sfc(CMutableTxWitness, mut_class._witness_class)
     sfc(CMutableTxInWitness, mut_class._witness_class._txin_witness_class)
     sfc(CMutableTxOutWitness, mut_class._witness_class._txout_witness_class)
+
+
+def _SetChainParams(params):
+    _thread_local.chain_params = params
+    _SetTransactionClassParams(params.TRANSACTION_CLASS)
+
+
+def _CurrentChainParams():
+    return _thread_local.chain_params
 
 
 _SetTransactionClassParams(CBitcoinTransaction)
@@ -989,15 +943,10 @@ __all__ = (
     'CMutableTxOutWitness',
     'CTxInWitness',
     'CTxOutWitness',
-    'CoreChainParamsBase',
-    'CoreMainParams',
-    'CoreTestNetParams',
-    'CoreRegTestParams',
     'CheckTransactionError',
     'CheckTransaction',
     'GetLegacySigOpCount',
     'Uint256',
     'bytes_for_repr',
     'str_money_value_for_repr',
-    '_CoreParamsByName',
 )

@@ -28,12 +28,12 @@ class Test_ConfidentialAddress(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._prev_chain = bitcointx.params.NAME
-        bitcointx.SelectParams('sidechain/elements')
+        cls._prev_chain_params = bitcointx.CurrentChainParams()
+        bitcointx.SelectChainParams('sidechain/elements')
 
     @classmethod
     def tearDownClass(cls):
-        bitcointx.SelectParams(cls._prev_chain)
+        bitcointx.SelectChainParams(cls._prev_chain_params)
 
     def test(self):
 

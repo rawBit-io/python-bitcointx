@@ -34,8 +34,10 @@ from bitcointx.core.secp256k1 import (
     build_aligned_data_array
 )
 
+from bitcointx import BitcoinMainNetParams
+
 from bitcointx.core import (
-    CoreMainParams, Uint256, MoneyRange, Hash,
+    Uint256, MoneyRange, Hash,
     bytes_for_repr, ReprOrStrMixin, b2x,
     CTxWitnessBase, CTxInWitnessBase, CTxOutWitnessBase,
     CTxInBase, CTxOutBase, COutPoint, CMutableOutPoint,
@@ -1607,21 +1609,6 @@ def RawElementsSidechainSignatureHash(script, txTo, inIdx, hashtype, amount=0,
     return (hash, None)
 
 
-class CoreElementsSidechainParams(CoreMainParams):
-    NAME = 'sidechain/elements'
-    TRANSACTION_CLASS = CElementsSidechainTransaction
-
-    ct_exponent = 0
-    ct_bits = 32
-
-
-class ElementsSidechainParams(CoreElementsSidechainParams):
-    RPC_PORT = 7041
-    ADDRESS_CLASS = CElementsSidechainAddress
-    KEY_CLASS = CElementsSidechainKey
-    EXT_KEY_CLASS = CElementsSidechainExtKey
-
-
 def generate_asset_entropy(prevout, contracthash):
     assert isinstance(prevout, COutPoint)
     assert isinstance(contracthash, (bytes, bytearray, Uint256))
@@ -1718,8 +1705,8 @@ def generate_rangeproof(in_blinds, nonce, amount, scriptPubKey, commit, gen, ass
     # Compose sidechannel message to convey asset info (ID and asset blinds)
     assetsMessage = asset.data + assetblind.data
 
-    ct_exponent = min(max(CoreElementsSidechainParams.ct_exponent, -1), 18)
-    ct_bits = min(max(CoreElementsSidechainParams.ct_bits, 1), 51)
+    ct_exponent = min(max(ElementsSidechainParams.ct_exponent, -1), 18)
+    ct_bits = min(max(ElementsSidechainParams.ct_bits, 1), 51)
     # Sign rangeproof
     # If min_value is 0, scriptPubKey must be unspendable
     res = secp256k1.secp256k1_rangeproof_sign(
@@ -2033,11 +2020,6 @@ class UnblindingSuccess(BlindingOrUnblindingSuccess,
             asset_blinding_factor=self.asset_blinding_factor)
 
 
-def get_chain_params(name):
-    assert name == CoreElementsSidechainParams.NAME
-    return CoreElementsSidechainParams, ElementsSidechainParams
-
-
 CCoinKey.register(CElementsSidechainKey)
 CCoinExtKey.register(CElementsSidechainExtKey)
 CCoinExtPubKey.register(CElementsSidechainExtPubKey)
@@ -2056,8 +2038,22 @@ CMutableTxWitness.register(CElementsSidechainMutableTxWitness)
 CMutableTxInWitness.register(CElementsSidechainMutableTxInWitness)
 CMutableTxOutWitness.register(CElementsSidechainTxOutWitness)
 
+
+# Declare chain params after frontend classes are regstered,
+# so that issubclass checks in ChainParamsMeta.__new__() would pass
+class ElementsSidechainParams(BitcoinMainNetParams):
+    NAME = 'sidechain/elements'
+    TRANSACTION_CLASS = CElementsSidechainTransaction
+    RPC_PORT = 7041
+    ADDRESS_CLASS = CElementsSidechainAddress
+    KEY_CLASS = CElementsSidechainKey
+    EXT_KEY_CLASS = CElementsSidechainExtKey
+
+    ct_exponent = 0
+    ct_bits = 32
+
+
 __all__ = (
-    'get_chain_params',
     'CAsset',
     'CAssetIssuance',
     'CConfidentialAsset',

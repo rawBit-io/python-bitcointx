@@ -12,7 +12,7 @@
 # pylama:ignore=E501,E221
 
 # NOTE: for simplicity, when we need to pass an array of structs to secp256k1
-# function, we will build an array of bytes out of elements, and than pass
+# function, we will build an array of bytes out of elements, and then pass
 # this array. we are dealing with 32 or 64-byte aligned data,
 # so this should be safe. You can use build_aligned_data_array() for this.
 
