@@ -2043,6 +2043,7 @@ CMutableTxOutWitness.register(CElementsSidechainTxOutWitness)
 # so that issubclass checks in ChainParamsMeta.__new__() would pass
 class ElementsSidechainParams(BitcoinMainNetParams):
     NAME = 'sidechain/elements'
+    READABLE_NAME = 'Elements sidechain'
     TRANSACTION_CLASS = CElementsSidechainTransaction
     RPC_PORT = 7041
     ADDRESS_CLASS = CElementsSidechainAddress
