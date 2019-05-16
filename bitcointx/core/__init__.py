@@ -31,10 +31,7 @@ from .util import (
 
 # Core definitions
 COIN = 100000000
-MAX_BLOCK_SIZE = 1000000
 MAX_BLOCK_WEIGHT = 4000000
-MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50
-WITNESS_COINBASE_SCRIPTPUBKEY_MAGIC = bytes([script.OP_RETURN, 0x24, 0xaa, 0x21, 0xa9, 0xed])
 BIP32_HARDENED_KEY_LIMIT = 0x80000000
 WITNESS_SCALE_FACTOR = 4
 
@@ -919,8 +916,6 @@ __all__ = (
     'Hash',
     'Hash160',
     'COIN',
-    'MAX_BLOCK_SIZE',
-    'MAX_BLOCK_SIGOPS',
     'MoneyRange',
     'x',
     'b2x',
