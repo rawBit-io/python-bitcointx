@@ -227,8 +227,8 @@ class BytesSerializer(Serializer):
 
     @classmethod
     def stream_deserialize(cls, f):
-        l = VarIntSerializer.stream_deserialize(f)
-        return ser_read(f, l)
+        datalen = VarIntSerializer.stream_deserialize(f)
+        return ser_read(f, datalen)
 
 
 class VectorSerializer(Serializer):
@@ -275,16 +275,16 @@ class intVectorSerializer(Serializer):
 
     @classmethod
     def stream_serialize(cls, ints, f):
-        l = len(ints)
-        VarIntSerializer.stream_serialize(l, f)
+        datalen = len(ints)
+        VarIntSerializer.stream_serialize(datalen, f)
         for i in ints:
             f.write(struct.pack(b"<i", i))
 
     @classmethod
     def stream_deserialize(cls, f):
-        l = VarIntSerializer.stream_deserialize(f)
+        datalen = VarIntSerializer.stream_deserialize(f)
         ints = []
-        for i in range(l):
+        for i in range(datalen):
             ints.append(struct.unpack(b"<i", ser_read(f, 4))[0])
         return ints
 
@@ -293,14 +293,14 @@ class VarStringSerializer(Serializer):
     """Serialize variable length byte strings"""
     @classmethod
     def stream_serialize(cls, s, f):
-        l = len(s)
-        VarIntSerializer.stream_serialize(l, f)
+        datalen = len(s)
+        VarIntSerializer.stream_serialize(datalen, f)
         f.write(s)
 
     @classmethod
     def stream_deserialize(cls, f):
-        l = VarIntSerializer.stream_deserialize(f)
-        return ser_read(f, l)
+        datalen = VarIntSerializer.stream_deserialize(f)
+        return ser_read(f, datalen)
 
 
 def uint256_from_str(s):
