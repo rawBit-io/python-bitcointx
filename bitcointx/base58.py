@@ -1,5 +1,6 @@
 # Copyright (C) 2011 Sam Rushing
 # Copyright (C) 2013-2014 The python-bitcoinlib developers
+# Copyright (C) 2018-2019 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
