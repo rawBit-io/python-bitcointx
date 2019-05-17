@@ -84,7 +84,7 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
 class BitcoinMainNetParams(ChainParamsBase):
     RPC_PORT = 8332
     MAX_MONEY = 21000000 * bitcointx.core.COIN
-    NAME = 'bitcoin/mainnet'
+    NAME = 'bitcoin'
     READABLE_NAME = 'Bitcoin'
     TRANSACTION_CLASS = bitcointx.core.CBitcoinTransaction
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinAddress
