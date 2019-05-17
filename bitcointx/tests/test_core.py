@@ -1,4 +1,5 @@
 # Copyright (C) 2013-2015 The python-bitcoinlib developers
+# Copyright (C) 2019 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
@@ -14,7 +15,9 @@
 import unittest
 
 from bitcointx import BitcoinMainNetParams
-from bitcointx.core import str_money_value, MoneyRange, COIN
+from bitcointx.core import (
+    str_money_value, MoneyRange, COIN
+)
 
 
 class Test_str_value(unittest.TestCase):

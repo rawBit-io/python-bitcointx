@@ -13,7 +13,8 @@
 
 import os
 import sys
-from bitcointx.core import b2x, BIP32_HARDENED_KEY_LIMIT
+from bitcointx.core import b2x
+from bitcointx.core.key import BIP32Path
 from bitcointx.base58 import Base58Error, UnexpectedBase58PrefixError
 from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
 
@@ -42,26 +43,25 @@ if __name__ == '__main__':
             print("ERROR: specified key does not appear to be valid")
             sys.exit(-1)
 
-    path = sys.argv[1]
-    if path.startswith('m'):
-        path = path[1:]
+    path_str = sys.argv[1]
 
-    numeric_path = []
-    for elt in path.split('/'):
-        if elt == '':
-            continue
+    if not path_str.startswith('m'):
+        # Allow users to omit path prefix
+        if path_str == '':
+            path_str = 'm'
+        else:
+            path_str = 'm/' + path_str.lstrip('/')
 
-        c = elt
-        hardened = 0
-        if c.endswith("'") or c.endswith('h'):
-            hardened = BIP32_HARDENED_KEY_LIMIT
-            c = c[:-1]
-        try:
-            n = int(c) + hardened
-        except ValueError:
-            print("ERROR: invalid element in the path:", elt)
-            sys.exit(-1)
+    path = BIP32Path(path_str)
 
+    if len(path) == 0:
+        # NOTE: xkey.derive_path() method will raise ValueError
+        # on empty path, to guard against bugs:
+        #   if there is nothing to derive, why call derive_path() ?
+        print('ERROR: nothing to derive, path is empty.')
+        sys.exit(-1)
+
+    for n in path:
         print("child number: 0x{:08x}".format(n))
         xkey = xkey.derive(n)
         if isinstance(xkey, CBitcoinExtKey):

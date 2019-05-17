@@ -1,6 +1,6 @@
 # Copyright (C) 2011 Sam Rushing
 # Copyright (C) 2012-2015 The python-bitcoinlib developers
-# Copyright (C) 2018 The python-bitcointx developers
+# Copyright (C) 2018-2019 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
@@ -35,6 +35,8 @@ from bitcointx.core.secp256k1 import (
     secp256k1_has_pubkey_recovery, secp256k1_has_ecdh,
     secp256k1_has_privkey_negate, secp256k1_has_pubkey_negate
 )
+
+BIP32_HARDENED_KEY_OFFSET = 0x80000000
 
 try:
     _ssl = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
@@ -507,6 +509,28 @@ class CExtKeyBase():
     def key_bytes(self):
         return self[41:74]
 
+    def derive_path(self, path):
+        """Derive the key using the bip32 derivation path."""
+
+        if not isinstance(path, BIP32Path):
+            path = BIP32Path(path)
+
+        # NOTE: empty path would mean we need to return master key
+        # - there's no need for any derivation - you already have your key.
+        # But if someone calls the derivation method, and there is no
+        # actual derivation, that might mean that there is some error in
+        # the code, and the path should be non-empty.
+        # We choose to err on the safe side, and
+        # raise ValueError on empty path
+        if len(path) == 0:
+            raise ValueError('derivation path is empty')
+
+        xkey = self
+        for n in path:
+            xkey = xkey.derive(n)
+
+        return xkey
+
 
 class CExtKeyMixin(CExtKeyBase):
     """An encapsulated extended private key
@@ -670,6 +694,125 @@ class CExtKey(bytes, CExtKeyMixin):
         return cls(data)
 
 
+class BIP32Path:
+
+    HARDENED_MARKERS = ("'", "h")
+
+    __slots__ = ['_indexlist', '_hardened_marker']
+
+    def __init__(self, path, hardened_marker=None):
+        if hardened_marker is not None:
+            if hardened_marker not in self.__class__.HARDENED_MARKERS:
+                raise ValueError('unsupported hardened_marker')
+
+        if isinstance(path, str):
+            indexlist, hardened_marker = self._parse_string(
+                path, hardened_marker=hardened_marker)
+        elif isinstance(path, BIP32Path):
+            if hardened_marker is None:
+                hardened_marker = path._hardened_marker
+            indexlist = path._indexlist
+            # we cannot just use _indexlist if it is mutalbe,
+            # assert that it is a tuple, so if the _indexlist attr will
+            # ever become mutable, this would be cathed by tests
+            print(type(indexlist))
+            assert isinstance(indexlist, tuple)
+        else:
+            indexlist = path
+
+        if len(indexlist) > 255:
+            raise ValueError('derivation path longer than 255 elements')
+
+        for n in indexlist:
+            n = int(n)  # ensure index is an integer
+            self._check_bip32_index_bounds(n, allow_hardened=True)
+
+        if hardened_marker is None:
+            hardened_marker = self.__class__.HARDENED_MARKERS[0]
+
+        self._indexlist = tuple(indexlist)
+        self._hardened_marker = hardened_marker
+
+    def __str__(self):
+        if len(self._indexlist) == 0:
+            return 'm'
+
+        return 'm/%s' % '/'.join('%u' % n if n < BIP32_HARDENED_KEY_OFFSET
+                                 else
+                                 '%u%s' % (n - BIP32_HARDENED_KEY_OFFSET,
+                                           self._hardened_marker)
+                                 for n in self._indexlist)
+
+    def __len__(self):
+        return len(self._indexlist)
+
+    def __getitem__(self, key):
+        return self._indexlist[key]
+
+    def __iter__(self):
+        return (n for n in self._indexlist)
+
+    def _check_bip32_index_bounds(self, n, allow_hardened=False):
+        if n < 0:
+            raise ValueError('derivation index cannot be negative')
+
+        limit = 0xFFFFFFFF if allow_hardened else BIP32_HARDENED_KEY_OFFSET-1
+
+        if n > limit:
+            raise ValueError(
+                'derivation index cannot be > {}' .format(limit))
+
+    def _parse_string(self, path, hardened_marker=None):
+        """Parse bip32 derivation path. returns list of indexes.
+        hardened indexes will have BIP32_HARDENED_KEY_OFFSET added to them."""
+
+        assert isinstance(path, str)
+
+        if path == 'm':
+            return [], hardened_marker
+        elif not path.startswith('m/'):
+            raise ValueError('derivation path does not start with "m/" '
+                             'and not equal "m"')
+
+        if path.endswith('/'):
+            raise ValueError('derivation must not end with "/" ')
+
+        indexlist = []
+
+        expected_marker = hardened_marker
+
+        for pos, elt in enumerate(path[2:].split('/')):
+            if elt == '':
+                # m/// is probably a result of the error, where indexes
+                # for some reason was empty strings. Be strict and not allow that.
+                raise ValueError('duplicate slashes are not allowed')
+
+            c = elt
+            hardened = 0
+            if c[-1] in self.__class__.HARDENED_MARKERS:
+                if expected_marker is None:
+                    expected_marker = c[-1]
+                elif expected_marker != c[-1]:
+                    raise ValueError(
+                        'Unexpected hardened marker: "{}" {}, but got {}'
+                        .format(expected_marker,
+                                ('seen in the path previously'
+                                 if hardened_marker is None
+                                 else 'was specified'),
+                                c[-1]))
+                hardened = BIP32_HARDENED_KEY_OFFSET
+                c = c[:-1]
+
+            # If element is not valid int, ValueError will be raised
+            n = int(c)
+
+            self._check_bip32_index_bounds(n, allow_hardened=False)
+
+            indexlist.append(n + hardened)
+
+        return indexlist, expected_marker
+
+
 __all__ = (
     'CKey',
     'CPubKey',
@@ -677,5 +820,6 @@ __all__ = (
     'CExtPubKey',
     'CKeyMixin',
     'CExtKeyMixin',
-    'CExtPubKeyMixin'
+    'CExtPubKeyMixin',
+    'BIP32Path'
 )

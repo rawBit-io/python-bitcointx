@@ -13,8 +13,10 @@
 
 import unittest
 
-from bitcointx.core import b2x, x, BIP32_HARDENED_KEY_LIMIT
-from bitcointx.core.key import CExtKey, CExtPubKey
+from bitcointx.core import b2x, x
+from bitcointx.core.key import (
+    CExtKey, CExtPubKey, BIP32Path, BIP32_HARDENED_KEY_OFFSET
+)
 from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
 
 
@@ -122,11 +124,17 @@ class Test_CBitcoinExtKey(unittest.TestCase):
     def test_standard_bip32_vectors(self):
         for vector in BIP32_TEST_VECTORS:
             _, seed = vector[0]
-            key = CBitcoinExtKey.from_seed(x(seed))
+            base_key = CBitcoinExtKey.from_seed(x(seed))
+            key = base_key
+            path = []
             for xpub, xpriv, child_num in vector[1:]:
                 self.assertEqual(xpub, str(key.neuter()))
                 self.assertEqual(xpriv, str(key))
                 key = key.derive(child_num)
+                path.append(child_num)
+
+            key_from_path = base_key.derive_path(str(BIP32Path(path)))
+            self.assertEqual(key, key_from_path)
 
 
 class Test_CBitcoinExtPubKey(unittest.TestCase):
@@ -148,7 +156,10 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
             for child_num in path:
                 xpub = xpub.derive(child_num)
 
-            self.assertTrue(str(CBitcoinExtPubKey.from_bytes(xpub)) == expected_child)
+            self.assertEqual(str(CBitcoinExtPubKey.from_bytes(xpub)), expected_child)
+
+            xpub = CBitcoinExtPubKey(base_xpub).derive_path(str(BIP32Path(path)))
+            self.assertEqual(str(CBitcoinExtPubKey.from_bytes(xpub)), expected_child)
 
         T('xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB',
           'xpub69H7F5d8KSRgmmdJg2KhpAK8SR3DjMwAdkxj3ZuxV27CprR9LgpeyGmXUbC6wb7ERfvrnKZjXoUmmDznezpbZb7ap6r1D3tgFxHmwMkQTPH',
@@ -181,7 +192,7 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
         )
 
         with self.assertRaises(ValueError):
-            xpub.derive(1 << 31)
+            xpub.derive(BIP32_HARDENED_KEY_OFFSET)
 
         final_xpub_str = 'xpubEPPCAoZp7t6CN5GGoyYTEr91FCaPpQonRouneRKmRCzgfcWNHnyHMuQPCDn8wLv1vYyPrFpSK26VeA9dDXTKMCLm7FaSY9aVTWw5mTZLC7F'
         for _ in range(255):
@@ -208,6 +219,111 @@ class Test_CExtKey(unittest.TestCase):
         xprv = CBitcoinExtKey(xprv_str)
         xprv2 = CExtKey(xprv)
         self.assertEqual(xprv_str, str(CBitcoinExtKey.from_bytes(xprv2)))
-        self.assertEqual(bytes(xprv.derive(BIP32_HARDENED_KEY_LIMIT)),
-                         bytes(xprv2.derive(BIP32_HARDENED_KEY_LIMIT)))
+        self.assertEqual(bytes(xprv.derive(BIP32_HARDENED_KEY_OFFSET)),
+                         bytes(xprv2.derive(BIP32_HARDENED_KEY_OFFSET)))
         self.assertEqual(str(xprv.neuter()), str(CBitcoinExtPubKey.from_bytes(xprv2.neuter())))
+
+
+class Test_BIP32Path(unittest.TestCase):
+    def test_from_string(self):
+        with self.assertRaises(ValueError):
+            BIP32Path('')  # empty path that is not 'm'
+        with self.assertRaises(ValueError):
+            BIP32Path('m/')  # empty path that is not 'm'
+        with self.assertRaises(ValueError):
+            BIP32Path('/')
+        with self.assertRaises(ValueError):
+            BIP32Path('nonsense')
+        with self.assertRaises(ValueError):
+            BIP32Path('m/-1')
+        with self.assertRaises(ValueError):
+            BIP32Path('m/4/')  # slash at the end of the path
+        with self.assertRaises(ValueError):
+            BIP32Path("m/4h/1'")  # inconsistent use of markers
+        with self.assertRaises(ValueError):
+            BIP32Path("m/2147483648'/1'")  # hardened index too big
+        with self.assertRaises(ValueError):
+            BIP32Path("m/2147483648/1")  # non-hardened index too big
+        with self.assertRaises(ValueError):
+            # wrong markers
+            BIP32Path("m/2147483647'/1'/0", hardened_marker='h')
+        with self.assertRaises(ValueError):
+            # wrong markers
+            BIP32Path("m/2147483647h/1h/0", hardened_marker="'")
+        with self.assertRaises(ValueError):
+            # invalid marker
+            BIP32Path("m/2147483647h/1h/0", hardened_marker="?")
+        with self.assertRaises(ValueError):
+            # too long path
+            BIP32Path('m/'+'/'.join('0' for _ in range(256)))
+
+        self.assertEqual(list(BIP32Path('m/0')), [0])
+        self.assertEqual(list(BIP32Path('m')), [])
+
+        self.assertEqual(list(BIP32Path("m/4h/5/1h")),
+                         [4+BIP32_HARDENED_KEY_OFFSET, 5,
+                          1+BIP32_HARDENED_KEY_OFFSET])
+
+        # check that markers correctly picked up from the string
+        self.assertEqual(str(BIP32Path("m/4h/5h/1/4")), "m/4h/5h/1/4")
+        self.assertEqual(str(BIP32Path("m/4'/5'/1/4")), "m/4'/5'/1/4")
+
+        self.assertEqual(list(BIP32Path("m/0'/2147483647'/1/10")),
+                         [BIP32_HARDENED_KEY_OFFSET, 0xFFFFFFFF, 1, 10])
+
+        self.assertEqual(
+            list(BIP32Path(
+                'm/'+'/'.join("%u'" % n for n in range(128))
+                + '/' + '/'.join("%u" % (BIP32_HARDENED_KEY_OFFSET-n-1)
+                                 for n in range(127)))),
+            [n+BIP32_HARDENED_KEY_OFFSET for n in range(128)]
+            + [BIP32_HARDENED_KEY_OFFSET-n-1 for n in range(127)])
+
+    def test_from_list(self):
+        with self.assertRaises(ValueError):
+            BIP32Path([-1])
+        with self.assertRaises(ValueError):
+            BIP32Path([0xFFFFFFFF+1])  # more than 32bit
+        with self.assertRaises(ValueError):
+            # only apostrophe and "h" markers are allowed
+            BIP32Path([0xFFFFFFFF, 0, 0x80000000],
+                      hardened_marker='b')
+
+        with self.assertRaises(ValueError):
+            # too long path
+            BIP32Path([0 for _ in range(256)])
+
+        self.assertEqual(str(BIP32Path([0])), "m/0")
+        self.assertEqual(str(BIP32Path([])), "m")
+
+        self.assertEqual(
+            str(BIP32Path([0xFFFFFFFF, 0x80000001, 1, 0x80000002])),
+            "m/2147483647'/1'/1/2'")
+
+        self.assertEqual(
+            str(BIP32Path([0xFFFFFFFF, 0x80000001, 1, 2],
+                          hardened_marker='h')),
+            "m/2147483647h/1h/1/2")
+
+        self.assertEqual(
+            str(BIP32Path([n+BIP32_HARDENED_KEY_OFFSET for n in range(128)]
+                          + [n for n in range(127)])),
+            'm/'+'/'.join("%u'" % n for n in range(128))
+            + '/' + '/'.join("%u" % n for n in range(127)))
+
+    def test_from_BIP32Path(self):
+        p = BIP32Path("m/4h/5h/1/4")
+        self.assertEqual(str(BIP32Path(p)), "m/4h/5h/1/4")
+        self.assertEqual(str(BIP32Path(p, hardened_marker="'")), "m/4'/5'/1/4")
+        p = BIP32Path("m/4'/5'/1/4")
+        self.assertEqual(str(BIP32Path(p)), "m/4'/5'/1/4")
+        self.assertEqual(str(BIP32Path(p, hardened_marker='h')), "m/4h/5h/1/4")
+
+    def test_random_access(self):
+        p = BIP32Path("m/4h/5h/1/4")
+        self.assertEqual(p[0], 4+BIP32_HARDENED_KEY_OFFSET)
+        self.assertEqual(p[1], 5+BIP32_HARDENED_KEY_OFFSET)
+        self.assertEqual(p[2], 1)
+        self.assertEqual(p[3], 4)
+        p = BIP32Path([0xFFFFFFFF-n for n in range(255)])
+        self.assertEqual(p[254], 0xFFFFFF01)
