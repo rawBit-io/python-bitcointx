@@ -1,6 +1,6 @@
 # python-bitcointx release notes
 
-## v0.11.0.dev0
+## v1.0.0
 
 XXX  examples/litecoin-alt-p2sh-prefix.py not working due to breaking changes
 
@@ -31,7 +31,7 @@ BREAKING CHANGES:
     `is_*` methods to properties. But because there was a lot more
     non-property `is_*` methods, this would break more code.
 
-    For details, see _disable_boolean_use() decorator in
+    For details, see no_bool_use_as_property() decorator in
     bitcointx/core/util.py
 
     ----
@@ -44,30 +44,18 @@ BREAKING CHANGES:
     CBitcoinSecret is renamed to CBitcoinKey
 
 
-* Elements sidechain support:
-
-    Confidential addresses
-    Confidential transactions:
-        serialization/deserialization
-        blinding/unblinding
-
-    Note that at the time of writing this, the functionality
-    required to blind and unblind transactions are only present
-    in experimental version of secp256k1-zkp library, that also
-    requires a patch to be interoperable with python-bitcointx.
-    The procedure to build this library and patch it is described
-    in the README file of Elements sidechain examplees.
-
-    Serialization and deserialization for Elements sidechain
-    transactions does not depend on secp256k1-zkp.
-
-    See examples in examples/sidechain/elements/
+NOTE: references to Elements sidechain below are in relation
+to python-elementstx - a separate module that uses python-bitcointx to
+build support for Elements sidechain. Other modules can be built
+in a similar fashion to support working with transactions
+in other bitcoin-related blockchains.
 
 * Core transaction class and accompanying transaction component classes
   are now only a front-ends to implementation-specific classes.
   When you create CTransaction, for example, you will get an instance
   of CBitcoinTransaction if default chain parameters are in effect,
-  or CElementsSidechainTransaction, if you have choosen Elements
+  or, for example, CElementsSidechainTransaction - if you are using
+  python-bitcointx module and have choosen Elements
   sidechain parameters. Same with CTxIn, CTxWitness, and other
   transaction component classes, and also CScript. This allows to support
   different (Bitcoin-based) transaction formats and various
@@ -81,7 +69,7 @@ BREAKING CHANGES:
 * More consistent mutable/immutable transaction component class handling.
   Creating CMutableTransaction and specifying CTxIn for inputs will result
   in CMutableTransaction instance that have CMutableTxIn in their inputs
-  (Actually, CBitcoinMutableTxIn or CElementsSidechainMutableTxIn)
+  (Actually, CBitcoinMutableTxIn or CElementsSidechainMutableTxIn, etc..)
 
 * Default transaction nVersion is now 2 (the same as in current Bitcoin Core)
 

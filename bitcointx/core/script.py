@@ -29,7 +29,7 @@ import bitcointx.core._bignum
 from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
 
 from .util import (
-    make_frontend_metaclass, disable_boolean_use, set_frontend_class
+    make_frontend_metaclass, no_bool_use_as_property, set_frontend_class
 )
 
 _thread_local = local()
@@ -86,7 +86,7 @@ class CScriptOp(int):
 
         return int(self - OP_1+1)
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_small_int(self):
         """Return true if the op pushes a small integer to the stack"""
         if 0x51 <= self <= 0x60 or self == 0:
@@ -679,7 +679,7 @@ class CScriptBase(bytes):
 
         return "CScript([%s])" % ', '.join(ops)
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_p2sh(self):
         """Test if the script is a p2sh scriptPubKey
 
@@ -690,7 +690,7 @@ class CScriptBase(bytes):
                 self[1] == 0x14 and
                 self[22] == OP_EQUAL)
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_witness_scriptpubkey(self):
         """Returns true if this is a scriptpubkey signaling segregated witness data.
 
@@ -718,27 +718,27 @@ class CScriptBase(bytes):
         """Returns the witness program"""
         return self[2:]
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_witness_v0_keyhash(self):
         """Returns true if this is a scriptpubkey for V0 P2WPKH. """
         return len(self) == 22 and self[0:2] == b'\x00\x14'
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_witness_v0_nested_keyhash(self):
         """Returns true if this is a scriptSig for V0 P2WPKH embedded in P2SH. """
         return len(self) == 23 and self[0:3] == b'\x16\x00\x14'
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_witness_v0_scripthash(self):
         """Returns true if this is a scriptpubkey for V0 P2WSH. """
         return len(self) == 34 and self[0:2] == b'\x00\x20'
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_witness_v0_nested_scripthash(self):
         """Returns true if this is a scriptSig for V0 P2WSH embedded in P2SH. """
         return len(self) == 35 and self[0:3] == b'\x22\x00\x20'
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_push_only(self):
         """Test if the script only contains pushdata ops
 
@@ -787,12 +787,12 @@ class CScriptBase(bytes):
             return False
         return True
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_unspendable(self):
         """Test if the script is provably unspendable"""
         return (len(self) > 0 and self[0] == OP_RETURN) or len(self) > MAX_SCRIPT_SIZE
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_valid(self):
         """Return True if the script is valid, False otherwise
 
@@ -888,7 +888,7 @@ class CScriptWitness(ImmutableSerializable):
     def __repr__(self):
         return 'CScriptWitness([' + ','.join("x('%s')" % bitcointx.core.b2x(s) for s in self.stack) + '])'
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_null(self):
         return len(self.stack) == 0
 

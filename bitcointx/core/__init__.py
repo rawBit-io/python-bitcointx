@@ -26,7 +26,7 @@ from .serialize import (
 )
 
 from .util import (
-    disable_boolean_use, make_frontend_metaclass, set_frontend_class
+    no_bool_use_as_property, make_frontend_metaclass, set_frontend_class
 )
 
 # Core definitions
@@ -151,7 +151,7 @@ class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
                              .format(self._UINT_WIDTH_BYTES))
         object.__setattr__(self, 'data', bytes(data))
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_null(self):
         return all(b == 0 for b in self.data)
 
@@ -211,7 +211,7 @@ class COutPoint(ImmutableSerializable):
         f.write(self.hash)
         f.write(struct.pack(b"<I", self.n))
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_null(self):
         return ((self.hash == b'\x00'*32) and (self.n == 0xffffffff))
 
@@ -282,7 +282,7 @@ class CTxInBase(ImmutableSerializable):
         BytesSerializer.stream_serialize(self.scriptSig, f)
         f.write(struct.pack(b"<I", self.nSequence))
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_final(self):
         return (self.nSequence == 0xffffffff)
 
@@ -366,7 +366,7 @@ class CBitcoinTxOut(CTxOutBase):
         f.write(struct.pack(b"<q", self.nValue))
         BytesSerializer.stream_serialize(self.scriptPubKey, f)
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_valid(self):
         if not MoneyRange(self.nValue):
             return False
@@ -421,7 +421,7 @@ class CBitcoinTxInWitness(CTxInWitnessBase):
     def __init__(self, scriptWitness=script.CScriptWitness()):
         object.__setattr__(self, 'scriptWitness', scriptWitness)
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_null(self):
         return self.scriptWitness.is_null()
 
@@ -490,7 +490,7 @@ class CBitcoinTxWitness(CTxWitnessBase):
                                  else self._txin_witness_class.from_txin_witness(w)
                                  for w in vtxinwit))
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_null(self):
         for n in range(len(self.vtxinwit)):
             if not self.vtxinwit[n].is_null():
@@ -581,7 +581,7 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         object.__setattr__(self, 'vout', tuple(self._txout_class.from_txout(txout) for txout in vout))
         object.__setattr__(self, 'wit', self._witness_class.from_witness(witness))
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_coinbase(self):
         return len(self.vin) == 1 and self.vin[0].prevout.is_null()
 

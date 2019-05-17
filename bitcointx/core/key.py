@@ -26,7 +26,7 @@ import ctypes.util
 import hashlib
 
 from bitcointx.core import Hash160
-from bitcointx.core.util import disable_boolean_use
+from bitcointx.core.util import no_bool_use_as_property
 from bitcointx.core.secp256k1 import (
     secp256k1, secp256k1_context_sign, secp256k1_context_verify,
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
@@ -122,7 +122,7 @@ class CKeyMixin():
 
         self.pub = CPubKey._from_raw(raw_pubkey, compressed=compressed)
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_compressed(self):
         return self.pub.is_compressed()
 
@@ -338,15 +338,15 @@ class CPubKey(bytes):
 
         return cls._from_raw(raw_pubkey, compressed=compressed)
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_valid(self):
         return len(self) > 0
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_fullyvalid(self):
         return self._fullyvalid
 
-    @disable_boolean_use
+    @no_bool_use_as_property
     def is_compressed(self):
         return len(self) == COMPRESSED_PUBLIC_KEY_SIZE
 

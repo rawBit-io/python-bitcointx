@@ -18,7 +18,6 @@ import bitcointx
 from bitcointx.core import b2x, x, Hash160
 from bitcointx.core.script import CScript, IsLowDERSignature
 from bitcointx.core.key import CPubKey
-from bitcointx.sidechain.elements import ElementsSidechainParams
 from bitcointx.wallet import (
     CCoinAddressError as CBitcoinAddressError,
     CCoinAddress,
@@ -35,10 +34,10 @@ from bitcointx.wallet import (
 
 class Test_CCoinAddress(unittest.TestCase):
 
-    def test_address_implementations(self):
+    def test_address_implementations(self, paramclasses=None):
         pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
-        paramclasses = bitcointx.ChainParamsMeta.get_registered_chain_params()
-        assert any(issubclass(p, ElementsSidechainParams) for p in paramclasses)
+        if paramclasses is None:
+            paramclasses = bitcointx.ChainParamsMeta.get_registered_chain_params()
         for paramclass in paramclasses:
             top_aclass = paramclass.ADDRESS_CLASS
             script_class = top_aclass._script_class

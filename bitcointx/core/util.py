@@ -33,7 +33,7 @@ class _NoBoolCallable():
         return self.value
 
 
-def disable_boolean_use(f):
+def no_bool_use_as_property(f):
     """A decorator that disables use of an attribute
     as a property in a boolean context """
     @property
