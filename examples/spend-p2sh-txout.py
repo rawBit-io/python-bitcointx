@@ -20,13 +20,13 @@ if sys.version_info.major < 3:
 
 import hashlib
 
-from bitcointx import SelectParams
+from bitcointx import SelectChainParams
 from bitcointx.core import b2x, lx, COIN, COutPoint, CMutableTxOut, CMutableTxIn, CMutableTransaction, Hash160
 from bitcointx.core.script import CScript, OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG, SignatureHash, SIGHASH_ALL
 from bitcointx.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcointx.wallet import CBitcoinAddress, CBitcoinSecret
 
-SelectParams('mainnet')
+SelectChainParams('bitcoin')
 
 # Create the (in)famous correct brainwallet secret key.
 h = hashlib.sha256(b'correct horse battery staple').digest()
