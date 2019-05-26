@@ -31,7 +31,6 @@ class ChainParamsMeta(ABCMeta):
     _required_attributes = (
         ('MAX_MONEY', isinstance, int),
         ('NAME', isinstance, str),
-        ('READABLE_NAME', isinstance, str),
         ('RPC_PORT', isinstance, int),
         ('CONFIG_LOCATION', isinstance, tuple),
         ('TRANSACTION_CLASS', issubclass, bitcointx.core.CTransaction),
@@ -111,14 +110,16 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
             return ''
         return name_parts[1]
 
+    def get_readable_name(self):
+        name_parts = self.NAME.split('/')
+        name_parts[0] = name_parts[0].capitalize()
+        return ' '.join(name_parts)
+
 
 class BitcoinMainNetParams(ChainParamsBase):
     RPC_PORT = 8332
     MAX_MONEY = 21000000 * bitcointx.core.COIN
     NAME = 'bitcoin'
-    CONFIG_LOCATION = ('bitcoin', 'bitcoin.conf')  # dir, file
-    DATA_LOCATION = 'bitcoin'
-    READABLE_NAME = 'Bitcoin'
     TRANSACTION_CLASS = bitcointx.core.CBitcoinTransaction
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinAddress
     KEY_CLASS = bitcointx.wallet.CBitcoinKey
@@ -128,7 +129,6 @@ class BitcoinMainNetParams(ChainParamsBase):
 class BitcoinTestNetParams(BitcoinMainNetParams):
     RPC_PORT = 18332
     NAME = 'bitcoin/testnet'
-    READABLE_NAME = 'Bitcoin testnet'
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
     KEY_CLASS = bitcointx.wallet.CBitcoinTestnetKey
     EXT_KEY_CLASS = bitcointx.wallet.CBitcoinTestnetExtKey
@@ -137,7 +137,6 @@ class BitcoinTestNetParams(BitcoinMainNetParams):
 class RegTestParams(BitcoinMainNetParams):
     RPC_PORT = 18443
     NAME = 'bitcoin/regtest'
-    READABLE_NAME = 'Bitcoin regtest'
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
     KEY_CLASS = bitcointx.wallet.CBitcoinTestnetKey
     EXT_KEY_CLASS = bitcointx.wallet.CBitcoinTestnetExtKey
