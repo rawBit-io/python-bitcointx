@@ -10,6 +10,9 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import os
+import platform
+
 from abc import ABCMeta
 from contextlib import contextmanager
 from collections import OrderedDict
@@ -30,6 +33,7 @@ class ChainParamsMeta(ABCMeta):
         ('NAME', isinstance, str),
         ('READABLE_NAME', isinstance, str),
         ('RPC_PORT', isinstance, int),
+        ('CONFIG_LOCATION', isinstance, tuple),
         ('TRANSACTION_CLASS', issubclass, bitcointx.core.CTransaction),
         ('ADDRESS_CLASS', issubclass, bitcointx.wallet.CCoinAddress),
         ('KEY_CLASS', issubclass, bitcointx.wallet.CCoinKey),
@@ -80,11 +84,40 @@ class ChainParamsMeta(ABCMeta):
 class ChainParamsBase(metaclass=ChainParamsMeta):
     """All chain param classes must be a subclass of this class."""
 
+    def get_confdir_path(self):
+        """Return default location for config directory"""
+        name = self.NAME.split('/')[0]
+
+        if platform.system() == 'Darwin':
+            return os.path.expanduser(
+                '~/Library/Application Support/{}'.format(name.capitalize()))
+        elif platform.system() == 'Windows':
+            return os.path.join(os.environ['APPDATA'], name.capitalize())
+
+        return os.path.expanduser('~/.{}'.format(name))
+
+    def get_config_path(self):
+        """Return default location for config file"""
+        name = self.NAME.split('/')[0]
+        return '{}/{}.conf'.format(self.get_confdir_path(), name)
+
+    def get_datadir_extra_name(self):
+        """Return appropriate dir name to find data for the chain,
+        and .cookie file. For mainnet, it will be an empty string -
+        because data directory is the same as config directory.
+        For others, like testnet or regtest, it will differ."""
+        name_parts = self.NAME.split('/')
+        if len(name_parts) == 1:
+            return ''
+        return name_parts[1]
+
 
 class BitcoinMainNetParams(ChainParamsBase):
     RPC_PORT = 8332
     MAX_MONEY = 21000000 * bitcointx.core.COIN
     NAME = 'bitcoin'
+    CONFIG_LOCATION = ('bitcoin', 'bitcoin.conf')  # dir, file
+    DATA_LOCATION = 'bitcoin'
     READABLE_NAME = 'Bitcoin'
     TRANSACTION_CLASS = bitcointx.core.CBitcoinTransaction
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinAddress

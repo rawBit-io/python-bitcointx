@@ -43,6 +43,8 @@ BREAKING CHANGES:
 
     CBitcoinSecret is renamed to CBitcoinKey
 
+    rpc.Proxy is removed, replaced with RPCCaller (ex-RawProxy)
+
 
 NOTE: references to Elements sidechain below are in relation
 to python-elementstx - a separate module that uses python-bitcointx to

@@ -1,5 +1,6 @@
 # Copyright (C) 2007 Jan-Klaas Kollhof
 # Copyright (C) 2011-2018 The python-bitcoinlib developers
+# Copyright (C) 2019 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
@@ -23,37 +24,18 @@ a different implementation can be used instead, at your own risk:
 thus better optimized but perhaps less stable.)
 """
 
-try:
-    import http.client as httplib
-except ImportError:
-    import httplib
+import http.client
 import base64
-import binascii
 import decimal
 import json
 import os
-import platform
-import sys
-try:
-    import urllib.parse as urlparse
-except ImportError:
-    import urlparse
+import urllib.parse
 
 import bitcointx
-from bitcointx.core import COIN, lx, b2lx, CTransaction, COutPoint, CTxOut
-from bitcointx.core.script import CScript
-from bitcointx.wallet import CBitcoinAddress, CBitcoinSecret
 
 DEFAULT_USER_AGENT = "AuthServiceProxy/0.1"
 
 DEFAULT_HTTP_TIMEOUT = 30
-
-# (un)hexlify to/from unicode, needed for Python3
-unhexlify = binascii.unhexlify
-hexlify = binascii.hexlify
-if sys.version > '3':
-    unhexlify = lambda h: binascii.unhexlify(h.encode('utf8'))
-    hexlify = lambda b: binascii.hexlify(b).decode('utf8')
 
 
 class JSONRPCError(Exception):
@@ -83,39 +65,66 @@ class JSONRPCError(Exception):
 
         return self
 
+
 @JSONRPCError._register_subcls
 class ForbiddenBySafeModeError(JSONRPCError):
     RPC_ERROR_CODE = -2
+
 
 @JSONRPCError._register_subcls
 class InvalidAddressOrKeyError(JSONRPCError):
     RPC_ERROR_CODE = -5
 
+
 @JSONRPCError._register_subcls
 class InvalidParameterError(JSONRPCError):
     RPC_ERROR_CODE = -8
+
 
 @JSONRPCError._register_subcls
 class VerifyError(JSONRPCError):
     RPC_ERROR_CODE = -25
 
+
 @JSONRPCError._register_subcls
 class VerifyRejectedError(JSONRPCError):
     RPC_ERROR_CODE = -26
 
+
 @JSONRPCError._register_subcls
 class VerifyAlreadyInChainError(JSONRPCError):
     RPC_ERROR_CODE = -27
+
 
 @JSONRPCError._register_subcls
 class InWarmupError(JSONRPCError):
     RPC_ERROR_CODE = -28
 
 
-class BaseProxy(object):
-    """Base JSON-RPC proxy class. Contains only private methods; do not use
-    directly."""
+def _try_read_conf_file(btc_conf_file):
+    # Bitcoin Core accepts empty rpcuser,
+    # not specified in btc_conf_file
+    conf = {'rpcuser': ""}
 
+    # Extract contents of bitcoin.conf to build service_url
+    try:
+        with open(btc_conf_file, 'r') as fd:
+            for line in fd.readlines():
+                if '#' in line:
+                    line = line[:line.index('#')]
+                if '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                conf[k.strip()] = v.strip()
+
+    # Treat a missing bitcoin.conf as though it were empty
+    except FileNotFoundError:
+        pass
+
+    return conf
+
+
+class RPCCaller:
     def __init__(self,
                  service_url=None,
                  service_port=None,
@@ -130,45 +139,26 @@ class BaseProxy(object):
         authpair = None
 
         if service_url is None:
-            # Figure out the path to the bitcoin.conf file
+            params = bitcointx.CurrentChainParams()
+
+            # Figure out the path to the config file
             if btc_conf_file is None:
-                if platform.system() == 'Darwin':
-                    btc_conf_file = os.path.expanduser('~/Library/Application Support/Bitcoin/')
-                elif platform.system() == 'Windows':
-                    btc_conf_file = os.path.join(os.environ['APPDATA'], 'Bitcoin')
-                else:
-                    btc_conf_file = os.path.expanduser('~/.bitcoin')
-                btc_conf_file = os.path.join(btc_conf_file, 'bitcoin.conf')
+                btc_conf_file = params.get_config_path()
 
-            # Bitcoin Core accepts empty rpcuser, not specified in btc_conf_file
-            conf = {'rpcuser': ""}
-
-            # Extract contents of bitcoin.conf to build service_url
-            try:
-                with open(btc_conf_file, 'r') as fd:
-                    for line in fd.readlines():
-                        if '#' in line:
-                            line = line[:line.index('#')]
-                        if '=' not in line:
-                            continue
-                        k, v = line.split('=', 1)
-                        conf[k.strip()] = v.strip()
-
-            # Treat a missing bitcoin.conf as though it were empty
-            except FileNotFoundError:
-                pass
+            conf = _try_read_conf_file(btc_conf_file)
 
             if service_port is None:
-                service_port = bitcointx.params.RPC_PORT
+                service_port = params.RPC_PORT
+
             conf['rpcport'] = int(conf.get('rpcport', service_port))
             conf['rpchost'] = conf.get('rpcconnect', 'localhost')
 
             service_url = ('%s://%s:%d' %
-                ('http', conf['rpchost'], conf['rpcport']))
+                           ('http', conf['rpchost'], conf['rpcport']))
 
             cookie_dir = conf.get('datadir', os.path.dirname(btc_conf_file))
-            if bitcointx.params.NAME != "mainnet":
-                cookie_dir = os.path.join(cookie_dir, bitcointx.params.NAME)
+            cookie_dir = os.path.join(cookie_dir,
+                                      params.get_datadir_extra_name())
             cookie_file = os.path.join(cookie_dir, ".cookie")
             try:
                 with open(cookie_file, 'r') as fd:
@@ -178,22 +168,26 @@ class BaseProxy(object):
                     authpair = "%s:%s" % (conf['rpcuser'], conf['rpcpassword'])
 
                 else:
-                    raise ValueError('Cookie file unusable (%s) and rpcpassword not specified in the configuration file: %r' % (err, btc_conf_file))
+                    raise ValueError(
+                        'Cookie file unusable (%s) and rpcpassword '
+                        'not specified in the configuration file: %r'
+                        % (err, btc_conf_file))
 
         else:
-            url = urlparse.urlparse(service_url)
+            url = urllib.parse.urlparse(service_url)
             authpair = "%s:%s" % (url.username, url.password)
 
         self.__service_url = service_url
-        self.__url = urlparse.urlparse(service_url)
+        self.__url = urllib.parse.urlparse(service_url)
 
         if self.__url.scheme not in ('http',):
             raise ValueError('Unsupported URL scheme %r' % self.__url.scheme)
 
         if self.__url.port is None:
-            port = service_port or httplib.HTTP_PORT
+            port = service_port or http.client.HTTP_PORT
         else:
             port = self.__url.port
+
         self.__id_count = 0
 
         if authpair is None:
@@ -205,8 +199,8 @@ class BaseProxy(object):
         if connection:
             self.__conn = connection
         else:
-            self.__conn = httplib.HTTPConnection(self.__url.hostname, port=port,
-                                                 timeout=timeout)
+            self.__conn = http.client.HTTPConnection(
+                self.__url.hostname, port=port, timeout=timeout)
 
     def _call(self, service_name, *args):
         self.__id_count += 1
@@ -233,7 +227,8 @@ class BaseProxy(object):
             if isinstance(err, dict):
                 raise JSONRPCError(
                     {'code': err.get('code', -345),
-                     'message': err.get('message', 'error message not specified')})
+                     'message': err.get('message',
+                                        'error message not specified')})
             raise JSONRPCError({'code': -344, 'message': str(err)})
         elif 'result' not in response:
             raise JSONRPCError({
@@ -268,7 +263,8 @@ class BaseProxy(object):
         except Exception:
             raise JSONRPCError({
                 'code': -342,
-                'message': ('non-JSON HTTP response with \'%i %s\' from server: \'%.20s%s\''
+                'message': ('non-JSON HTTP response with \'%i %s\' '
+                            'from server: \'%.20s%s\''
                             % (http_response.status, http_response.reason,
                                rdata, '...' if len(rdata) > 20 else ''))})
 
@@ -280,25 +276,12 @@ class BaseProxy(object):
         if self.__conn is not None:
             self.__conn.close()
 
+    def __getattribute__(self, name):
+        if name.startswith('__') and name.endswith('__'):
+            # Python internal stuff
+            raise AttributeError
 
-class RawProxy(BaseProxy):
-    """Low-level proxy to a bitcoin JSON-RPC service
-
-    Unlike ``Proxy``, no conversion is done besides parsing JSON. As far as
-    Python is concerned, you can call any method; ``JSONRPCError`` will be
-    raised if the server does not recognize it.
-    """
-    def __init__(self,
-                 service_url=None,
-                 service_port=None,
-                 btc_conf_file=None,
-                 timeout=DEFAULT_HTTP_TIMEOUT,
-                 **kwargs):
-        super(RawProxy, self).__init__(service_url=service_url,
-                                       service_port=service_port,
-                                       btc_conf_file=btc_conf_file,
-                                       timeout=timeout,
-                                       **kwargs)
+        return super().__getattribute__(name)
 
     def __getattr__(self, name):
         if name.startswith('__') and name.endswith('__'):
@@ -306,388 +289,13 @@ class RawProxy(BaseProxy):
             raise AttributeError
 
         # Create a callable to do the actual call
-        f = lambda *args: self._call(name, *args)
+        def f(*args): self._call(name, *args)
 
-        # Make debuggers show <function bitcointx.rpc.name> rather than <function
-        # bitcointx.rpc.<lambda>>
+        # Make debuggers show <function bitcointx.rpc.name>
+        # rather than <function bitcointx.rpc.<lambda>>
         f.__name__ = name
         return f
 
-
-class Proxy(BaseProxy):
-    """Proxy to a bitcoin RPC service
-
-    Unlike ``RawProxy``, data is passed as ``bitcointx.core`` objects or packed
-    bytes, rather than JSON or hex strings. Not all methods are implemented
-    yet; you can use ``call`` to access missing ones in a forward-compatible
-    way. Assumes Bitcoin Core version >= v0.16.0; older versions mostly work,
-    but there are a few incompatibilities.
-    """
-
-    def __init__(self,
-                 service_url=None,
-                 service_port=None,
-                 btc_conf_file=None,
-                 timeout=DEFAULT_HTTP_TIMEOUT,
-                 **kwargs):
-        """Create a proxy object
-
-        If ``service_url`` is not specified, the username and password are read
-        out of the file ``btc_conf_file``. If ``btc_conf_file`` is not
-        specified, ``~/.bitcoin/bitcoin.conf`` or equivalent is used by
-        default.  The default port is set according to the chain parameters in
-        use: mainnet, testnet, or regtest.
-
-        Usually no arguments to ``Proxy()`` are needed; the local bitcoind will
-        be used.
-
-        ``timeout`` - timeout in seconds before the HTTP interface times out
-        """
-
-        super(Proxy, self).__init__(service_url=service_url,
-                                    service_port=service_port,
-                                    btc_conf_file=btc_conf_file,
-                                    timeout=timeout,
-                                    **kwargs)
-
-    def call(self, service_name, *args):
-        """Call an RPC method by name and raw (JSON encodable) arguments"""
-        return self._call(service_name, *args)
-
-    def dumpprivkey(self, addr):
-        """Return the private key matching an address
-        """
-        r = self._call('dumpprivkey', str(addr))
-
-        return CBitcoinSecret(r)
-
-    def fundrawtransaction(self, tx, include_watching=False):
-        """Add inputs to a transaction until it has enough in value to meet its out value.
-
-        include_watching - Also select inputs which are watch only
-
-        Returns dict:
-
-        {'tx':        Resulting tx,
-         'fee':       Fee the resulting transaction pays,
-         'changepos': Position of added change output, or -1,
-        }
-        """
-        hextx = hexlify(tx.serialize())
-        r = self._call('fundrawtransaction', hextx, include_watching)
-
-        r['tx'] = CTransaction.deserialize(unhexlify(r['hex']))
-        del r['hex']
-
-        r['fee'] = int(r['fee'] * COIN)
-
-        return r
-
-    def generate(self, numblocks):
-        """Mine blocks immediately (before the RPC call returns)
-
-        numblocks - How many blocks are generated immediately.
-
-        Returns iterable of block hashes generated.
-        """
-        r = self._call('generate', numblocks)
-        return (lx(blk_hash) for blk_hash in r)
-
-    def getaccountaddress(self, account=None):
-        """Return the current Bitcoin address for receiving payments to this
-        account."""
-        r = self._call('getaccountaddress', account)
-        return CBitcoinAddress(r)
-
-    def getbalance(self, account='*', minconf=1, include_watchonly=False):
-        """Get the balance
-
-        account - The selected account. Defaults to "*" for entire wallet. It
-        may be the default account using "".
-
-        minconf - Only include transactions confirmed at least this many times.
-        (default=1)
-
-        include_watchonly - Also include balance in watch-only addresses (see 'importaddress')
-        (default=False)
-        """
-        r = self._call('getbalance', account, minconf, include_watchonly)
-        return int(r*COIN)
-
-    def getbestblockhash(self):
-        """Return hash of best (tip) block in longest block chain."""
-        return lx(self._call('getbestblockhash'))
-
-    def getblockcount(self):
-        """Return the number of blocks in the longest block chain"""
-        return self._call('getblockcount')
-
-    def getblockhash(self, height):
-        """Return hash of block in best-block-chain at height.
-
-        Raises IndexError if height is not valid.
-        """
-        try:
-            return lx(self._call('getblockhash', height))
-        except InvalidParameterError as ex:
-            raise IndexError('%s.getblockhash(): %s (%d)' %
-                    (self.__class__.__name__, ex.error['message'], ex.error['code']))
-
-    def getinfo(self):
-        """Return a JSON object containing various state info"""
-        r = self._call('getinfo')
-        if 'balance' in r:
-            r['balance'] = int(r['balance'] * COIN)
-        if 'paytxfee' in r:
-            r['paytxfee'] = int(r['paytxfee'] * COIN)
-        return r
-
-    def getmininginfo(self):
-        """Return a JSON object containing mining-related information"""
-        return self._call('getmininginfo')
-
-    def getnewaddress(self, account=None):
-        """Return a new Bitcoin address for receiving payments.
-
-        If account is not None, it is added to the address book so payments
-        received with the address will be credited to account.
-        """
-        r = None
-        if account is not None:
-            r = self._call('getnewaddress', account)
-        else:
-            r = self._call('getnewaddress')
-
-        return CBitcoinAddress(r)
-
-    def getrawchangeaddress(self):
-        """Returns a new Bitcoin address, for receiving change.
-
-        This is for use with raw transactions, NOT normal use.
-        """
-        r = self._call('getrawchangeaddress')
-        return CBitcoinAddress(r)
-
-    def getrawmempool(self, verbose=False):
-        """Return the mempool"""
-        if verbose:
-            return self._call('getrawmempool', verbose)
-
-        else:
-            r = self._call('getrawmempool')
-            r = [lx(txid) for txid in r]
-            return r
-
-    def getrawtransaction(self, txid, verbose=False):
-        """Return transaction with hash txid
-
-        Raises IndexError if transaction not found.
-
-        verbose - If true a dict is returned instead with additional
-        information on the transaction.
-
-        Note that if all txouts are spent and the transaction index is not
-        enabled the transaction may not be available.
-        """
-        try:
-            r = self._call('getrawtransaction', b2lx(txid), 1 if verbose else 0)
-        except InvalidAddressOrKeyError as ex:
-            raise IndexError('%s.getrawtransaction(): %s (%d)' %
-                    (self.__class__.__name__, ex.error['message'], ex.error['code']))
-        if verbose:
-            r['tx'] = CTransaction.deserialize(unhexlify(r['hex']))
-            del r['hex']
-            del r['txid']
-            del r['version']
-            del r['locktime']
-            del r['vin']
-            del r['vout']
-            r['blockhash'] = lx(r['blockhash']) if 'blockhash' in r else None
-        else:
-            r = CTransaction.deserialize(unhexlify(r))
-
-        return r
-
-    def getreceivedbyaddress(self, addr, minconf=1):
-        """Return total amount received by given a (wallet) address
-
-        Get the amount received by <address> in transactions with at least
-        [minconf] confirmations.
-
-        Works only for addresses in the local wallet; other addresses will
-        always show zero.
-
-        addr    - The address. (CBitcoinAddress instance)
-
-        minconf - Only include transactions confirmed at least this many times.
-        (default=1)
-        """
-        r = self._call('getreceivedbyaddress', str(addr), minconf)
-        return int(r * COIN)
-
-    def gettransaction(self, txid):
-        """Get detailed information about in-wallet transaction txid
-
-        Raises IndexError if transaction not found in the wallet.
-
-        FIXME: Returned data types are not yet converted.
-        """
-        try:
-            r = self._call('gettransaction', b2lx(txid))
-        except InvalidAddressOrKeyError as ex:
-            raise IndexError('%s.getrawtransaction(): %s (%d)' %
-                    (self.__class__.__name__, ex.error['message'], ex.error['code']))
-        return r
-
-    def gettxout(self, outpoint, includemempool=True):
-        """Return details about an unspent transaction output.
-
-        Raises IndexError if outpoint is not found or was spent.
-
-        includemempool - Include mempool txouts
-        """
-        r = self._call('gettxout', b2lx(outpoint.hash), outpoint.n, includemempool)
-
-        if r is None:
-            raise IndexError('%s.gettxout(): unspent txout %r not found' % (self.__class__.__name__, outpoint))
-
-        r['txout'] = CTxOut(int(r['value'] * COIN),
-                            CScript(unhexlify(r['scriptPubKey']['hex'])))
-        del r['value']
-        del r['scriptPubKey']
-        r['bestblock'] = lx(r['bestblock'])
-        return r
-
-    def importaddress(self, addr, label='', rescan=True):
-        """Adds an address or pubkey to wallet without the associated privkey."""
-        addr = str(addr)
-
-        r = self._call('importaddress', addr, label, rescan)
-        return r
-
-    def listunspent(self, minconf=0, maxconf=9999999, addrs=None):
-        """Return unspent transaction outputs in wallet
-
-        Outputs will have between minconf and maxconf (inclusive)
-        confirmations, optionally filtered to only include txouts paid to
-        addresses in addrs.
-        """
-        r = None
-        if addrs is None:
-            r = self._call('listunspent', minconf, maxconf)
-        else:
-            addrs = [str(addr) for addr in addrs]
-            r = self._call('listunspent', minconf, maxconf, addrs)
-
-        r2 = []
-        for unspent in r:
-            unspent['outpoint'] = COutPoint(lx(unspent['txid']), unspent['vout'])
-            del unspent['txid']
-            del unspent['vout']
-
-            # address isn't always available as Bitcoin Core allows scripts w/o
-            # an address type to be imported into the wallet, e.g. non-p2sh
-            # segwit
-            try:
-                unspent['address'] = CBitcoinAddress(unspent['address'])
-            except KeyError:
-                pass
-            unspent['scriptPubKey'] = CScript(unhexlify(unspent['scriptPubKey']))
-            unspent['amount'] = int(unspent['amount'] * COIN)
-            r2.append(unspent)
-        return r2
-
-    def lockunspent(self, unlock, outpoints):
-        """Lock or unlock outpoints"""
-        json_outpoints = [{'txid':b2lx(outpoint.hash), 'vout':outpoint.n}
-                          for outpoint in outpoints]
-        return self._call('lockunspent', unlock, json_outpoints)
-
-    def sendrawtransaction(self, tx, allowhighfees=False):
-        """Submit transaction to local node and network.
-
-        allowhighfees - Allow even if fees are unreasonably high.
-        """
-        hextx = hexlify(tx.serialize())
-        r = None
-        if allowhighfees:
-            r = self._call('sendrawtransaction', hextx, True)
-        else:
-            r = self._call('sendrawtransaction', hextx)
-        return lx(r)
-
-    def sendmany(self, fromaccount, payments, minconf=1, comment='', subtractfeefromamount=[]):
-        """Send amount to given addresses.
-
-        payments - dict with {address: amount}
-        """
-        json_payments = {str(addr):float(amount)/COIN
-                         for addr, amount in payments.items()}
-        r = self._call('sendmany', fromaccount, json_payments, minconf, comment, subtractfeefromamount)
-        return lx(r)
-
-    def sendtoaddress(self, addr, amount, comment='', commentto='', subtractfeefromamount=False):
-        """Send amount to a given address"""
-        addr = str(addr)
-        amount = float(amount)/COIN
-        r = self._call('sendtoaddress', addr, amount, comment, commentto, subtractfeefromamount)
-        return lx(r)
-
-    def signrawtransaction(self, tx, *args):
-        """Sign inputs for transaction
-
-        FIXME: implement options
-        """
-        hextx = hexlify(tx.serialize())
-        r = self._call('signrawtransaction', hextx, *args)
-        r['tx'] = CTransaction.deserialize(unhexlify(r['hex']))
-        del r['hex']
-        return r
-
-    def submitblock(self, block, params=None):
-        """Submit a new block to the network.
-
-        params is optional and is currently ignored by bitcoind. See
-        https://en.bitcoin.it/wiki/BIP_0022 for full specification.
-        """
-        hexblock = hexlify(block.serialize())
-        if params is not None:
-            return self._call('submitblock', hexblock, params)
-        else:
-            return self._call('submitblock', hexblock)
-
-    def validateaddress(self, address):
-        """Return information about an address"""
-        r = self._call('validateaddress', str(address))
-        if r['isvalid']:
-            r['address'] = CBitcoinAddress(r['address'])
-        if 'pubkey' in r:
-            r['pubkey'] = unhexlify(r['pubkey'])
-        return r
-
-    def unlockwallet(self, password, timeout=60):
-        """Stores the wallet decryption key in memory for 'timeout' seconds.
-
-        password - The wallet passphrase.
-
-        timeout - The time to keep the decryption key in seconds.
-        (default=60)
-        """
-        r = self._call('walletpassphrase', password, timeout)
-        return r
-
-    def _addnode(self, node, arg):
-        r = self._call('addnode', node, arg)
-        return r
-
-    def addnode(self, node):
-        return self._addnode(node, 'add')
-
-    def addnodeonetry(self, node):
-        return self._addnode(node, 'onetry')
-
-    def removenode(self, node):
-        return self._addnode(node, 'remove')
 
 __all__ = (
     'JSONRPCError',
@@ -698,6 +306,5 @@ __all__ = (
     'VerifyRejectedError',
     'VerifyAlreadyInChainError',
     'InWarmupError',
-    'RawProxy',
-    'Proxy',
+    'RPCCaller',
 )

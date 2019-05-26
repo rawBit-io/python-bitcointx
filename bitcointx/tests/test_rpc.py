@@ -1,4 +1,5 @@
 # Copyright (C) 2013-2014 The python-bitcoinlib developers
+# Copyright (C) 2019 The python-bitcoinlib developers
 #
 # This file is part of python-bitcointx.
 #
@@ -9,18 +10,22 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import unittest
 
-from bitcointx.rpc import Proxy
+from bitcointx.rpc import RPCCaller
+
 
 class Test_RPC(unittest.TestCase):
     # Tests disabled, see discussion below.
     # "Looks like your unit tests won't work if Bitcoin Core isn't running;
-    # maybe they in turn need to check that and disable the test if core isn't available?"
+    # maybe they in turn need to check that and disable the test
+    # if core isn't available?"
     # https://github.com/petertodd/python-bitcoinlib/pull/10
-    pass
+
+    # NOTE: if we add MockRPCCaller to create mocked RPC interface,
+    # then maybe we can add tests that will make sense.
+    # For now, just test that we can create the instance.
+    RPCCaller(service_url='http://user:pass@host')
 
 #    def test_can_validate(self):
 #        working_address = '1CB2fxLGAZEzgaY4pjr4ndeDWJiz3D3AT7'
