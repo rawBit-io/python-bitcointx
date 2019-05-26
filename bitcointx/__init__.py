@@ -171,7 +171,7 @@ def SelectChainParams(params):
 
     if isinstance(params, str):
         params_cls = ChainParamsMeta.find_chain_params(name=params)
-        if params is None:
+        if params_cls is None:
             raise ValueError('Unknown chain %r' % params)
         params = params_cls()
     elif isinstance(params, type):
