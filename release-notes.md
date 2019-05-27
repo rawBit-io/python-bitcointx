@@ -45,6 +45,9 @@ BREAKING CHANGES:
 
     rpc.Proxy is removed, replaced with RPCCaller (ex-RawProxy)
 
+    add DATA,NUMBER,OPCODE guards to script module: CScript([DATA(var)]) will
+    raise ValueError if var is not bytes or bytearray instance, etc.
+
 
 NOTE: references to Elements sidechain below are in relation
 to python-elementstx - a separate module that uses python-bitcointx to

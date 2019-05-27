@@ -9,13 +9,21 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+# pylama:ignore=E501
 
 import unittest
-import os
 
-from bitcointx.core import b2x,x
-from bitcointx.core.script import *
+from bitcointx.core import b2x, x
+from bitcointx.core.script import (
+    CScript, CScriptOp, CScriptInvalidError,
+    OP_0, OP_1, OP_2, OP_3, OP_4, OP_5, OP_6, OP_7, OP_8,
+    OP_9, OP_10, OP_11, OP_12, OP_13, OP_14, OP_15, OP_16,
+    OP_CHECKSIG, OP_1NEGATE, OP_BOOLOR, OP_BOOLAND,
+    OP_INVALIDOPCODE, OP_CHECKMULTISIG, OP_DROP,
+    DATA, NUMBER, OPCODE,
+    IsLowDERSignature
+)
+
 
 class Test_CScriptOp(unittest.TestCase):
     def test_pushdata(self):
@@ -79,6 +87,7 @@ class Test_CScriptOp(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             CScriptOp(1).decode_op_n()
+
 
 class Test_CScript(unittest.TestCase):
     def test_tokenize_roundtrip(self):
@@ -157,7 +166,7 @@ class Test_CScript(unittest.TestCase):
         T('4dffff' + 'ff'*0xfffe)
         T('4e')
         T('4effffff')
-        T('4effffffff' + 'ff'*0xfffe) # not going to test with 4GiB-1...
+        T('4effffffff' + 'ff'*0xfffe)  # not going to test with 4GiB-1...
 
     def test_equality(self):
         # Equality is on the serialized script, not the logical meaning.
@@ -228,16 +237,16 @@ class Test_CScript(unittest.TestCase):
             actual_repr = repr(script)
             self.assertEqual(actual_repr, expected_repr)
 
-        T( CScript([]),
+        T(CScript([]),
           'CScript([])')
 
-        T( CScript([1]),
+        T(CScript([1]),
           'CScript([1])')
 
-        T( CScript([1, 2, 3]),
+        T(CScript([1, 2, 3]),
           'CScript([1, 2, 3])')
 
-        T( CScript([1, x('7ac977d8373df875eceda362298e5d09d4b72b53'), OP_DROP]),
+        T(CScript([1, x('7ac977d8373df875eceda362298e5d09d4b72b53'), OP_DROP]),
           "CScript([1, x('7ac977d8373df875eceda362298e5d09d4b72b53'), OP_DROP])")
 
         T(CScript(x('0001ff515261ff')),
@@ -419,7 +428,8 @@ class Test_CScript(unittest.TestCase):
         T([],
           'a914b472a266d0bd89c13706a4132ccfb16f7c3b9fcb87')
 
-        T([1,x('029b6d2c97b8b7c718c325d7be3ac30f7c9d67651bce0c929f55ee77ce58efcf84'),1,OP_CHECKMULTISIG],
+        T([1, x('029b6d2c97b8b7c718c325d7be3ac30f7c9d67651bce0c929f55ee77ce58efcf84'),
+           1, OP_CHECKMULTISIG],
           'a91419a7d869032368fd1f1e26e5e73a4ad0e474960e87')
 
         T([b'\xff'*517],
@@ -428,10 +438,33 @@ class Test_CScript(unittest.TestCase):
         with self.assertRaises(ValueError):
             CScript([b'a' * 518]).to_p2sh_scriptPubKey()
 
+    def test_guards(self):
+        bt = b'a'
+        nr = 42
+        op = OP_1
+        with self.assertRaises(TypeError):
+            CScript([DATA(nr)])
+        with self.assertRaises(TypeError):
+            CScript([DATA(op)])
+        with self.assertRaises(TypeError):
+            CScript([NUMBER(bt)])
+        with self.assertRaises(TypeError):
+            CScript([NUMBER(op)])
+        with self.assertRaises(TypeError):
+            CScript([OPCODE(bt)])
+        with self.assertRaises(TypeError):
+            CScript([OPCODE(nr)])
+
+        self.assertEqual(CScript([DATA(bt)]), CScript([bt]))
+        self.assertEqual(CScript([NUMBER(nr)]), CScript([nr]))
+        self.assertEqual(CScript([OPCODE(op)]), CScript([op]))
+
+
 class Test_IsLowDERSignature(unittest.TestCase):
     def test_high_s_value(self):
         sig = x('3046022100820121109528efda8bb20ca28788639e5ba5b365e0a84f8bd85744321e7312c6022100a7c86a21446daa405306fe10d0a9906e37d1a2c6b6fdfaaf6700053058029bbe')
         self.assertFalse(IsLowDERSignature(sig))
+
     def test_low_s_value(self):
         sig = x('3045022100b135074e08cc93904a1712b2600d3cb01899a5b1cc7498caa4b8585bcf5f27e7022074ab544045285baef0a63f0fb4c95e577dcbf5c969c0bf47c7da8e478909d669')
         self.assertTrue(IsLowDERSignature(sig))

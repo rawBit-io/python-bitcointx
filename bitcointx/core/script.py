@@ -508,6 +508,61 @@ DISABLED_OPCODES = frozenset((OP_VERIF, OP_VERNOTIF,
                               OP_LSHIFT, OP_RSHIFT))
 
 
+class DATA(bytes):
+    """A class that can be used to prevent accidental use of non-data
+    elements in the script where data elemets were expected. For example,
+    the code `CScript([var])` does not communicate to the reader if `var`
+    is expected to be just data, or a number, or an opcode.
+    with CScript([DATA(var)]), this is communicated clearly, and will
+    raise TypeError if var is not bytes or bytearray instance."""
+
+    def __new__(cls, data):
+        if not isinstance(data, (bytes, bytearray)):
+            raise TypeError(
+                'DATA can only accept bytes or bytearray instance')
+
+        return super(DATA, cls).__new__(cls, data)
+
+
+class NUMBER(int):
+    """A class that can be used to prevent accidental use of non-numeric
+    elements in the script where nmeric elemets were expected. For example,
+    the code `CScript([var])` does not communicate to the reader if `var`
+    is expected to be just data, or a number, or an opcode.
+    with CScript([NUMBER(var)]), this is communicated clearly, and will
+    raise TypeError if var is not an instance of int class, and not
+    and instance of CScriptOp (special case needed because CScriptOp is
+    a subclas of int, but there are special OPCODE guard for it"""
+
+    def __new__(cls, num):
+        if not isinstance(num, int):
+            raise TypeError(
+                'NUMBER can only accept values that are instance of '
+                'int class (except CScriptOp)')
+
+        if isinstance(num, CScriptOp):
+            raise TypeError('NUMBER can not accept CScriptOp instance')
+
+        return super(NUMBER, cls).__new__(cls, num)
+
+
+def OPCODE(op):
+    """A function that can be used to prevent accidental use of non-opcode
+    elements in the script where opcode elemets were expected. For example,
+    the code `CScript([var])` does not communicate to the reader if `var`
+    is expected to be just data, or a number, or an opcode.
+    with CScript([OPCODE(var)]), this is communicated clearly, and will
+    raise TypeError if var is not an instance of CScriptOp
+    Note that while DATA and NUMBER are classes, OPCODE cannot be a class,
+    because if the op is some subclass of the CScriptOp, result of
+    OPCODE(op) will not be the same, whereas with a function the same
+    instance is just returned."""
+    if not isinstance(op, CScriptOp):
+        raise TypeError(
+            'OPCODE can only accept instances of CScriptOp')
+    return op
+
+
 class CScriptInvalidError(Exception):
     """Base class for CScript exceptions"""
     pass
@@ -526,7 +581,7 @@ class CScriptBase(bytes):
     A bytes subclass, so you can use this directly whenever bytes are accepted.
     Note that this means that indexing does *not* work - you'll get an index by
     byte rather than opcode. This format was chosen for efficiency so that the
-    general case would not require creating a lot of little CScriptOP objects.
+    general case would not require creating a lot of little CScriptOp objects.
 
     iter(script) however does iterate by opcode.
     """
@@ -541,9 +596,13 @@ class CScriptBase(bytes):
             elif other == -1:
                 other = bytes([OP_1NEGATE])
             else:
-                other = CScriptOp.encode_op_pushdata(bitcointx.core._bignum.bn2vch(other))
+                other = CScriptOp.encode_op_pushdata(
+                    bitcointx.core._bignum.bn2vch(other))
         elif isinstance(other, (bytes, bytearray)):
             other = CScriptOp.encode_op_pushdata(other)
+        else:
+            raise TypeError('type {} cannot be represented in the script'
+                            .format(type(other).__name__))
         return other
 
     def __add__(self, other):
@@ -631,7 +690,7 @@ class CScriptBase(bytes):
     def __iter__(self):
         """'Cooked' iteration
 
-        Returns either a CScriptOP instance, an integer, or bytes, as
+        Returns either a CScriptOp instance, an integer, or bytes, as
         appropriate.
 
         See raw_iter() if you need to distinguish the different possible
