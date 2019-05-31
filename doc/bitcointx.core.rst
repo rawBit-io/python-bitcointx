@@ -28,3 +28,17 @@ Everything consensus critical is found in the core subpackage.
 
 .. automodule:: bitcointx.core.serialize
 
+:mod:`secp256k1`
+----------------
+
+.. automodule:: bitcointx.core.secp256k1
+
+:mod:`sha256`
+----------------
+
+.. automodule:: bitcointx.core.sha256
+
+:mod:`util`
+----------------
+
+.. automodule:: bitcointx.core.sha256

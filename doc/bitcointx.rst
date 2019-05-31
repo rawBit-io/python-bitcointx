@@ -11,25 +11,20 @@ bitcointx
 
 .. automodule:: bitcointx.base58
 
-:mod:`messages`
----------------
+:mod:`bech32`
+-------------
 
-.. automodule:: bitcointx.messages
-
-:mod:`net`
-----------
-
-.. automodule:: bitcointx.net
+.. automodule:: bitcointx.bech32
 
 :mod:`rpc`
 ----------
 
 .. automodule:: bitcointx.rpc
 
-:mod:`signature`
-----------------
+:mod:`segwit_addr`
+----------
 
-.. automodule:: bitcointx.signature
+.. automodule:: bitcointx.segwit_addr
 
 :mod:`signmessage`
 ------------------
