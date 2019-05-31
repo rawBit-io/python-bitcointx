@@ -15,7 +15,7 @@
 
 # This is needed for midstate SHA256, that is not available
 # from hashlib.sha256. Runtime performance will be slow,
-# but is OK for the tasks that it will be used for.
+# but oftentimes this is acceptable.
 
 # pylama:ignore=E501
 
