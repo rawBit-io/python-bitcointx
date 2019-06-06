@@ -137,9 +137,9 @@ class BitcoinTestnetParams(BitcoinMainnetParams):
 class BitcoinRegtestParams(BitcoinMainnetParams):
     RPC_PORT = 18443
     NAME = 'bitcoin/regtest'
-    ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
-    KEY_CLASS = bitcointx.wallet.CBitcoinTestnetKey
-    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinTestnetExtKey
+    ADDRESS_CLASS = bitcointx.wallet.CBitcoinRegtestAddress
+    KEY_CLASS = bitcointx.wallet.CBitcoinRegtestKey
+    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinRegtestExtKey
 
 
 def CurrentChainParams():

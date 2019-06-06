@@ -462,12 +462,21 @@ class CBitcoinTestnetAddress(CBitcoinAddress):
     ...
 
 
+class CBitcoinRegtestAddress(CBitcoinAddress):
+    ...
+
+
 class CBase58BitcoinAddress(CBase58CoinAddressCommon, CBitcoinAddress):
     ...
 
 
 class CBase58BitcoinTestnetAddress(CBase58CoinAddressCommon,
                                    CBitcoinTestnetAddress):
+    ...
+
+
+class CBase58BitcoinRegtestAddress(CBase58CoinAddressCommon,
+                                   CBitcoinRegtestAddress):
     ...
 
 
@@ -500,6 +509,16 @@ class P2PKHBitcoinTestnetAddress(P2PKHCoinAddressCommon,
 
 class P2SHBitcoinTestnetAddress(P2SHCoinAddressCommon,
                                 CBase58BitcoinTestnetAddress):
+    base58_prefix = bytes([196])
+
+
+class P2PKHBitcoinRegtestAddress(P2PKHCoinAddressCommon,
+                                 CBase58BitcoinRegtestAddress):
+    base58_prefix = bytes([111])
+
+
+class P2SHBitcoinRegtestAddress(P2SHCoinAddressCommon,
+                                CBase58BitcoinRegtestAddress):
     base58_prefix = bytes([196])
 
 
@@ -545,6 +564,8 @@ P2PKHCoinAddress.register(P2PKHBitcoinTestnetAddress)
 P2WSHCoinAddress.register(P2WSHBitcoinTestnetAddress)
 P2WPKHCoinAddress.register(P2WPKHBitcoinTestnetAddress)
 
+P2SHCoinAddress.register(P2SHBitcoinRegtestAddress)
+P2PKHCoinAddress.register(P2PKHBitcoinRegtestAddress)
 P2WSHCoinAddress.register(P2WSHBitcoinRegtestAddress)
 P2WPKHCoinAddress.register(P2WPKHBitcoinRegtestAddress)
 
@@ -563,10 +584,18 @@ CBitcoinTestnetAddress.set_class_params(
     address_classes=(
         [CBech32BitcoinTestnetAddress,
          (P2WSHBitcoinTestnetAddress, P2WPKHBitcoinTestnetAddress)],
-        [CBech32BitcoinRegtestAddress,
-         (P2WSHBitcoinRegtestAddress, P2WPKHBitcoinRegtestAddress)],
         [CBase58BitcoinTestnetAddress,
          (P2SHBitcoinTestnetAddress, P2PKHBitcoinTestnetAddress)]
+    )
+)
+
+CBitcoinRegtestAddress.set_class_params(
+    script_class=CBitcoinScript,
+    address_classes=(
+        [CBech32BitcoinRegtestAddress,
+         (P2WSHBitcoinRegtestAddress, P2WPKHBitcoinRegtestAddress)],
+        [CBase58BitcoinRegtestAddress,
+         (P2SHBitcoinRegtestAddress, P2PKHBitcoinRegtestAddress)]
     )
 )
 
@@ -633,6 +662,10 @@ class CBitcoinTestnetKey(CBitcoinKey):
     base58_prefix = bytes([239])
 
 
+class CBitcoinRegtestKey(CBitcoinKey):
+    base58_prefix = bytes([239])
+
+
 class CCoinExtKey(metaclass=_frontend_metaclass):
     pass
 
@@ -692,12 +725,25 @@ class CBitcoinTestnetExtKey(CBitcoinExtKey):
     _key_class = CBitcoinTestnetKey
 
 
+class CBitcoinRegtestExtPubKey(CBitcoinExtPubKey):
+    base58_prefix = b'\x04\x35\x87\xCF'
+
+
+class CBitcoinRegtestExtKey(CBitcoinExtKey):
+    base58_prefix = b'\x04\x35\x83\x94'
+    _xpub_class = CBitcoinRegtestExtPubKey
+    _key_class = CBitcoinRegtestKey
+
+
 CCoinKey.register(CBitcoinKey)
 CCoinKey.register(CBitcoinTestnetKey)
+CCoinKey.register(CBitcoinRegtestKey)
 CCoinExtKey.register(CBitcoinExtKey)
 CCoinExtKey.register(CBitcoinTestnetExtKey)
+CCoinExtKey.register(CBitcoinRegtestExtKey)
 CCoinExtPubKey.register(CBitcoinExtPubKey)
 CCoinExtPubKey.register(CBitcoinTestnetExtPubKey)
+CCoinExtPubKey.register(CBitcoinRegtestExtPubKey)
 
 
 def _SetAddressClassParams(address_cls, key_cls, xpriv_cls):
