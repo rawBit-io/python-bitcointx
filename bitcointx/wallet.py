@@ -59,7 +59,7 @@ class P2WPKHCoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
-class CCoinAddressCommon():
+class CCoinAddressBase():
 
     _address_encoding_classes = None
     _script_class = None
@@ -454,15 +454,15 @@ class P2WPKHCoinAddressCommon():
              OP_EQUALVERIFY, OP_CHECKSIG])
 
 
-class CBitcoinAddress(CCoinAddressCommon):
+class CBitcoinAddress(CCoinAddressBase):
     ...
 
 
-class CBitcoinTestnetAddress(CBitcoinAddress):
+class CBitcoinTestnetAddress(CCoinAddressBase):
     ...
 
 
-class CBitcoinRegtestAddress(CBitcoinAddress):
+class CBitcoinRegtestAddress(CCoinAddressBase):
     ...
 
 
@@ -607,7 +607,7 @@ class CCoinKey(metaclass=_frontend_metaclass):
     pass
 
 
-class CCoinKeyCommon(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
+class CBase58CoinKeyBase(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
     """A base58-encoded secret key
 
     Attributes: (inherited from CKeyMixin):
@@ -628,7 +628,7 @@ class CCoinKeyCommon(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
         if len(data) > 33:
             raise ValueError('data size must not exceed 33 bytes')
         compressed = (len(data) > 32 and data[32] == 1)
-        self = super(CCoinKeyCommon, cls).from_bytes(data)
+        self = super(CBase58CoinKeyBase, cls).from_bytes(data)
         CKeyMixin.__init__(self, None, compressed=compressed)
         return self
 
@@ -637,7 +637,7 @@ class CCoinKeyCommon(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
         """Create a secret key from a 32-byte secret"""
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
-        self = super(CCoinKeyCommon, cls).from_bytes(secret + (b'\x01' if compressed else b''))
+        self = super(CBase58CoinKeyBase, cls).from_bytes(secret + (b'\x01' if compressed else b''))
         CKeyMixin.__init__(self, None, compressed=compressed)
         return self
 
@@ -652,7 +652,7 @@ class CCoinKeyCommon(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
         return self.__class__.from_secret_bytes(self[:32], False)
 
 
-class CBitcoinKey(CCoinKeyCommon):
+class CBitcoinKey(CBase58CoinKeyBase):
     base58_prefix = bytes([128])
 
 
@@ -661,11 +661,11 @@ class CBitcoinSecret(CBitcoinKey):
     might be deprecated in the future."""
 
 
-class CBitcoinTestnetKey(CBitcoinKey):
+class CBitcoinTestnetKey(CBase58CoinKeyBase):
     base58_prefix = bytes([239])
 
 
-class CBitcoinRegtestKey(CBitcoinKey):
+class CBitcoinRegtestKey(CBase58CoinKeyBase):
     base58_prefix = bytes([239])
 
 
@@ -677,23 +677,23 @@ class CCoinExtPubKey(metaclass=_frontend_metaclass):
     pass
 
 
-class CCoinExtPubKeyCommon(bitcointx.base58.CBase58PrefixedData,
-                           CExtPubKeyMixin):
+class CBase58CoinExtPubKeyBase(bitcointx.base58.CBase58PrefixedData,
+                               CExtPubKeyMixin):
 
     def __init__(self, _s):
         assert isinstance(self, CExtPubKeyMixin)
         CExtPubKeyMixin.__init__(self, None)
 
 
-class CCoinExtKeyCommon(bitcointx.base58.CBase58PrefixedData,
-                        CExtKeyMixin):
+class CBase58CoinExtKeyBase(bitcointx.base58.CBase58PrefixedData,
+                            CExtKeyMixin):
 
     def __init__(self, _s):
         assert isinstance(self, CExtKeyMixin)
         CExtKeyMixin.__init__(self, None)
 
 
-class CBitcoinExtPubKey(CCoinExtPubKeyCommon):
+class CBitcoinExtPubKey(CBase58CoinExtPubKeyBase):
     """A base58-encoded extended public key
 
     Attributes (inherited from CExtPubKeyMixin):
@@ -704,7 +704,7 @@ class CBitcoinExtPubKey(CCoinExtPubKeyCommon):
     base58_prefix = b'\x04\x88\xB2\x1E'
 
 
-class CBitcoinExtKey(CCoinExtKeyCommon):
+class CBitcoinExtKey(CBase58CoinExtKeyBase):
     """A base58-encoded extended key
 
     Attributes (inherited from key mixin class):
@@ -718,21 +718,21 @@ class CBitcoinExtKey(CCoinExtKeyCommon):
     _key_class = CBitcoinKey
 
 
-class CBitcoinTestnetExtPubKey(CBitcoinExtPubKey):
+class CBitcoinTestnetExtPubKey(CBase58CoinExtPubKeyBase):
     base58_prefix = b'\x04\x35\x87\xCF'
 
 
-class CBitcoinTestnetExtKey(CBitcoinExtKey):
+class CBitcoinTestnetExtKey(CBase58CoinExtKeyBase):
     base58_prefix = b'\x04\x35\x83\x94'
     _xpub_class = CBitcoinTestnetExtPubKey
     _key_class = CBitcoinTestnetKey
 
 
-class CBitcoinRegtestExtPubKey(CBitcoinExtPubKey):
+class CBitcoinRegtestExtPubKey(CBase58CoinExtPubKeyBase):
     base58_prefix = b'\x04\x35\x87\xCF'
 
 
-class CBitcoinRegtestExtKey(CBitcoinExtKey):
+class CBitcoinRegtestExtKey(CBase58CoinKeyBase):
     base58_prefix = b'\x04\x35\x83\x94'
     _xpub_class = CBitcoinRegtestExtPubKey
     _key_class = CBitcoinRegtestKey
@@ -795,4 +795,7 @@ __all__ = (
     'CBitcoinTestnetKey',
     'CBitcoinTestnetExtKey',
     'CBitcoinTestnetExtPubKey',
+    'CBitcoinRegtestKey',
+    'CBitcoinRegtestExtKey',
+    'CBitcoinRegtestExtPubKey',
 )

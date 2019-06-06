@@ -217,12 +217,12 @@ class COutPoint(ImmutableSerializable):
 
     def __repr__(self):
         if self.is_null():
-            return 'C%sOutPoint()' % (
-                'Mutable' if self._immutable_restriction_lifted else '',
+            return '%s()' % (
+                self.__class__.__name__
             )
         else:
-            return 'C%sOutPoint(lx(%r), %i)' % (
-                'Mutable' if self._immutable_restriction_lifted else '',
+            return '%s(lx(%r), %i)' % (
+                self.__class__.__name__,
                 b2lx(self.hash), self.n)
 
     def __str__(self):
@@ -337,11 +337,7 @@ class CBitcoinMutableTxIn(CBitcoinTxIn):
         return cls(prevout, txin.scriptSig, txin.nSequence)
 
 
-class CTxOutBase(ImmutableSerializable):
-    pass
-
-
-class CBitcoinTxOut(CTxOutBase):
+class CBitcoinTxOutCommon:
     """An output of a transaction
 
     Contains the public key that the next input must be able to sign with to
@@ -375,9 +371,12 @@ class CBitcoinTxOut(CTxOutBase):
         return True
 
     def __repr__(self):
-        return "C%sTxOut(%s, %r)" % (
-            'Mutable' if self._immutable_restriction_lifted else '',
+        return "%s(%s, %r)" % (
+            self.__class__.__name__,
             str_money_value_for_repr(self.nValue), self.scriptPubKey)
+
+
+class CBitcoinTxOut(CBitcoinTxOutCommon, ImmutableSerializable):
 
     @classmethod
     def from_txout(cls, txout):
@@ -410,11 +409,7 @@ class CBitcoinMutableTxOut(CBitcoinTxOut):
         return cls(txout.nValue, txout.scriptPubKey)
 
 
-class CTxInWitnessBase(ImmutableSerializable):
-    pass
-
-
-class CBitcoinTxInWitness(CTxInWitnessBase):
+class CBitcoinTxInWitness(ImmutableSerializable):
     """Witness data for a single transaction input"""
     __slots__ = ['scriptWitness']
 
