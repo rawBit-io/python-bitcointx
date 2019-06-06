@@ -116,7 +116,7 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
         return ' '.join(name_parts)
 
 
-class BitcoinMainNetParams(ChainParamsBase):
+class BitcoinMainnetParams(ChainParamsBase):
     RPC_PORT = 8332
     MAX_MONEY = 21000000 * bitcointx.core.COIN
     NAME = 'bitcoin'
@@ -126,7 +126,7 @@ class BitcoinMainNetParams(ChainParamsBase):
     EXT_KEY_CLASS = bitcointx.wallet.CBitcoinExtKey
 
 
-class BitcoinTestNetParams(BitcoinMainNetParams):
+class BitcoinTestnetParams(BitcoinMainnetParams):
     RPC_PORT = 18332
     NAME = 'bitcoin/testnet'
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
@@ -134,7 +134,7 @@ class BitcoinTestNetParams(BitcoinMainNetParams):
     EXT_KEY_CLASS = bitcointx.wallet.CBitcoinTestnetExtKey
 
 
-class RegTestParams(BitcoinMainNetParams):
+class BitcoinRegtestParams(BitcoinMainnetParams):
     RPC_PORT = 18443
     NAME = 'bitcoin/regtest'
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
@@ -189,4 +189,4 @@ def SelectChainParams(params):
     bitcointx.core._SetChainParams(params)
 
 
-SelectChainParams(BitcoinMainNetParams)
+SelectChainParams(BitcoinMainnetParams)

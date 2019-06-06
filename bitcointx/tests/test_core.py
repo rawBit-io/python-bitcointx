@@ -14,7 +14,7 @@
 
 import unittest
 
-from bitcointx import BitcoinMainNetParams
+from bitcointx import BitcoinMainnetParams
 from bitcointx.core import (
     str_money_value, MoneyRange, COIN
 )
@@ -47,7 +47,9 @@ class Test_Money(unittest.TestCase):
         self.assertFalse(MoneyRange(21000001 * COIN))
 
     def test_MoneyRangeCustomParams(self):
-        highMaxParamsType = type(str('CoreHighMainParams'), (BitcoinMainNetParams, object), {'MAX_MONEY': 22000000 * COIN})
+        highMaxParamsType = type(str('CoreHighMainParams'),
+                                 (BitcoinMainnetParams, object),
+                                 {'MAX_MONEY': 22000000 * COIN})
         highMaxParams = highMaxParamsType()
         self.assertTrue(MoneyRange(21000001 * COIN, highMaxParams))
         self.assertTrue(MoneyRange(22000000 * COIN, highMaxParams))

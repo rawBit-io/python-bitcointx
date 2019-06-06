@@ -10,6 +10,7 @@ The list of things to be described here:
     Frontend classes
 
     Chain params:
+        - new param class names
         - new function names
         - contexts
         - thread-local
