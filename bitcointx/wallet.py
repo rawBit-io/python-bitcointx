@@ -553,6 +553,9 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddressCommon,
 # Make CBitcoinAddress behave like a a subclass of CCoinAddress
 # regarding isinstance(script, CCoinAddress), etc
 CCoinAddress.register(CBitcoinAddress)
+CCoinAddress.register(CBitcoinTestnetAddress)
+CCoinAddress.register(CBitcoinRegtestAddress)
+
 # do the same for more specific front-end classes
 P2SHCoinAddress.register(P2SHBitcoinAddress)
 P2PKHCoinAddress.register(P2PKHBitcoinAddress)
