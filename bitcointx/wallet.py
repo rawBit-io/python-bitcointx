@@ -540,6 +540,14 @@ P2PKHCoinAddress.register(P2PKHBitcoinAddress)
 P2WSHCoinAddress.register(P2WSHBitcoinAddress)
 P2WPKHCoinAddress.register(P2WPKHBitcoinAddress)
 
+P2SHCoinAddress.register(P2SHBitcoinTestnetAddress)
+P2PKHCoinAddress.register(P2PKHBitcoinTestnetAddress)
+P2WSHCoinAddress.register(P2WSHBitcoinTestnetAddress)
+P2WPKHCoinAddress.register(P2WPKHBitcoinTestnetAddress)
+
+P2WSHCoinAddress.register(P2WSHBitcoinRegtestAddress)
+P2WPKHCoinAddress.register(P2WPKHBitcoinRegtestAddress)
+
 CBitcoinAddress.set_class_params(
     script_class=CBitcoinScript,
     address_classes=(
