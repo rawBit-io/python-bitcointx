@@ -370,6 +370,14 @@ def make_mutable(cls):
     return cls
 
 
+class MutableSerializableMeta(type):
+    def __new__(cls, name, bases, dct):
+        new_cls = super(MutableSerializableMeta,
+                        cls).__new__(cls, name, bases, dct)
+        make_mutable(new_cls)
+        return new_cls
+
+
 __all__ = (
     'MAX_SIZE',
     'Hash',
@@ -393,4 +401,5 @@ __all__ = (
     'uint256_to_str',
     'uint256_to_shortstr',
     'make_mutable',
+    'MutableSerializableMeta',
 )

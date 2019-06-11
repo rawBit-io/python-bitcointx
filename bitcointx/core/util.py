@@ -65,6 +65,9 @@ def make_frontend_metaclass(prefix, frontend_class_store):
         real_class = frontend_class_store.clsmap[cls]
         return real_class(*args, **kwargs)
 
+    base_class = type(prefix + 'FrontendClassBase', (), {'__new__': base_new})
+    meta_class = type(prefix + 'FrontendClassMeta', (ABCMeta, ), {})
+
     def meta_getattr(cls, name):
         if cls not in frontend_class_store.clsmap:
             raise TypeError(
@@ -73,16 +76,19 @@ def make_frontend_metaclass(prefix, frontend_class_store):
         real_class = frontend_class_store.clsmap[cls]
         return getattr(real_class, name)
 
-    base_class = type(prefix + 'FrontendClassBase', (), {'__new__': base_new})
+    meta_class.__getattr__ = meta_getattr
 
-    meta_class = type(
-        prefix + 'FrontendClassMeta', (ABCMeta, ),
-        {
-            '__new__': lambda cls, name, bases, dct:
-            super(meta_class, cls).__new__(
-                cls, name, tuple([base_class] + list(bases)), dct),
-            '__getattr__': meta_getattr
-        }
-    )
+    def meta_new(cls, name, bases, dct):
+        if any(type(b) is cls for b in bases):
+            # If there are base class that has our metaclass as a type,
+            # that means we do not need to add *FrontendClassBase,
+            # because everything is already in place at this base class
+            pass
+        else:
+            # otherwise, we add the base class
+            bases = tuple([base_class] + list(bases))
+        return super(meta_class, cls).__new__(cls, name, bases, dct)
+
+    meta_class.__new__ = meta_new
 
     return meta_class

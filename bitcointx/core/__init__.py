@@ -12,6 +12,7 @@
 
 # pylama:ignore=E501
 
+import types
 import binascii
 import struct
 from abc import ABCMeta, abstractmethod
@@ -20,7 +21,7 @@ from threading import local
 from . import script
 
 from .serialize import (
-    ImmutableSerializable,
+    ImmutableSerializable, MutableSerializableMeta,
     BytesSerializer, VectorSerializer,
     ser_read, uint256_to_str, uint256_from_str,
     Hash, Hash160, make_mutable
@@ -186,6 +187,78 @@ class Uint256(_UintBitVector):
         return uint256_from_str(self.data)
 
 
+class CoinIdentityMeta(type, metaclass=ABCMeta):
+
+    # a dict that holds frontend to concrete class mapping
+    _clsmap = None
+    # used to ensure set_classmap called only once per coin identity class
+    __clsid = None
+
+    def __new__(cls, name, bases, dct):
+        new_cls = super(CoinIdentityMeta,
+                        cls).__new__(cls, name, bases, dct)
+
+        class AttrAccessHelper:
+            def __getattr__(self, name):
+                return cls._clsmap[name]
+
+        new_cls._concrete_class = AttrAccessHelper()
+
+        return new_cls
+
+    @classmethod
+    def set_classmap(cls, clsmap):
+        assert cls._clsmap is None or cls.__clsid != cls, \
+            "set_classmap can be called only once for each class"
+
+        cls.__clsid = cls
+
+        required = set((CTransaction, CTxIn, CTxOut, CTxWitness, COutPoint,
+                        CTxInWitness, CTxOutWitness, script.CScript))
+
+        supplied = set()
+        final_map = {}
+        for front, concrete in clsmap.items():
+            if front not in required:
+                for base in front.__mro__:
+                    if base in required:
+                        front = base
+                        break
+
+            supplied.add(front)
+            final_map[front.__name__] = concrete
+
+        missing = required-supplied
+        if missing:
+            raise ValueError('Required class(es) was not found in clsmap: {}'
+                             .format([c.__name__ for c in missing]))
+        extra = supplied-required
+        if extra:
+            raise ValueError('Unexpected class(es) in clsmap: {}'
+                             .format([c.__name__ for c in extra]))
+
+        for front, concrete in clsmap.items():
+            if type(front) is _frontend_metaclass:
+                # regiser the concrete class to frontend class
+                # so isinstance and issubclass will work as expected
+                front.register(concrete)
+
+            if not issubclass(concrete, front):
+                raise ValueError('{} is not a subclass of {}'
+                                 .format(concrete.__name__, front.__name__))
+
+        # make the map read-only
+        cls._clsmap = types.MappingProxyType(final_map)
+
+
+class BitcoinIdentityMeta(CoinIdentityMeta):
+    ...
+
+
+class BitcoinMutableIdentityMeta(BitcoinIdentityMeta, MutableSerializableMeta):
+    ...
+
+
 class COutPoint(ImmutableSerializable):
     """The combination of a transaction hash and an index n into its vout"""
     __slots__ = ['hash', 'n']
@@ -263,22 +336,22 @@ class CTxInBase(ImmutableSerializable):
         if not (0 <= nSequence <= 0xffffffff):
             raise ValueError('CTxIn: nSequence must be an integer between 0x0 and 0xffffffff; got %x' % nSequence)
         if prevout is None:
-            prevout = self._outpoint_class()
+            prevout = self._concrete_class.COutPoint()
         elif self._immutable_restriction_lifted != prevout._immutable_restriction_lifted:
-            prevout = self._outpoint_class.from_outpoint(prevout)
+            prevout = self._concrete_class.COutPoint.from_outpoint(prevout)
         object.__setattr__(self, 'nSequence', nSequence)
         object.__setattr__(self, 'prevout', prevout)
         object.__setattr__(self, 'scriptSig', scriptSig)
 
     @classmethod
     def stream_deserialize(cls, f):
-        prevout = cls._outpoint_class.stream_deserialize(f)
+        prevout = cls._concrete_class.COutPoint.stream_deserialize(f)
         scriptSig = BytesSerializer.stream_deserialize(f)
         nSequence = struct.unpack(b"<I", ser_read(f, 4))[0]
         return cls(prevout, scriptSig, nSequence)
 
     def stream_serialize(self, f):
-        self._outpoint_class.stream_serialize(self.prevout, f)
+        self._concrete_class.COutPoint.stream_serialize(self.prevout, f)
         BytesSerializer.stream_serialize(self.scriptSig, f)
         f.write(struct.pack(b"<I", self.nSequence))
 
@@ -287,8 +360,7 @@ class CTxInBase(ImmutableSerializable):
         return (self.nSequence == 0xffffffff)
 
 
-class CBitcoinTxIn(CTxInBase):
-    _outpoint_class = COutPoint
+class CBitcoinTxIn(CTxInBase, metaclass=BitcoinIdentityMeta):
 
     def __init__(self, prevout=None, scriptSig=script.CBitcoinScript(),
                  nSequence=0xffffffff):
@@ -311,8 +383,9 @@ class CBitcoinTxIn(CTxInBase):
             # txin is immutable, therefore returning same txin is OK
             return txin
         else:
-            return cls(cls._outpoint_class.from_outpoint(txin.prevout),
-                       txin.scriptSig, txin.nSequence)
+            return cls(
+                cls._concrete_class.COutPoint.from_outpoint(txin.prevout),
+                txin.scriptSig, txin.nSequence)
 
     def __repr__(self):
         return "C%sTxIn(%s, %s, 0x%x)" % (
@@ -320,11 +393,9 @@ class CBitcoinTxIn(CTxInBase):
             repr(self.prevout), repr(self.scriptSig), self.nSequence)
 
 
-@make_mutable
-class CBitcoinMutableTxIn(CBitcoinTxIn):
+class CBitcoinMutableTxIn(CBitcoinTxIn, metaclass=BitcoinMutableIdentityMeta):
     """A mutable CTxIn"""
     __slots__ = []
-    _outpoint_class = CMutableOutPoint
 
     @classmethod
     def from_txin(cls, txin):
@@ -333,11 +404,11 @@ class CBitcoinMutableTxIn(CBitcoinTxIn):
             raise ValueError(
                 'incompatible txin class: expected instance of {}, got {}'
                 .format(CBitcoinTxIn.__name__, txin.__class__.__name__))
-        prevout = cls._outpoint_class.from_outpoint(txin.prevout)
+        prevout = cls._concrete_class.COutPoint.from_outpoint(txin.prevout)
         return cls(prevout, txin.scriptSig, txin.nSequence)
 
 
-class CBitcoinTxOutCommon:
+class CBitcoinTxOutCommon(ImmutableSerializable):
     """An output of a transaction
 
     Contains the public key that the next input must be able to sign with to
@@ -376,7 +447,7 @@ class CBitcoinTxOutCommon:
             str_money_value_for_repr(self.nValue), self.scriptPubKey)
 
 
-class CBitcoinTxOut(CBitcoinTxOutCommon, ImmutableSerializable):
+class CBitcoinTxOut(CBitcoinTxOutCommon):
 
     @classmethod
     def from_txout(cls, txout):
@@ -814,7 +885,7 @@ class CTransaction(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTransaction(metaclass=_frontend_metaclass):
+class CMutableTransaction(CTransaction):
     pass
 
 
@@ -822,7 +893,7 @@ class CTxWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxWitness(metaclass=_frontend_metaclass):
+class CMutableTxWitness(CTxWitness):
     pass
 
 
@@ -830,7 +901,7 @@ class CTxInWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxInWitness(metaclass=_frontend_metaclass):
+class CMutableTxInWitness(CTxInWitness):
     pass
 
 
@@ -838,7 +909,7 @@ class CTxOutWitness(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxOutWitness(metaclass=_frontend_metaclass):
+class CMutableTxOutWitness(CTxOutWitness):
     pass
 
 
@@ -846,7 +917,7 @@ class CTxIn(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxIn(metaclass=_frontend_metaclass):
+class CMutableTxIn(CTxIn):
     pass
 
 
@@ -854,23 +925,31 @@ class CTxOut(metaclass=_frontend_metaclass):
     pass
 
 
-class CMutableTxOut(metaclass=_frontend_metaclass):
+class CMutableTxOut(CTxOut):
     pass
 
 
-CTransaction.register(CBitcoinTransaction)
-CTxIn.register(CBitcoinTxIn)
-CTxOut.register(CBitcoinTxOut)
-CTxWitness.register(CBitcoinTxWitness)
-CTxInWitness.register(CBitcoinTxInWitness)
-CTxOutWitness.register(_CBitcoinDummyTxOutWitness)
+BitcoinIdentityMeta.set_classmap({
+    CTransaction: CBitcoinTransaction,
+    CTxIn: CBitcoinTxIn,
+    CTxOut: CBitcoinTxOut,
+    CTxWitness: CBitcoinTxWitness,
+    CTxInWitness: CBitcoinTxInWitness,
+    CTxOutWitness: _CBitcoinDummyTxOutWitness,
+    COutPoint: COutPoint,
+    script.CScript: script.CBitcoinScript
+})
 
-CMutableTransaction.register(CBitcoinMutableTransaction)
-CMutableTxIn.register(CBitcoinMutableTxIn)
-CMutableTxOut.register(CBitcoinMutableTxOut)
-CMutableTxWitness.register(CBitcoinMutableTxWitness)
-CMutableTxInWitness.register(CBitcoinMutableTxInWitness)
-CMutableTxOutWitness.register(_CBitcoinDummyTxOutWitness)
+BitcoinMutableIdentityMeta.set_classmap({
+    CMutableTransaction: CBitcoinMutableTransaction,
+    CMutableTxIn: CBitcoinMutableTxIn,
+    CMutableTxOut: CBitcoinMutableTxOut,
+    CMutableTxWitness: CBitcoinMutableTxWitness,
+    CMutableTxInWitness: CBitcoinMutableTxInWitness,
+    CMutableTxOutWitness: _CBitcoinDummyTxOutWitness,
+    CMutableOutPoint: CMutableOutPoint,
+    script.CScript: script.CBitcoinScript
+})
 
 
 def _SetTransactionClassParams(transaction_class):
