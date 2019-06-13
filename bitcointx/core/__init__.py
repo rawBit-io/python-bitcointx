@@ -12,7 +12,6 @@
 
 # pylama:ignore=E501
 
-import types
 import binascii
 import struct
 from abc import ABCMeta, abstractmethod
@@ -28,7 +27,8 @@ from .serialize import (
 )
 
 from .util import (
-    no_bool_use_as_property, make_frontend_metaclass, set_frontend_class
+    no_bool_use_as_property, make_frontend_metaclass, set_frontend_class,
+    CoinIdentityMeta
 )
 
 # Core definitions
@@ -187,12 +187,9 @@ class Uint256(_UintBitVector):
         return uint256_from_str(self.data)
 
 
-class CoinIdentityMeta(type, metaclass=ABCMeta):
+class CoinTransactionIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
 
-    # a dict that holds frontend to concrete class mapping
-    _clsmap = None
-    # used to ensure set_classmap called only once per coin identity class
-    __clsid = None
+    _frontend_metaclass = _frontend_metaclass
 
     def __new__(cls, name, bases, dct):
         new_cls = super(CoinIdentityMeta,
@@ -207,55 +204,17 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
         return new_cls
 
     @classmethod
-    def set_classmap(cls, clsmap):
-        assert cls._clsmap is None or cls.__clsid != cls, \
-            "set_classmap can be called only once for each class"
-
-        cls.__clsid = cls
-
-        required = set((CTransaction, CTxIn, CTxOut, CTxWitness, COutPoint,
-                        CTxInWitness, CTxOutWitness, script.CScript))
-
-        supplied = set()
-        final_map = {}
-        for front, concrete in clsmap.items():
-            if front not in required:
-                for base in front.__mro__:
-                    if base in required:
-                        front = base
-                        break
-
-            supplied.add(front)
-            final_map[front.__name__] = concrete
-
-        missing = required-supplied
-        if missing:
-            raise ValueError('Required class(es) was not found in clsmap: {}'
-                             .format([c.__name__ for c in missing]))
-        extra = supplied-required
-        if extra:
-            raise ValueError('Unexpected class(es) in clsmap: {}'
-                             .format([c.__name__ for c in extra]))
-
-        for front, concrete in clsmap.items():
-            if type(front) is _frontend_metaclass:
-                # regiser the concrete class to frontend class
-                # so isinstance and issubclass will work as expected
-                front.register(concrete)
-
-            if not issubclass(concrete, front):
-                raise ValueError('{} is not a subclass of {}'
-                                 .format(concrete.__name__, front.__name__))
-
-        # make the map read-only
-        cls._clsmap = types.MappingProxyType(final_map)
+    def _get_required_classes(cls):
+        return set((CTransaction, CTxIn, CTxOut, CTxWitness, COutPoint,
+                    CTxInWitness, CTxOutWitness, script.CScript))
 
 
-class BitcoinIdentityMeta(CoinIdentityMeta):
+class BitcoinTransactionIdentityMeta(CoinTransactionIdentityMeta):
     ...
 
 
-class BitcoinMutableIdentityMeta(BitcoinIdentityMeta, MutableSerializableMeta):
+class BitcoinMutableTransactionIdentityMeta(BitcoinTransactionIdentityMeta,
+                                            MutableSerializableMeta):
     ...
 
 
@@ -360,7 +319,7 @@ class CTxInBase(ImmutableSerializable):
         return (self.nSequence == 0xffffffff)
 
 
-class CBitcoinTxIn(CTxInBase, metaclass=BitcoinIdentityMeta):
+class CBitcoinTxIn(CTxInBase, metaclass=BitcoinTransactionIdentityMeta):
 
     def __init__(self, prevout=None, scriptSig=script.CBitcoinScript(),
                  nSequence=0xffffffff):
@@ -393,7 +352,8 @@ class CBitcoinTxIn(CTxInBase, metaclass=BitcoinIdentityMeta):
             repr(self.prevout), repr(self.scriptSig), self.nSequence)
 
 
-class CBitcoinMutableTxIn(CBitcoinTxIn, metaclass=BitcoinMutableIdentityMeta):
+class CBitcoinMutableTxIn(CBitcoinTxIn,
+                          metaclass=BitcoinMutableTransactionIdentityMeta):
     """A mutable CTxIn"""
     __slots__ = []
 
@@ -929,7 +889,7 @@ class CMutableTxOut(CTxOut):
     pass
 
 
-BitcoinIdentityMeta.set_classmap({
+BitcoinTransactionIdentityMeta.set_classmap({
     CTransaction: CBitcoinTransaction,
     CTxIn: CBitcoinTxIn,
     CTxOut: CBitcoinTxOut,
@@ -940,7 +900,7 @@ BitcoinIdentityMeta.set_classmap({
     script.CScript: script.CBitcoinScript
 })
 
-BitcoinMutableIdentityMeta.set_classmap({
+BitcoinMutableTransactionIdentityMeta.set_classmap({
     CMutableTransaction: CBitcoinMutableTransaction,
     CMutableTxIn: CBitcoinMutableTxIn,
     CMutableTxOut: CBitcoinMutableTxOut,

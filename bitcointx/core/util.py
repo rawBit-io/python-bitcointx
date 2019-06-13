@@ -9,6 +9,7 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import types
 from abc import ABCMeta
 
 
@@ -92,3 +93,67 @@ def make_frontend_metaclass(prefix, frontend_class_store):
     meta_class.__new__ = meta_new
 
     return meta_class
+
+
+class CoinIdentityMeta(type, metaclass=ABCMeta):
+
+    # a dict that holds frontend to concrete class mapping
+    _clsmap = None
+    # used to ensure set_classmap called only once per coin identity class
+    __clsid = None
+
+    def __new__(cls, name, bases, dct):
+        new_cls = super(CoinIdentityMeta,
+                        cls).__new__(cls, name, bases, dct)
+
+        class AttrAccessHelper:
+            def __getattr__(self, name):
+                return cls._clsmap[name]
+
+        new_cls._concrete_class = AttrAccessHelper()
+
+        return new_cls
+
+    @classmethod
+    def set_classmap(cls, clsmap):
+        assert cls._clsmap is None or cls.__clsid != cls, \
+            "set_classmap can be called only once for each class"
+
+        cls.__clsid = cls
+
+        required = cls._get_required_classes()
+        frontend_metaclass = cls._frontend_metaclass
+
+        supplied = set()
+        final_map = {}
+        for front, concrete in clsmap.items():
+            if front not in required:
+                for base in front.__mro__:
+                    if base in required:
+                        front = base
+                        break
+
+            supplied.add(front)
+            final_map[front.__name__] = concrete
+
+        missing = required-supplied
+        if missing:
+            raise ValueError('Required class(es) was not found in clsmap: {}'
+                             .format([c.__name__ for c in missing]))
+        extra = supplied-required
+        if extra:
+            raise ValueError('Unexpected class(es) in clsmap: {}'
+                             .format([c.__name__ for c in extra]))
+
+        for front, concrete in clsmap.items():
+            if type(front) is frontend_metaclass:
+                # regiser the concrete class to frontend class
+                # so isinstance and issubclass will work as expected
+                front.register(concrete)
+
+            if not issubclass(concrete, front):
+                raise ValueError('{} is not a subclass of {}'
+                                 .format(concrete.__name__, front.__name__))
+
+        # make the map read-only
+        cls._clsmap = types.MappingProxyType(final_map)
