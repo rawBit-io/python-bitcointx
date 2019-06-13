@@ -736,7 +736,7 @@ class CScriptBase(bytes):
                 if op is not None:
                     ops.append(op)
 
-        return "CScript([%s])" % ', '.join(ops)
+        return "%s([%s])" % (self.__class__.__name__, ', '.join(ops))
 
     @no_bool_use_as_property
     def is_p2sh(self):

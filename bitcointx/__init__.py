@@ -33,7 +33,8 @@ class ChainParamsMeta(ABCMeta):
         ('NAME', isinstance, str),
         ('RPC_PORT', isinstance, int),
         ('CONFIG_LOCATION', isinstance, tuple),
-        ('TRANSACTION_CLASS', issubclass, bitcointx.core.CTransaction),
+        ('TRANSACTION_IDENTITY',
+         issubclass, bitcointx.core.CoinTransactionIdentityMeta),
         ('ADDRESS_CLASS', issubclass, bitcointx.wallet.CCoinAddress),
         ('KEY_CLASS', issubclass, bitcointx.wallet.CCoinKey),
         ('EXT_KEY_CLASS', issubclass, bitcointx.wallet.CCoinExtKey)
@@ -120,7 +121,7 @@ class BitcoinMainnetParams(ChainParamsBase):
     RPC_PORT = 8332
     MAX_MONEY = 21000000 * bitcointx.core.COIN
     NAME = 'bitcoin'
-    TRANSACTION_CLASS = bitcointx.core.CBitcoinTransaction
+    TRANSACTION_IDENTITY = bitcointx.core.BitcoinTransactionIdentityMeta
     ADDRESS_CLASS = bitcointx.wallet.CBitcoinAddress
     KEY_CLASS = bitcointx.wallet.CBitcoinKey
     EXT_KEY_CLASS = bitcointx.wallet.CBitcoinExtKey

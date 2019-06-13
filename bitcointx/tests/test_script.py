@@ -238,32 +238,32 @@ class Test_CScript(unittest.TestCase):
             self.assertEqual(actual_repr, expected_repr)
 
         T(CScript([]),
-          'CScript([])')
+          'CBitcoinScript([])')
 
         T(CScript([1]),
-          'CScript([1])')
+          'CBitcoinScript([1])')
 
         T(CScript([1, 2, 3]),
-          'CScript([1, 2, 3])')
+          'CBitcoinScript([1, 2, 3])')
 
         T(CScript([1, x('7ac977d8373df875eceda362298e5d09d4b72b53'), OP_DROP]),
-          "CScript([1, x('7ac977d8373df875eceda362298e5d09d4b72b53'), OP_DROP])")
+          "CBitcoinScript([1, x('7ac977d8373df875eceda362298e5d09d4b72b53'), OP_DROP])")
 
         T(CScript(x('0001ff515261ff')),
-          "CScript([0, x('ff'), 1, 2, OP_NOP, OP_INVALIDOPCODE])")
+          "CBitcoinScript([0, x('ff'), 1, 2, OP_NOP, OP_INVALIDOPCODE])")
 
         # truncated scripts
         T(CScript(x('6101')),
-          "CScript([OP_NOP, x('')...<ERROR: PUSHDATA(1): truncated data>])")
+          "CBitcoinScript([OP_NOP, x('')...<ERROR: PUSHDATA(1): truncated data>])")
 
         T(CScript(x('614bff')),
-          "CScript([OP_NOP, x('ff')...<ERROR: PUSHDATA(75): truncated data>])")
+          "CBitcoinScript([OP_NOP, x('ff')...<ERROR: PUSHDATA(75): truncated data>])")
 
         T(CScript(x('614c')),
-          "CScript([OP_NOP, <ERROR: PUSHDATA1: missing data length>])")
+          "CBitcoinScript([OP_NOP, <ERROR: PUSHDATA1: missing data length>])")
 
         T(CScript(x('614c0200')),
-          "CScript([OP_NOP, x('00')...<ERROR: PUSHDATA1: truncated data>])")
+          "CBitcoinScript([OP_NOP, x('00')...<ERROR: PUSHDATA1: truncated data>])")
 
     def test_is_p2sh(self):
         def T(serialized, b):

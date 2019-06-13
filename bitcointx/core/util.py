@@ -9,7 +9,6 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-import types
 from abc import ABCMeta
 
 
@@ -99,20 +98,24 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
 
     # a dict that holds frontend to concrete class mapping
     _clsmap = None
+    # a dict that holds immutable frontend classname to concrete class mapping
+    # used for attribute access, like cls._concrete_class.COutPoint() etc.
+    _namemap = None
     # used to ensure set_classmap called only once per coin identity class
     __clsid = None
 
     def __new__(cls, name, bases, dct):
         new_cls = super(CoinIdentityMeta,
                         cls).__new__(cls, name, bases, dct)
+        new_cls._concrete_class = cls._get_attr_access_helper()
+        return new_cls
 
+    @classmethod
+    def _get_attr_access_helper(cls):
         class AttrAccessHelper:
             def __getattr__(self, name):
-                return cls._clsmap[name]
-
-        new_cls._concrete_class = AttrAccessHelper()
-
-        return new_cls
+                return cls._namemap[name]
+        return AttrAccessHelper()
 
     @classmethod
     def set_classmap(cls, clsmap):
@@ -125,7 +128,7 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
         frontend_metaclass = cls._frontend_metaclass
 
         supplied = set()
-        final_map = {}
+        namemap = {}
         for front, concrete in clsmap.items():
             if front not in required:
                 for base in front.__mro__:
@@ -134,7 +137,7 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
                         break
 
             supplied.add(front)
-            final_map[front.__name__] = concrete
+            namemap[front.__name__] = concrete
 
         missing = required-supplied
         if missing:
@@ -155,5 +158,5 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
                 raise ValueError('{} is not a subclass of {}'
                                  .format(concrete.__name__, front.__name__))
 
-        # make the map read-only
-        cls._clsmap = types.MappingProxyType(final_map)
+        cls._namemap = namemap
+        cls._clsmap = clsmap

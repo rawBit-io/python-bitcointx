@@ -374,6 +374,9 @@ class MutableSerializableMeta(type):
     def __new__(cls, name, bases, dct):
         new_cls = super(MutableSerializableMeta,
                         cls).__new__(cls, name, bases, dct)
+        assert issubclass(new_cls, ImmutableSerializable), \
+            ("MutableSerializableMeta can only be applied to subclasses "
+             "of ImmutableSerializable")
         make_mutable(new_cls)
         return new_cls
 

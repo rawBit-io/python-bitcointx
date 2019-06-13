@@ -56,7 +56,7 @@ def load_test_vectors(name):
 class Test_COutPoint(unittest.TestCase):
     def test_is_null(self):
         self.assertTrue(COutPoint().is_null())
-        self.assertTrue(COutPoint(hash=b'\x00'*32,n=0xffffffff).is_null())
+        self.assertTrue(COutPoint(hash=b'\x00'*32, n=0xffffffff).is_null())
         self.assertFalse(COutPoint(hash=b'\x00'*31 + b'\x01').is_null())
         self.assertFalse(COutPoint(n=1).is_null())
 
@@ -64,9 +64,9 @@ class Test_COutPoint(unittest.TestCase):
         def T(outpoint, expected):
             actual = repr(outpoint)
             self.assertEqual(actual, expected)
-        T( COutPoint(),
+        T(COutPoint(),
           'COutPoint()')
-        T( COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
+        T(COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
           "COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)")
 
     def test_str(self):
@@ -76,9 +76,9 @@ class Test_COutPoint(unittest.TestCase):
         T(COutPoint(),
           '0000000000000000000000000000000000000000000000000000000000000000:4294967295')
         T(COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
-                       '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0')
+          '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0')
         T(COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 10),
-                       '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:10')
+          '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:10')
 
     def test_immutable(self):
         """COutPoint shall not be mutable"""
@@ -101,9 +101,9 @@ class Test_CMutableOutPoint(unittest.TestCase):
         def T(outpoint, expected):
             actual = repr(outpoint)
             self.assertEqual(actual, expected)
-        T( CMutableOutPoint(),
+        T(CMutableOutPoint(),
           'CMutableOutPoint()')
-        T( CMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
+        T(CMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
           "CMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)")
 
 
@@ -117,14 +117,15 @@ class Test_CTxIn(unittest.TestCase):
         def T(txin, expected):
             actual = repr(txin)
             self.assertEqual(actual, expected)
-        T( CTxIn(),
-          'CTxIn(COutPoint(), CScript([]), 0xffffffff)')
+        T(CTxIn(),
+          'CBitcoinTxIn(COutPoint(), CBitcoinScript([]), 0xffffffff)')
 
     def test_immutable(self):
         """CTxIn shall not be mutable"""
         txin = CTxIn()
         with self.assertRaises(AttributeError):
             txin.nSequence = 1
+
 
 class Test_CMutableTxIn(unittest.TestCase):
     def test_GetHash(self):
@@ -140,8 +141,8 @@ class Test_CMutableTxIn(unittest.TestCase):
         def T(txin, expected):
             actual = repr(txin)
             self.assertEqual(actual, expected)
-        T( CMutableTxIn(),
-          'CMutableTxIn(CMutableOutPoint(), CScript([]), 0xffffffff)')
+        T(CMutableTxIn(),
+          'CBitcoinMutableTxIn(CMutableOutPoint(), CBitcoinScript([]), 0xffffffff)')
 
 
 class Test_CTransaction(unittest.TestCase):
@@ -168,8 +169,8 @@ class Test_CTransaction(unittest.TestCase):
             try:
                 CheckTransaction(tx)
             except CheckTransactionError:
-                self.fail('tx failed CheckTransaction(): ' \
-                        + str((prevouts, b2x(tx.serialize()), enforceP2SH)))
+                self.fail('tx failed CheckTransaction(): '
+                          + str((prevouts, b2x(tx.serialize()), enforceP2SH)))
                 continue
 
             for i in range(len(tx.vin)):

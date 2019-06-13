@@ -115,7 +115,7 @@ class AddressEncodingError(Exception):
     """Base class for all errors related to address encoding"""
 
 
-class ReprOrStrMixin(metaclass=ABCMeta):
+class ReprOrStrMixin():
 
     @abstractmethod
     def _repr_or_str(self, strfn):
@@ -126,6 +126,29 @@ class ReprOrStrMixin(metaclass=ABCMeta):
 
     def __repr__(self):
         return self._repr_or_str(repr)
+
+
+def _check_inst_compatible(inst, imm_concrete_class):
+    if not isinstance(inst, imm_concrete_class):
+        raise ValueError(
+            'incompatible class: expected instance of {}, got {}'
+            .format(imm_concrete_class.__name__, inst.__class__.__name__))
+
+
+def _is_mut_cls(cls):
+    # The base class is always ImmutableSerializable
+    assert issubclass(cls, ImmutableSerializable)
+
+    # But MutableSerializableMeta might be added that will make it mutable
+    return issubclass(type(cls), MutableSerializableMeta)
+
+
+def _is_mut_inst(inst):
+    # The base class is always ImmutableSerializable
+    assert isinstance(inst, ImmutableSerializable)
+
+    # But MutableSerializableMeta might be added that will make it mutable
+    return issubclass(type(type(inst)), MutableSerializableMeta)
 
 
 class _UintBitVectorMeta(type):
@@ -191,18 +214,6 @@ class CoinTransactionIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
 
     _frontend_metaclass = _frontend_metaclass
 
-    def __new__(cls, name, bases, dct):
-        new_cls = super(CoinIdentityMeta,
-                        cls).__new__(cls, name, bases, dct)
-
-        class AttrAccessHelper:
-            def __getattr__(self, name):
-                return cls._clsmap[name]
-
-        new_cls._concrete_class = AttrAccessHelper()
-
-        return new_cls
-
     @classmethod
     def _get_required_classes(cls):
         return set((CTransaction, CTxIn, CTxOut, CTxWitness, COutPoint,
@@ -215,7 +226,18 @@ class BitcoinTransactionIdentityMeta(CoinTransactionIdentityMeta):
 
 class BitcoinMutableTransactionIdentityMeta(BitcoinTransactionIdentityMeta,
                                             MutableSerializableMeta):
-    ...
+    @classmethod
+    def set_classmap(cls, clsmap, *, immutable_identity):
+        super(BitcoinMutableTransactionIdentityMeta,
+              cls).set_classmap(clsmap)
+        mut_access = cls._get_attr_access_helper()
+        imm_access = immutable_identity._get_attr_access_helper()
+        cls._namemap['mutable'] = mut_access
+        cls._namemap['immutable'] = imm_access
+        cls._immutable_identity = immutable_identity
+        immutable_identity._namemap['mutable'] = mut_access
+        immutable_identity._namemap['immutable'] = imm_access
+        immutable_identity._mutable_identity = cls
 
 
 class COutPoint(ImmutableSerializable):
@@ -262,29 +284,26 @@ class COutPoint(ImmutableSerializable):
 
     @classmethod
     def from_outpoint(cls, outpoint):
-        """Create an immutable copy of an existing OutPoint
+        """Create a mutable or immutable copy of an existing OutPoint,
+        depending on the class this method is called on.
 
-        If outpoint is already immutable, it is returned directly.
+        If cls and outpoint are both immutable, outpoint is returned directly.
         """
-        if not outpoint._immutable_restriction_lifted:
+        _check_inst_compatible(outpoint, COutPoint)
+
+        if not _is_mut_cls(cls) and not _is_mut_inst(outpoint):
             return outpoint
-        else:
-            return cls(outpoint.hash, outpoint.n)
 
-
-@make_mutable
-class CMutableOutPoint(COutPoint):
-    """A mutable COutPoint"""
-    __slots__ = []
-
-    @classmethod
-    def from_outpoint(cls, outpoint):
-        """Create a mutable copy of an existing COutPoint"""
         return cls(outpoint.hash, outpoint.n)
 
 
+class CMutableOutPoint(COutPoint, metaclass=MutableSerializableMeta):
+    """A mutable COutPoint"""
+    __slots__ = []
+
+
 class CTxInBase(ImmutableSerializable):
-    """An input of a transaction
+    """A base class for an input of a transaction
 
     Contains the location of the previous transaction's output that it claims,
     and a signature that matches the output's public key.
@@ -294,6 +313,11 @@ class CTxInBase(ImmutableSerializable):
     def __init__(self, prevout=None, scriptSig=None, nSequence=0xffffffff):
         if not (0 <= nSequence <= 0xffffffff):
             raise ValueError('CTxIn: nSequence must be an integer between 0x0 and 0xffffffff; got %x' % nSequence)
+        if scriptSig is None:
+            scriptSig = self._concrete_class.CScript()
+        elif not isinstance(scriptSig, self._concrete_class.CScript):
+            assert isinstance(scriptSig, (bytes, bytearray)), scriptSig.__class__
+            scriptSig = self._concrete_class.CScript(scriptSig)
         if prevout is None:
             prevout = self._concrete_class.COutPoint()
         elif self._immutable_restriction_lifted != prevout._immutable_restriction_lifted:
@@ -318,58 +342,42 @@ class CTxInBase(ImmutableSerializable):
     def is_final(self):
         return (self.nSequence == 0xffffffff)
 
-
-class CBitcoinTxIn(CTxInBase, metaclass=BitcoinTransactionIdentityMeta):
-
-    def __init__(self, prevout=None, scriptSig=script.CBitcoinScript(),
-                 nSequence=0xffffffff):
-        if not isinstance(scriptSig, script.CBitcoinScript):
-            assert isinstance(scriptSig, (bytes, bytearray))
-            scriptSig = script.CBitcoinScript(scriptSig)
-        super(CBitcoinTxIn, self).__init__(prevout, scriptSig, nSequence)
-
     @classmethod
     def from_txin(cls, txin):
-        """Create an immutable copy of an existing TxIn
+        """Create a mutable or immutable copy of an existing TxIn,
+        depending on the class this method is called on.
 
-        If txin is already immutable, it is returned directly.
+        If cls and txin are both immutable, txin is returned directly.
         """
-        if not isinstance(txin, CBitcoinTxIn):
-            raise ValueError(
-                'incompatible txin class: expected instance of {}, got {}'
-                .format(CBitcoinTxIn.__name__, txin.__class__.__name__))
-        if not txin._immutable_restriction_lifted:
-            # txin is immutable, therefore returning same txin is OK
+
+        _check_inst_compatible(txin, cls._concrete_class.immutable.CTxIn)
+
+        if not _is_mut_cls(cls) and not _is_mut_inst(txin):
             return txin
-        else:
-            return cls(
-                cls._concrete_class.COutPoint.from_outpoint(txin.prevout),
-                txin.scriptSig, txin.nSequence)
+
+        return cls(
+            cls._concrete_class.COutPoint.from_outpoint(txin.prevout),
+            txin.scriptSig, txin.nSequence)
 
     def __repr__(self):
-        return "C%sTxIn(%s, %s, 0x%x)" % (
-            'Mutable' if self._immutable_restriction_lifted else '',
+        return "%s(%s, %s, 0x%x)" % (
+            self.__class__.__name__,
             repr(self.prevout), repr(self.scriptSig), self.nSequence)
+
+
+class CBitcoinTxIn(CTxInBase, metaclass=BitcoinTransactionIdentityMeta):
+    """An immutable Bitcoin TxIn"""
+    __slots__ = []
 
 
 class CBitcoinMutableTxIn(CBitcoinTxIn,
                           metaclass=BitcoinMutableTransactionIdentityMeta):
-    """A mutable CTxIn"""
+    """A mutable Bitcoin TxIn"""
     __slots__ = []
 
-    @classmethod
-    def from_txin(cls, txin):
-        """Create a fully mutable copy of an existing TxIn"""
-        if not isinstance(txin, CBitcoinTxIn):
-            raise ValueError(
-                'incompatible txin class: expected instance of {}, got {}'
-                .format(CBitcoinTxIn.__name__, txin.__class__.__name__))
-        prevout = cls._concrete_class.COutPoint.from_outpoint(txin.prevout)
-        return cls(prevout, txin.scriptSig, txin.nSequence)
 
-
-class CBitcoinTxOutCommon(ImmutableSerializable):
-    """An output of a transaction
+class CTxOutBase(ImmutableSerializable):
+    """A base class for an output of a transaction
 
     Contains the public key that the next input must be able to sign with to
     claim it.
@@ -406,42 +414,35 @@ class CBitcoinTxOutCommon(ImmutableSerializable):
             self.__class__.__name__,
             str_money_value_for_repr(self.nValue), self.scriptPubKey)
 
-
-class CBitcoinTxOut(CBitcoinTxOutCommon):
-
     @classmethod
     def from_txout(cls, txout):
-        """Create an immutable copy of an existing TxOut
+        """Create a mutable or immutable copy of an existing TxOut,
+        depending on the class this method is called on.
 
-        If txout is already immutable, then it will be returned directly.
+        If cls and txout are both immutable, txout is returned directly.
         """
-        if not isinstance(txout, CBitcoinTxOut):
-            raise ValueError(
-                'incompatible txout class: expected instance of {}, got {}'
-                .format(CBitcoinTxOut.__name__, txout.__class__.__name__))
-        if not txout._immutable_restriction_lifted:
+
+        _check_inst_compatible(txout, cls._concrete_class.immutable.CTxOut)
+
+        if not _is_mut_cls(cls) and not _is_mut_inst(txout):
             return txout
-        else:
-            return cls(txout.nValue, txout.scriptPubKey)
 
-
-@make_mutable
-class CBitcoinMutableTxOut(CBitcoinTxOut):
-    """A mutable CTxOut"""
-    __slots__ = []
-
-    @classmethod
-    def from_txout(cls, txout):
-        """Create a fullly mutable copy of an existing TxOut"""
-        if not isinstance(txout, CBitcoinTxOut):
-            raise ValueError(
-                'incompatible txout class: expected instance of {}, got {}'
-                .format(CBitcoinTxOut.__name__, txout.__class__.__name__))
         return cls(txout.nValue, txout.scriptPubKey)
 
 
-class CBitcoinTxInWitness(ImmutableSerializable):
-    """Witness data for a single transaction input"""
+class CBitcoinTxOut(CTxOutBase, metaclass=BitcoinTransactionIdentityMeta):
+    """A immutable Bitcoin TxOut"""
+    __slots__ = []
+
+
+class CBitcoinMutableTxOut(CBitcoinTxOut,
+                           metaclass=BitcoinMutableTransactionIdentityMeta):
+    """A mutable Bitcoin CTxOut"""
+    __slots__ = []
+
+
+class CTxInWitnessBase(ImmutableSerializable):
+    """A base class for witness data for a single transaction input"""
     __slots__ = ['scriptWitness']
 
     def __init__(self, scriptWitness=script.CScriptWitness()):
@@ -461,34 +462,28 @@ class CBitcoinTxInWitness(ImmutableSerializable):
 
     @classmethod
     def from_txin_witness(cls, txin_witness):
-        if not isinstance(txin_witness, CBitcoinTxInWitness):
-            raise ValueError(
-                'incompatible txin witness class: expected instance of {}, got {}'
-                .format(CBitcoinTxInWitness.__name__,
-                        txin_witness.__class__.__name__))
-        if not txin_witness._immutable_restriction_lifted:
-            # txin_witness is immutable, therefore returning same txin_witness is OK
+        _check_inst_compatible(txin_witness,
+                               cls._concrete_class.immutable.CTxInWitness)
+
+        if not _is_mut_cls(cls) and not _is_mut_inst(txin_witness):
             return txin_witness
+
         return cls(txin_witness.scriptWitness)
 
     def __repr__(self):
-        return "C%sTxInWitness(%s)" % (
-            'Mutable' if self._immutable_restriction_lifted else '',
-            repr(self.scriptWitness))
+        return "%s(%s)" % (self.__class__.__name__, repr(self.scriptWitness))
 
 
-@make_mutable
-class CBitcoinMutableTxInWitness(CBitcoinTxInWitness):
+class CBitcoinTxInWitness(CTxInWitnessBase,
+                          metaclass=BitcoinTransactionIdentityMeta):
+    """Immutable Bitcoin witness data for a single transaction input"""
+    __slots__ = []
 
-    @classmethod
-    def from_txin_witness(cls, txin_witness):
-        """Create a mutable copy of an existing TxInWitness"""
-        if not isinstance(txin_witness, CBitcoinTxInWitness):
-            raise ValueError(
-                'incompatible txin witness class: expected instance of {}, got {}'
-                .format(CBitcoinTxInWitness.__name__,
-                        txin_witness.__class__.__name__))
-        return cls(txin_witness.scriptWitness)
+
+class CBitcoinMutableTxInWitness(CBitcoinTxInWitness,
+                                 metaclass=BitcoinMutableTransactionIdentityMeta):
+    """Mutable Bitcoin witness data for a single transaction input"""
+    __slots__ = []
 
 
 class CTxOutWitnessBase(ImmutableSerializable):
@@ -500,21 +495,25 @@ class _CBitcoinDummyTxOutWitness(CTxOutWitnessBase):
 
 
 class CTxWitnessBase(ImmutableSerializable):
-    pass
-
-
-class CBitcoinTxWitness(CTxWitnessBase):
     """Witness data for all inputs to a transaction"""
     __slots__ = ['vtxinwit']
-    _txin_witness_class = CBitcoinTxInWitness
-    _txout_witness_class = _CBitcoinDummyTxOutWitness
 
-    def __init__(self, vtxinwit=()):
+    def __init__(self, vtxinwit=(), vtxoutwit=None):
         # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
-        object.__setattr__(self, 'vtxinwit',
-                           tuple(w if not w._immutable_restriction_lifted
-                                 else self._txin_witness_class.from_txin_witness(w)
-                                 for w in vtxinwit))
+        txinwit = []
+        for w in vtxinwit:
+            _check_inst_compatible(
+                w, self._concrete_class.immutable.CTxInWitness)
+            if _is_mut_inst(self) or _is_mut_inst(w):
+                txinwit.append(self._concrete_class.CTxInWitness.from_txin_witness(w))
+            else:
+                txinwit.append(w)
+
+        if not _is_mut_inst(self):
+            txinwit = tuple(txinwit)
+
+        # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
+        object.__setattr__(self, 'vtxinwit', txinwit)
 
     @no_bool_use_as_property
     def is_null(self):
@@ -526,7 +525,7 @@ class CBitcoinTxWitness(CTxWitnessBase):
     # NOTE: this cannot be a @classmethod like the others because we need to
     # know how many items to deserialize, which comes from len(vin)
     def stream_deserialize(self, f):
-        vtxinwit = tuple(self._txin_witness_class.stream_deserialize(f)
+        vtxinwit = tuple(self._concrete_class.CTxInWitness.stream_deserialize(f)
                          for dummy in range(len(self.vtxinwit)))
         return self.__class__(vtxinwit)
 
@@ -536,52 +535,37 @@ class CBitcoinTxWitness(CTxWitnessBase):
 
     @classmethod
     def from_witness(cls, witness):
-        if not isinstance(witness, CBitcoinTxWitness):
-            raise ValueError(
-                'incompatible tx witness class: expected instance of{}, got {}'
-                .format(CBitcoinTxWitness.__name__, witness.__class__.__name__))
-        if not witness._immutable_restriction_lifted:
+        _check_inst_compatible(witness,
+                               cls._concrete_class.immutable.CTxWitness)
+
+        if not _is_mut_cls(cls) and not _is_mut_inst(witness):
             return witness
-        vtxinwit = (cls._txin_witness_class.from_txin_witness(txinwit)
-                    for txinwit in witness.vtxinwit)
+
+        vtxinwit = (cls._concrete_class.CTxInWitness.from_txin_witness(w)
+                    for w in witness.vtxinwit)
+
         return cls(vtxinwit)
 
     def __repr__(self):
-        return "C%sTxWitness([%s])" % (
-            'Mutable' if self._immutable_restriction_lifted else '',
-            ','.join(repr(w) for w in self.vtxinwit))
+        return "%s([%s])" % (self.__class__.__name__,
+                             ','.join(repr(w) for w in self.vtxinwit))
+
+
+class CBitcoinTxWitness(CTxWitnessBase,
+                        metaclass=BitcoinTransactionIdentityMeta):
+    """Immutable witness data for all inputs to a transaction"""
+    __slots__ = []
 
 
 @make_mutable
-class CBitcoinMutableTxWitness(CBitcoinTxWitness):
+class CBitcoinMutableTxWitness(CBitcoinTxWitness,
+                               metaclass=BitcoinMutableTransactionIdentityMeta):
     """Witness data for all inputs to a transaction, mutable version"""
     __slots__ = []
-    _txin_witness_class = CBitcoinMutableTxInWitness
-
-    def __init__(self, vtxinwit=(), vtxoutwit=None):
-        # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
-        self.vtxinwit = [w if w._immutable_restriction_lifted
-                         else self.__class__._txin_witness_class.from_txin_witness(w)
-                         for w in vtxinwit]
-
-    @classmethod
-    def from_witness(cls, witness):
-        if not isinstance(witness, CBitcoinTxWitness):
-            raise ValueError(
-                'incompatible tx witness class: expected instance of {}, got {}'
-                .format(CBitcoinTxWitness.__name__, witness.__class__.__name__))
-        vtxinwit = (cls._txin_witness_class.from_txin_witness(txinwit)
-                    for txinwit in witness.vtxinwit)
-        return cls(vtxinwit)
 
 
 class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
-    """A transaction"""
     __slots__ = ['nVersion', 'vin', 'vout', 'nLockTime', 'wit']
-
-    _witness_class = None
-    _txin_class = None
-    _txout_class = None
 
     CURRENT_VERSION = 2
 
@@ -595,17 +579,32 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         if not (0 <= nLockTime <= 0xffffffff):
             raise ValueError('CTransaction: nLockTime must be in range 0x0 to 0xffffffff; got %x' % nLockTime)
 
-        if witness is None:
-            witness = self._witness_class()
-
         if nVersion is None:
             nVersion = self.CURRENT_VERSION
 
+        wclass = self._concrete_class.CTxWitness
+        txin_wclass = self._concrete_class.CTxInWitness
+        txout_wclass = self._concrete_class.CTxOutWitness
+
+        if witness is None or witness.is_null():
+            if witness is None and not _is_mut_inst(self):
+                witness = wclass()
+            else:
+                witness = wclass(
+                    [txin_wclass() for dummy in range(len(vin))],
+                    [txout_wclass() for dummy in range(len(vout))])
+        else:
+            witness = wclass.from_witness(witness)
+
+        tuple_or_list = list if _is_mut_inst(self) else tuple
+
         object.__setattr__(self, 'nLockTime', nLockTime)
         object.__setattr__(self, 'nVersion', nVersion)
-        object.__setattr__(self, 'vin', tuple(self._txin_class.from_txin(txin) for txin in vin))
-        object.__setattr__(self, 'vout', tuple(self._txout_class.from_txout(txout) for txout in vout))
-        object.__setattr__(self, 'wit', self._witness_class.from_witness(witness))
+        object.__setattr__(self, 'vin', tuple_or_list(
+            self._concrete_class.CTxIn.from_txin(txin) for txin in vin))
+        object.__setattr__(self, 'vout', tuple_or_list(
+            self._concrete_class.CTxOut.from_txout(txout) for txout in vout))
+        object.__setattr__(self, 'wit', witness)
 
     @no_bool_use_as_property
     def is_coinbase(self):
@@ -634,84 +633,24 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         return txid
 
     def to_mutable(self):
-        if self._immutable_restriction_lifted:
-            return self.__class__.from_tx(self)
-        return self._inverted_mutability_class.from_tx(self)
+        return self._concrete_class.mutable.CTransaction.from_tx(self)
 
     def to_immutable(self):
-        if not self._immutable_restriction_lifted:
-            return self.__class__.from_tx(self)
-        return self._inverted_mutability_class.from_tx(self)
+        return self._concrete_class.immutable.CTransaction.from_tx(self)
 
-    @classmethod
-    def _from_tx(cls, tx):
-        vin = [cls._txin_class.from_txin(txin) for txin in tx.vin]
-        vout = [cls._txout_class.from_txout(txout) for txout in tx.vout]
-        wit = cls._witness_class.from_witness(tx.wit)
-        return cls(vin, vout, tx.nLockTime, tx.nVersion, wit)
-
-
-class CImmutableTransactionBase(CTransactionBase):
     @classmethod
     def from_tx(cls, tx):
-        """Create an immutable copy of a pre-existing transaction
+        _check_inst_compatible(tx,
+                               cls._concrete_class.immutable.CTransaction)
 
-        If tx is already immutable, then it will be returned directly.
-        """
-        if not tx._immutable_restriction_lifted:
-            # tx is immutable, therefore returning same tx is OK
+        if not _is_mut_cls(cls) and not _is_mut_inst(tx):
             return tx
 
-        return cls._from_tx(tx)
-
-
-@make_mutable
-class CMutableTransactionBase(CTransactionBase):
-    """A mutable transaction"""
-    __slots__ = []
-
-    def __init__(self, vin=None, vout=None, nLockTime=0, nVersion=None, witness=None):
-        if not (0 <= nLockTime <= 0xffffffff):
-            raise ValueError('CTransaction: nLockTime must be in range 0x0 to 0xffffffff; got %x' % nLockTime)
-
-        if nVersion is None:
-            nVersion = self.CURRENT_VERSION
-
-        self.nLockTime = nLockTime
-
-        if vin is None:
-            self.vin = []
-        else:
-            self.vin = [inp if inp._immutable_restriction_lifted
-                        else self.__class__._txin_class.from_txin(inp)
-                        for inp in vin]
-
-        if vout is None:
-            self.vout = []
-        else:
-            self.vout = [out if out._immutable_restriction_lifted
-                         else self.__class__._txout_class.from_txout(out)
-                         for out in vout]
-        self.nVersion = nVersion
-
-        wclass = self._witness_class
-        if witness is None or witness.is_null():
-            self.wit = wclass([wclass._txin_witness_class() for dummy in range(len(self.vin))],
-                              [wclass._txout_witness_class() for dummy in range(len(self.vout))])
-
-        elif not witness._immutable_restriction_lifted:
-            self.wit = wclass.from_witness(witness)
-        else:
-            self.wit = witness
-
-    @classmethod
-    def from_tx(cls, tx):
-        """Create a fully mutable copy of a pre-existing transaction"""
-        # tx is mutable, we should always return new instance
-        return cls._from_tx(tx)
-
-
-class CBitcoinTransactionCommon():
+        vin = [cls._concrete_class.CTxIn.from_txin(txin) for txin in tx.vin]
+        vout = [cls._concrete_class.CTxOut.from_txout(txout)
+                for txout in tx.vout]
+        wit = cls._concrete_class.CTxWitness.from_witness(tx.wit)
+        return cls(vin, vout, tx.nLockTime, tx.nVersion, wit)
 
     @classmethod
     def stream_deserialize(cls, f):
@@ -732,17 +671,22 @@ class CBitcoinTransactionCommon():
         markerbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         flagbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         if markerbyte == 0 and flagbyte == 1:
-            vin = VectorSerializer.stream_deserialize(cls._txin_class, f)
-            vout = VectorSerializer.stream_deserialize(cls._txout_class, f)
-            wit = cls._witness_class(tuple(cls._witness_class._txin_witness_class()
-                                           for dummy in range(len(vin))))
+            vin = VectorSerializer.stream_deserialize(
+                cls._concrete_class.CTxIn, f)
+            vout = VectorSerializer.stream_deserialize(
+                cls._concrete_class.CTxOut, f)
+            wit = cls._concrete_class.CTxWitness(
+                tuple(cls._concrete_class.CTxInWitness()
+                      for dummy in range(len(vin))))
             wit = wit.stream_deserialize(f)
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion, wit)
         else:
             f.seek(pos)  # put marker byte back, since we don't have peek
-            vin = VectorSerializer.stream_deserialize(cls._txin_class, f)
-            vout = VectorSerializer.stream_deserialize(cls._txout_class, f)
+            vin = VectorSerializer.stream_deserialize(
+                cls._concrete_class.CTxIn, f)
+            vout = VectorSerializer.stream_deserialize(
+                cls._concrete_class.CTxOut, f)
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion)
 
@@ -752,36 +696,27 @@ class CBitcoinTransactionCommon():
             assert(len(self.wit.vtxinwit) == len(self.vin))
             f.write(b'\x00')  # Marker
             f.write(b'\x01')  # Flag
-            VectorSerializer.stream_serialize(self._txin_class, self.vin, f)
-            VectorSerializer.stream_serialize(self._txout_class, self.vout, f)
+            VectorSerializer.stream_serialize(
+                self._concrete_class.CTxIn, self.vin, f)
+            VectorSerializer.stream_serialize(
+                self._concrete_class.CTxOut, self.vout, f)
             self.wit.stream_serialize(f)
         else:
-            VectorSerializer.stream_serialize(self._txin_class, self.vin, f)
-            VectorSerializer.stream_serialize(self._txout_class, self.vout, f)
+            VectorSerializer.stream_serialize(
+                self._concrete_class.CTxIn, self.vin, f)
+            VectorSerializer.stream_serialize(
+                self._concrete_class.CTxOut, self.vout, f)
         f.write(struct.pack(b"<I", self.nLockTime))
 
-    @classmethod
-    def from_tx(cls, tx):
-        if not isinstance(tx, CBitcoinTransactionCommon):
-            raise ValueError(
-                'incompatible tx class: expected instance of {}, got {}'
-                .format(CBitcoinTransactionCommon.__name__,
-                        tx.__class__.__name__))
-        return super(CBitcoinTransactionCommon, cls).from_tx(tx)
+
+class CBitcoinMutableTransaction(CTransactionBase,
+                                 metaclass=BitcoinMutableTransactionIdentityMeta):
+    """Bitcoin transaction"""
 
 
-class CBitcoinMutableTransaction(CBitcoinTransactionCommon, CMutableTransactionBase):
-    # _inverted_mutability_class will be set in _SetTransactionClassParams
-    _witness_class = CBitcoinMutableTxWitness
-    _txin_class = CBitcoinMutableTxIn
-    _txout_class = CBitcoinMutableTxOut
-
-
-class CBitcoinTransaction(CBitcoinTransactionCommon, CImmutableTransactionBase):
-    _inverted_mutability_class = CBitcoinMutableTransaction
-    _witness_class = CBitcoinTxWitness
-    _txin_class = CBitcoinTxIn
-    _txout_class = CBitcoinTxOut
+class CBitcoinTransaction(CTransactionBase,
+                          metaclass=BitcoinTransactionIdentityMeta):
+    """Bitcoin transaction, mutable version"""
 
 
 class CheckTransactionError(ValidationError):
@@ -909,42 +844,28 @@ BitcoinMutableTransactionIdentityMeta.set_classmap({
     CMutableTxOutWitness: _CBitcoinDummyTxOutWitness,
     CMutableOutPoint: CMutableOutPoint,
     script.CScript: script.CBitcoinScript
-})
+}, immutable_identity=BitcoinTransactionIdentityMeta)
 
 
-def _SetTransactionClassParams(transaction_class):
-    imm_class = transaction_class
-    mut_class = transaction_class._inverted_mutability_class
-    mut_class._inverted_mutability_class = imm_class
+def _SetTransactionClassParams(transaction_identity):
+    for frontend, concrete in transaction_identity._clsmap.items():
+        set_frontend_class(frontend, concrete, _thread_local)
 
-    def sfc(frontend_cls, concrete_cls):
-        set_frontend_class(frontend_cls, concrete_cls, _thread_local)
-
-    sfc(CTransaction, imm_class)
-    sfc(CTxIn, imm_class._txin_class)
-    sfc(CTxOut, imm_class._txout_class)
-    sfc(CTxWitness, imm_class._witness_class)
-    sfc(CTxInWitness, imm_class._witness_class._txin_witness_class)
-    sfc(CTxOutWitness, imm_class._witness_class._txout_witness_class)
-
-    sfc(CMutableTransaction, mut_class)
-    sfc(CMutableTxIn, mut_class._txin_class)
-    sfc(CMutableTxOut, mut_class._txout_class)
-    sfc(CMutableTxWitness, mut_class._witness_class)
-    sfc(CMutableTxInWitness, mut_class._witness_class._txin_witness_class)
-    sfc(CMutableTxOutWitness, mut_class._witness_class._txout_witness_class)
+    for frontend, concrete in \
+            transaction_identity._mutable_identity._clsmap.items():
+        set_frontend_class(frontend, concrete, _thread_local)
 
 
 def _SetChainParams(params):
     _thread_local.chain_params = params
-    _SetTransactionClassParams(params.TRANSACTION_CLASS)
+    _SetTransactionClassParams(params.TRANSACTION_IDENTITY)
 
 
 def _CurrentChainParams():
     return _thread_local.chain_params
 
 
-_SetTransactionClassParams(CBitcoinTransaction)
+_SetTransactionClassParams(BitcoinTransactionIdentityMeta)
 
 __all__ = (
     'Hash',
