@@ -65,9 +65,9 @@ class Test_COutPoint(unittest.TestCase):
             actual = repr(outpoint)
             self.assertEqual(actual, expected)
         T(COutPoint(),
-          'COutPoint()')
+          'CBitcoinOutPoint()')
         T(COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
-          "COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)")
+          "CBitcoinOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)")
 
     def test_str(self):
         def T(outpoint, expected):
@@ -102,9 +102,9 @@ class Test_CMutableOutPoint(unittest.TestCase):
             actual = repr(outpoint)
             self.assertEqual(actual, expected)
         T(CMutableOutPoint(),
-          'CMutableOutPoint()')
+          'CBitcoinMutableOutPoint()')
         T(CMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
-          "CMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)")
+          "CBitcoinMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)")
 
 
 class Test_CTxIn(unittest.TestCase):
@@ -118,7 +118,7 @@ class Test_CTxIn(unittest.TestCase):
             actual = repr(txin)
             self.assertEqual(actual, expected)
         T(CTxIn(),
-          'CBitcoinTxIn(COutPoint(), CBitcoinScript([]), 0xffffffff)')
+          'CBitcoinTxIn(CBitcoinOutPoint(), CBitcoinScript([]), 0xffffffff)')
 
     def test_immutable(self):
         """CTxIn shall not be mutable"""
@@ -142,7 +142,7 @@ class Test_CMutableTxIn(unittest.TestCase):
             actual = repr(txin)
             self.assertEqual(actual, expected)
         T(CMutableTxIn(),
-          'CBitcoinMutableTxIn(CMutableOutPoint(), CBitcoinScript([]), 0xffffffff)')
+          'CBitcoinMutableTxIn(CBitcoinMutableOutPoint(), CBitcoinScript([]), 0xffffffff)')
 
 
 class Test_CTransaction(unittest.TestCase):

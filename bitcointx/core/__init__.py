@@ -216,12 +216,20 @@ class CoinTransactionIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
 
     @classmethod
     def _get_required_classes(cls):
-        return set((CTransaction, CTxIn, CTxOut, CTxWitness, COutPoint,
-                    CTxInWitness, CTxOutWitness, script.CScript))
+        """Return two sets of frontend classes: one that is expected
+        to be set via set_classmap() and is the classes that is actually
+        implemented in this module, and another set is frontend classes
+        that are merely used bu the first set of classes, and that must
+        be in the mapping returned by _get_extra_classmap()"""
+        return (set((CTransaction, CTxIn, CTxOut, CTxWitness, COutPoint,
+                    CTxInWitness, CTxOutWitness)),
+                set([script.CScript]))
 
 
 class BitcoinTransactionIdentityMeta(CoinTransactionIdentityMeta):
-    ...
+    @classmethod
+    def _get_extra_classmap(cls):
+        return {script.CScript: script.CBitcoinScript}
 
 
 class BitcoinMutableTransactionIdentityMeta(BitcoinTransactionIdentityMeta,
@@ -240,7 +248,8 @@ class BitcoinMutableTransactionIdentityMeta(BitcoinTransactionIdentityMeta,
         immutable_identity._mutable_identity = cls
 
 
-class COutPoint(ImmutableSerializable):
+class CBitcoinOutPoint(ImmutableSerializable,
+                       metaclass=BitcoinTransactionIdentityMeta):
     """The combination of a transaction hash and an index n into its vout"""
     __slots__ = ['hash', 'n']
 
@@ -289,7 +298,8 @@ class COutPoint(ImmutableSerializable):
 
         If cls and outpoint are both immutable, outpoint is returned directly.
         """
-        _check_inst_compatible(outpoint, COutPoint)
+        _check_inst_compatible(outpoint,
+                               cls._concrete_class.immutable.COutPoint)
 
         if not _is_mut_cls(cls) and not _is_mut_inst(outpoint):
             return outpoint
@@ -297,7 +307,8 @@ class COutPoint(ImmutableSerializable):
         return cls(outpoint.hash, outpoint.n)
 
 
-class CMutableOutPoint(COutPoint, metaclass=MutableSerializableMeta):
+class CBitcoinMutableOutPoint(CBitcoinOutPoint,
+                              metaclass=BitcoinMutableTransactionIdentityMeta):
     """A mutable COutPoint"""
     __slots__ = []
 
@@ -808,6 +819,14 @@ class CMutableTxOutWitness(CTxOutWitness):
     pass
 
 
+class COutPoint(metaclass=_frontend_metaclass):
+    pass
+
+
+class CMutableOutPoint(COutPoint):
+    pass
+
+
 class CTxIn(metaclass=_frontend_metaclass):
     pass
 
@@ -831,8 +850,7 @@ BitcoinTransactionIdentityMeta.set_classmap({
     CTxWitness: CBitcoinTxWitness,
     CTxInWitness: CBitcoinTxInWitness,
     CTxOutWitness: _CBitcoinDummyTxOutWitness,
-    COutPoint: COutPoint,
-    script.CScript: script.CBitcoinScript
+    COutPoint: CBitcoinOutPoint,
 })
 
 BitcoinMutableTransactionIdentityMeta.set_classmap({
@@ -842,8 +860,7 @@ BitcoinMutableTransactionIdentityMeta.set_classmap({
     CMutableTxWitness: CBitcoinMutableTxWitness,
     CMutableTxInWitness: CBitcoinMutableTxInWitness,
     CMutableTxOutWitness: _CBitcoinDummyTxOutWitness,
-    CMutableOutPoint: CMutableOutPoint,
-    script.CScript: script.CBitcoinScript
+    CMutableOutPoint: CBitcoinMutableOutPoint,
 }, immutable_identity=BitcoinTransactionIdentityMeta)
 
 

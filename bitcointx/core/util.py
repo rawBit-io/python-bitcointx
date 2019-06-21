@@ -111,6 +111,25 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
         return new_cls
 
     @classmethod
+    def _get_required_classes(cls):
+        """Return two sets of frontend classes: one that is expected
+        to be set via set_classmap() and is the classes that is actually
+        implemented in this module, and another set is frontend classes
+        that are merely used bu the first set of classes, and that must
+        be in the mapping returned by _get_extra_classmap()"""
+        raise NotImplementedError('must be implemented by a subclass')
+
+    @classmethod
+    def _get_extra_classmap(cls):
+        """Must return a dict of frontend to concrete class mapping
+        that will be added to _concrete_class mapping, For example,
+        transaction-related concrete classes might need to know a
+        concrete class for CScript. specific TransactionIdentity class
+        might implement this method to return appropriate mapping for
+        CScript to conrete class."""
+        raise NotImplementedError('must be implemented by a subclass')
+
+    @classmethod
     def _get_attr_access_helper(cls):
         class AttrAccessHelper:
             def __getattr__(self, name):
@@ -124,11 +143,22 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
 
         cls.__clsid = cls
 
-        required = cls._get_required_classes()
+        required, extra = cls._get_required_classes()
+
+        extra_classmap = cls._get_extra_classmap()
+        assert extra == set(extra_classmap.keys()), \
+            ('extra classes returned by {}._get_extra_classmap() ({})'
+             'must match the set of extra classes returned by '
+             '{}._get_required_classes() ({})'
+             .format(cls.__name__, extra,
+                     cls.__name__, extra_classmap.keys()))
+        assert not (extra & required),\
+            "extra classmap cannot intersect with required classmap"
+
         frontend_metaclass = cls._frontend_metaclass
 
         supplied = set()
-        namemap = {}
+        namemap = extra_classmap.copy()
         for front, concrete in clsmap.items():
             if front not in required:
                 for base in front.__mro__:
@@ -149,14 +179,24 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
                              .format([c.__name__ for c in extra]))
 
         for front, concrete in clsmap.items():
-            if type(front) is frontend_metaclass:
-                # regiser the concrete class to frontend class
-                # so isinstance and issubclass will work as expected
-                front.register(concrete)
+            assert type(front) is frontend_metaclass, \
+                ("metaclass of {} must be {}"
+                 .format(front.__name__, frontend_metaclass.__name__))
+            assert not issubclass(concrete, front), \
+                ("double-registering {} as subclass of {} is not allowed"
+                 .format(concrete.__name__, front.__name__))
+
+            # regiser the concrete class to frontend class
+            # so isinstance and issubclass will work as expected
+            front.register(concrete)
 
             if not issubclass(concrete, front):
                 raise ValueError('{} is not a subclass of {}'
                                  .format(concrete.__name__, front.__name__))
+
+        for front, concrete in extra_classmap.items():
+            namemap[front.__name__] = concrete
+            clsmap[front] = concrete
 
         cls._namemap = namemap
         cls._clsmap = clsmap

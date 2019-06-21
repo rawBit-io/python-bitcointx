@@ -48,14 +48,17 @@ class CoinWalletIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
 
     @classmethod
     def _get_required_classes(cls):
-        return set((CCoinAddress, CBase58CoinAddress, CBech32CoinAddress,
+        return (set((CCoinAddress, CBase58CoinAddress, CBech32CoinAddress,
                     P2SHCoinAddress, P2PKHCoinAddress,
                     P2WSHCoinAddress, P2WPKHCoinAddress,
-                    CScript, CCoinKey, CCoinExtKey, CCoinExtPubKey))
+                    CCoinKey, CCoinExtKey, CCoinExtPubKey)),
+                set([CScript]))
 
 
 class BitcoinWalletIdentityMeta(CoinWalletIdentityMeta):
-    ...
+    @classmethod
+    def _get_extra_classmap(cls):
+        return {CScript: CBitcoinScript}
 
 
 class BitcoinTestnetWalletIdentityMeta(BitcoinWalletIdentityMeta):
@@ -718,7 +721,6 @@ BitcoinWalletIdentityMeta.set_classmap({
     CCoinKey: CBitcoinKey,
     CCoinExtKey: CBitcoinExtKey,
     CCoinExtPubKey: CBitcoinExtPubKey,
-    CScript: CBitcoinScript
 })
 
 BitcoinTestnetWalletIdentityMeta.set_classmap({
@@ -732,7 +734,6 @@ BitcoinTestnetWalletIdentityMeta.set_classmap({
     CCoinKey: CBitcoinTestnetKey,
     CCoinExtKey: CBitcoinTestnetExtKey,
     CCoinExtPubKey: CBitcoinTestnetExtPubKey,
-    CScript: CBitcoinScript
 })
 
 BitcoinRegtestWalletIdentityMeta.set_classmap({
@@ -746,7 +747,6 @@ BitcoinRegtestWalletIdentityMeta.set_classmap({
     CCoinKey: CBitcoinRegtestKey,
     CCoinExtKey: CBitcoinRegtestExtKey,
     CCoinExtPubKey: CBitcoinRegtestExtPubKey,
-    CScript: CBitcoinScript
 })
 
 
