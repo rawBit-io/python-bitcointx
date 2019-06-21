@@ -848,6 +848,9 @@ BitcoinMutableTransactionIdentityMeta.set_classmap({
 
 
 def _SetTransactionCoinIdentity(transaction_identity):
+    assert not issubclass(transaction_identity, MutableSerializableMeta),\
+        "immutable idenity expected"
+
     for frontend, concrete in transaction_identity._clsmap.items():
         set_frontend_class(frontend, concrete, _thread_local)
 

@@ -175,10 +175,9 @@ def SelectChainParams(params):
         raise ValueError('Supplied chain params is not a subclass of '
                          'ChainParamsBase')
 
-    bitcointx.wallet._SetWalletCoinIdentity(params.WALLET_IDENTITY)
-    bitcointx.core.script._SetScriptClassParams(
-        bitcointx.core.script.CBitcoinScript)
     bitcointx.core._SetChainParams(params)
+    bitcointx.core.script._SetChainParams(params)
+    bitcointx.wallet._SetChainParams(params)
 
 
 SelectChainParams(BitcoinMainnetParams)

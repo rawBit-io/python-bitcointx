@@ -1195,6 +1195,12 @@ CScript.register(CBitcoinScript)
 
 _SetScriptClassParams(CBitcoinScript)
 
+
+def _SetChainParams(params):
+    _SetScriptClassParams(
+        params.TRANSACTION_IDENTITY._clsmap[CScript])
+
+
 __all__ = (
     'MAX_SCRIPT_SIZE',
     'MAX_SCRIPT_ELEMENT_SIZE',
