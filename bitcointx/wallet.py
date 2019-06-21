@@ -25,7 +25,10 @@ import bitcointx
 import bitcointx.base58
 import bitcointx.bech32
 import bitcointx.core
-from bitcointx.core.util import make_frontend_metaclass, set_frontend_class
+
+from bitcointx.core.util import (
+    make_frontend_metaclass, set_frontend_class, CoinIdentityMeta
+)
 from bitcointx.core.key import (
     CPubKey, CKeyMixin, CExtKeyMixin, CExtPubKeyMixin
 )
@@ -39,7 +42,35 @@ _thread_local = local()
 _frontend_metaclass = make_frontend_metaclass('_Wallet', _thread_local)
 
 
+class CoinWalletIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
+
+    _frontend_metaclass = _frontend_metaclass
+
+    @classmethod
+    def _get_required_classes(cls):
+        return set((CCoinAddress, CBase58CoinAddress, CBech32CoinAddress,
+                    P2SHCoinAddress, P2PKHCoinAddress,
+                    P2WSHCoinAddress, P2WPKHCoinAddress,
+                    CScript, CCoinKey, CCoinExtKey, CCoinExtPubKey))
+
+
+class BitcoinWalletIdentityMeta(CoinWalletIdentityMeta):
+    ...
+
+
+class BitcoinTestnetWalletIdentityMeta(BitcoinWalletIdentityMeta):
+    ...
+
+
+class BitcoinRegtestWalletIdentityMeta(BitcoinWalletIdentityMeta):
+    ...
+
+
 class CCoinAddress(metaclass=_frontend_metaclass):
+    pass
+
+
+class CBase58CoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
@@ -48,6 +79,10 @@ class P2SHCoinAddress(metaclass=_frontend_metaclass):
 
 
 class P2PKHCoinAddress(metaclass=_frontend_metaclass):
+    pass
+
+
+class CBech32CoinAddress(metaclass=_frontend_metaclass):
     pass
 
 
@@ -61,11 +96,9 @@ class P2WPKHCoinAddress(metaclass=_frontend_metaclass):
 
 class CCoinAddressBase():
 
-    _address_encoding_classes = None
-    _script_class = None
-
     def __new__(cls, s):
-        for enc_class in cls._address_encoding_classes:
+        for enc_class in (cls._concrete_class.CBech32CoinAddress,
+                          cls._concrete_class.CBase58CoinAddress):
             try:
                 return enc_class(s)
             except bitcointx.core.AddressEncodingError:
@@ -75,33 +108,10 @@ class CCoinAddressBase():
             'Unrecognized encoding for {}' .format(cls.__name__))
 
     @classmethod
-    def set_class_params(cls, script_class=None, address_classes=()):
-        if script_class is None and cls._script_class is not None:
-            raise ValueError(
-                '{} has no script class parameter set by its superclasses, '
-                'therefore it should be specified when calling '
-                'set_class_params'.format(cls.__name__))
-        if not issubclass(script_class, CScript):
-            raise ValueError(
-                'script parameter should be a subclass of CScript')
-
-        cls._script_class = script_class
-
-        enc_class_list = []
-        for enc_class, subclasses in address_classes:
-            if enc_class._address_subclasses is not None:
-                raise ValueError(
-                    '{}._address_subclasses were already set earlier'
-                    .format(enc_class.__name__))
-            enc_class._address_subclasses = subclasses
-            enc_class_list.append(enc_class)
-
-        cls._address_encoding_classes = tuple(enc_class_list)
-
-    @classmethod
     def from_scriptPubKey(cls, scriptPubKey):
         """Convert a scriptPubKey to a subclass of CCoinAddress"""
-        for enc_class in cls._address_encoding_classes:
+        for enc_class in (cls._concrete_class.CBech32CoinAddress,
+                          cls._concrete_class.CBase58CoinAddress):
             try:
                 return enc_class.from_scriptPubKey(scriptPubKey)
             except CCoinAddressError:
@@ -158,7 +168,6 @@ class P2WPKHCoinAddressError(CBech32AddressError):
 class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
     """A Bech32-encoded coin address"""
 
-    _address_subclasses = None
     _data_length = None
     _witness_version = None
 
@@ -169,8 +178,9 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
             assert witver is not None, \
                 ("witver must be specified for {}.from_bytes()"
                  .format(cls.__name__))
-            for candidate in cls._address_subclasses:
-                if len(witprog) == candidate._data_length and\
+            for candidate in (cls._concrete_class.P2WSHCoinAddress,
+                              cls._concrete_class.P2WPKHCoinAddress):
+                if len(witprog) == candidate._data_length and \
                         witver == candidate._witness_version:
                     break
             else:
@@ -194,7 +204,8 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
         Returns a CBech32CoinAddressCommon subclass.
         If the scriptPubKey is not recognized CCoinAddressError will be raised.
         """
-        for candidate in cls._address_subclasses:
+        for candidate in (cls._concrete_class.P2WSHCoinAddress,
+                          cls._concrete_class.P2WPKHCoinAddress):
             try:
                 return candidate.from_scriptPubKey(scriptPubKey)
             except CCoinAddressError:
@@ -209,13 +220,12 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
 
     base58_prefix = b''
 
-    _address_subclasses = None
-    _data_length = None
-
     @classmethod
     def from_bytes_with_prefix(cls, data):
         if not cls.base58_prefix:
-            return cls.match_base58_classes(data, cls._address_subclasses)
+            return cls.match_base58_classes(
+                data, (cls._concrete_class.P2SHCoinAddress,
+                       cls._concrete_class.P2PKHCoinAddress))
         return super(CBase58CoinAddressCommon, cls).from_bytes_with_prefix(data)
 
     @classmethod
@@ -236,7 +246,8 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
             If the scriptPubKey is not recognized,
             CCoinAddressError will be raised.
         """
-        for candidate in cls._address_subclasses:
+        for candidate in (cls._concrete_class.P2SHCoinAddress,
+                          cls._concrete_class.P2PKHCoinAddress):
             try:
                 return candidate.from_scriptPubKey(scriptPubKey)
             except CCoinAddressError:
@@ -272,8 +283,7 @@ class P2SHCoinAddressCommon():
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        return self.__class__._script_class(
-            [OP_HASH160, self, OP_EQUAL])
+        return self._concrete_class.CScript([OP_HASH160, self, OP_EQUAL])
 
     def to_redeemScript(self):
         raise NotImplementedError("not enough data in p2sh address to reconstruct redeem script")
@@ -319,11 +329,11 @@ class P2PKHCoinAddressCommon():
             # Canonicalize script pushes
 
             # in case it's not a CScript instance yet
-            scriptPubKey = cls._script_class(scriptPubKey)
+            scriptPubKey = cls._concrete_class.CScript(scriptPubKey)
 
             try:
                 # canonicalize
-                scriptPubKey = cls._script_class(tuple(scriptPubKey))
+                scriptPubKey = cls._concrete_class.CScript(tuple(scriptPubKey))
             except CScriptInvalidError:
                 raise P2PKHCoinAddressError(
                     'not a P2PKH scriptPubKey: script is invalid')
@@ -364,9 +374,8 @@ class P2PKHCoinAddressCommon():
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        return self.__class__._script_class(
-            [OP_DUP, OP_HASH160, self,
-             OP_EQUALVERIFY, OP_CHECKSIG])
+        return self._concrete_class.CScript([OP_DUP, OP_HASH160, self,
+                                             OP_EQUALVERIFY, OP_CHECKSIG])
 
     def to_redeemScript(self):
         return self.to_scriptPubKey()
@@ -399,7 +408,7 @@ class P2WSHCoinAddressCommon():
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        return self.__class__._script_class([0, self])
+        return self._concrete_class.CScript([0, self])
 
     def to_redeemScript(self):
         raise NotImplementedError(
@@ -446,23 +455,25 @@ class P2WPKHCoinAddressCommon():
 
     def to_scriptPubKey(self):
         """Convert an address to a scriptPubKey"""
-        return self.__class__._script_class([0, self])
+        return self._concrete_class.CScript([0, self])
 
     def to_redeemScript(self):
-        return self.__class__._script_class(
-            [OP_DUP, OP_HASH160, self,
-             OP_EQUALVERIFY, OP_CHECKSIG])
+        return self._concrete_class.CScript([OP_DUP, OP_HASH160, self,
+                                             OP_EQUALVERIFY, OP_CHECKSIG])
 
 
-class CBitcoinAddress(CCoinAddressBase):
+class CBitcoinAddress(CCoinAddressBase,
+                      metaclass=BitcoinWalletIdentityMeta):
     ...
 
 
-class CBitcoinTestnetAddress(CCoinAddressBase):
+class CBitcoinTestnetAddress(CCoinAddressBase,
+                             metaclass=BitcoinTestnetWalletIdentityMeta):
     ...
 
 
-class CBitcoinRegtestAddress(CCoinAddressBase):
+class CBitcoinRegtestAddress(CCoinAddressBase,
+                             metaclass=BitcoinRegtestWalletIdentityMeta):
     ...
 
 
@@ -550,59 +561,6 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddressCommon,
     ...
 
 
-# Make CBitcoinAddress behave like a a subclass of CCoinAddress
-# regarding isinstance(script, CCoinAddress), etc
-CCoinAddress.register(CBitcoinAddress)
-CCoinAddress.register(CBitcoinTestnetAddress)
-CCoinAddress.register(CBitcoinRegtestAddress)
-
-# do the same for more specific front-end classes
-P2SHCoinAddress.register(P2SHBitcoinAddress)
-P2PKHCoinAddress.register(P2PKHBitcoinAddress)
-P2WSHCoinAddress.register(P2WSHBitcoinAddress)
-P2WPKHCoinAddress.register(P2WPKHBitcoinAddress)
-
-P2SHCoinAddress.register(P2SHBitcoinTestnetAddress)
-P2PKHCoinAddress.register(P2PKHBitcoinTestnetAddress)
-P2WSHCoinAddress.register(P2WSHBitcoinTestnetAddress)
-P2WPKHCoinAddress.register(P2WPKHBitcoinTestnetAddress)
-
-P2SHCoinAddress.register(P2SHBitcoinRegtestAddress)
-P2PKHCoinAddress.register(P2PKHBitcoinRegtestAddress)
-P2WSHCoinAddress.register(P2WSHBitcoinRegtestAddress)
-P2WPKHCoinAddress.register(P2WPKHBitcoinRegtestAddress)
-
-CBitcoinAddress.set_class_params(
-    script_class=CBitcoinScript,
-    address_classes=(
-        [CBech32BitcoinAddress,
-         (P2WSHBitcoinAddress, P2WPKHBitcoinAddress)],
-        [CBase58BitcoinAddress,
-         (P2SHBitcoinAddress, P2PKHBitcoinAddress)]
-    )
-)
-
-CBitcoinTestnetAddress.set_class_params(
-    script_class=CBitcoinScript,
-    address_classes=(
-        [CBech32BitcoinTestnetAddress,
-         (P2WSHBitcoinTestnetAddress, P2WPKHBitcoinTestnetAddress)],
-        [CBase58BitcoinTestnetAddress,
-         (P2SHBitcoinTestnetAddress, P2PKHBitcoinTestnetAddress)]
-    )
-)
-
-CBitcoinRegtestAddress.set_class_params(
-    script_class=CBitcoinScript,
-    address_classes=(
-        [CBech32BitcoinRegtestAddress,
-         (P2WSHBitcoinRegtestAddress, P2WPKHBitcoinRegtestAddress)],
-        [CBase58BitcoinRegtestAddress,
-         (P2SHBitcoinRegtestAddress, P2PKHBitcoinRegtestAddress)]
-    )
-)
-
-
 class CCoinKey(metaclass=_frontend_metaclass):
     pass
 
@@ -652,7 +610,8 @@ class CBase58CoinKeyBase(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
         return self.__class__.from_secret_bytes(self[:32], False)
 
 
-class CBitcoinKey(CBase58CoinKeyBase):
+class CBitcoinKey(CBase58CoinKeyBase,
+                  metaclass=BitcoinWalletIdentityMeta):
     base58_prefix = bytes([128])
 
 
@@ -661,11 +620,13 @@ class CBitcoinSecret(CBitcoinKey):
     might be deprecated in the future."""
 
 
-class CBitcoinTestnetKey(CBase58CoinKeyBase):
+class CBitcoinTestnetKey(CBase58CoinKeyBase,
+                         metaclass=BitcoinTestnetWalletIdentityMeta):
     base58_prefix = bytes([239])
 
 
-class CBitcoinRegtestKey(CBase58CoinKeyBase):
+class CBitcoinRegtestKey(CBase58CoinKeyBase,
+                         metaclass=BitcoinRegtestWalletIdentityMeta):
     base58_prefix = bytes([239])
 
 
@@ -692,8 +653,17 @@ class CBase58CoinExtKeyBase(bitcointx.base58.CBase58PrefixedData,
         assert isinstance(self, CExtKeyMixin)
         CExtKeyMixin.__init__(self, None)
 
+    @property
+    def _xpub_class(self):
+        return self._concrete_class.CCoinExtPubKey
 
-class CBitcoinExtPubKey(CBase58CoinExtPubKeyBase):
+    @property
+    def _key_class(self):
+        return self._concrete_class.CCoinKey
+
+
+class CBitcoinExtPubKey(CBase58CoinExtPubKeyBase,
+                        metaclass=BitcoinWalletIdentityMeta):
     """A base58-encoded extended public key
 
     Attributes (inherited from CExtPubKeyMixin):
@@ -704,7 +674,8 @@ class CBitcoinExtPubKey(CBase58CoinExtPubKeyBase):
     base58_prefix = b'\x04\x88\xB2\x1E'
 
 
-class CBitcoinExtKey(CBase58CoinExtKeyBase):
+class CBitcoinExtKey(CBase58CoinExtKeyBase,
+                     metaclass=BitcoinWalletIdentityMeta):
     """A base58-encoded extended key
 
     Attributes (inherited from key mixin class):
@@ -714,52 +685,77 @@ class CBitcoinExtKey(CBase58CoinExtKeyBase):
     """
 
     base58_prefix = b'\x04\x88\xAD\xE4'
-    _xpub_class = CBitcoinExtPubKey
-    _key_class = CBitcoinKey
 
 
-class CBitcoinTestnetExtPubKey(CBase58CoinExtPubKeyBase):
+class CBitcoinTestnetExtPubKey(CBase58CoinExtPubKeyBase,
+                               metaclass=BitcoinTestnetWalletIdentityMeta):
     base58_prefix = b'\x04\x35\x87\xCF'
 
 
-class CBitcoinTestnetExtKey(CBase58CoinExtKeyBase):
+class CBitcoinTestnetExtKey(CBase58CoinExtKeyBase,
+                            metaclass=BitcoinTestnetWalletIdentityMeta):
     base58_prefix = b'\x04\x35\x83\x94'
-    _xpub_class = CBitcoinTestnetExtPubKey
-    _key_class = CBitcoinTestnetKey
 
 
-class CBitcoinRegtestExtPubKey(CBase58CoinExtPubKeyBase):
+class CBitcoinRegtestExtPubKey(CBase58CoinExtPubKeyBase,
+                               metaclass=BitcoinRegtestWalletIdentityMeta):
     base58_prefix = b'\x04\x35\x87\xCF'
 
 
-class CBitcoinRegtestExtKey(CBase58CoinKeyBase):
+class CBitcoinRegtestExtKey(CBase58CoinKeyBase,
+                            metaclass=BitcoinRegtestWalletIdentityMeta):
     base58_prefix = b'\x04\x35\x83\x94'
-    _xpub_class = CBitcoinRegtestExtPubKey
-    _key_class = CBitcoinRegtestKey
 
 
-CCoinKey.register(CBitcoinKey)
-CCoinKey.register(CBitcoinTestnetKey)
-CCoinKey.register(CBitcoinRegtestKey)
-CCoinExtKey.register(CBitcoinExtKey)
-CCoinExtKey.register(CBitcoinTestnetExtKey)
-CCoinExtKey.register(CBitcoinRegtestExtKey)
-CCoinExtPubKey.register(CBitcoinExtPubKey)
-CCoinExtPubKey.register(CBitcoinTestnetExtPubKey)
-CCoinExtPubKey.register(CBitcoinRegtestExtPubKey)
+BitcoinWalletIdentityMeta.set_classmap({
+    CCoinAddress: CBitcoinAddress,
+    CBase58CoinAddress: CBase58BitcoinAddress,
+    CBech32CoinAddress: CBech32BitcoinAddress,
+    P2SHCoinAddress: P2SHBitcoinAddress,
+    P2PKHCoinAddress: P2PKHBitcoinAddress,
+    P2WSHCoinAddress: P2WSHBitcoinAddress,
+    P2WPKHCoinAddress: P2WPKHBitcoinAddress,
+    CCoinKey: CBitcoinKey,
+    CCoinExtKey: CBitcoinExtKey,
+    CCoinExtPubKey: CBitcoinExtPubKey,
+    CScript: CBitcoinScript
+})
+
+BitcoinTestnetWalletIdentityMeta.set_classmap({
+    CCoinAddress: CBitcoinTestnetAddress,
+    CBase58CoinAddress: CBase58BitcoinTestnetAddress,
+    CBech32CoinAddress: CBech32BitcoinTestnetAddress,
+    P2SHCoinAddress: P2SHBitcoinTestnetAddress,
+    P2PKHCoinAddress: P2PKHBitcoinTestnetAddress,
+    P2WSHCoinAddress: P2WSHBitcoinTestnetAddress,
+    P2WPKHCoinAddress: P2WPKHBitcoinTestnetAddress,
+    CCoinKey: CBitcoinTestnetKey,
+    CCoinExtKey: CBitcoinTestnetExtKey,
+    CCoinExtPubKey: CBitcoinTestnetExtPubKey,
+    CScript: CBitcoinScript
+})
+
+BitcoinRegtestWalletIdentityMeta.set_classmap({
+    CCoinAddress: CBitcoinRegtestAddress,
+    CBase58CoinAddress: CBase58BitcoinRegtestAddress,
+    CBech32CoinAddress: CBech32BitcoinRegtestAddress,
+    P2SHCoinAddress: P2SHBitcoinRegtestAddress,
+    P2PKHCoinAddress: P2PKHBitcoinRegtestAddress,
+    P2WSHCoinAddress: P2WSHBitcoinRegtestAddress,
+    P2WPKHCoinAddress: P2WPKHBitcoinRegtestAddress,
+    CCoinKey: CBitcoinRegtestKey,
+    CCoinExtKey: CBitcoinRegtestExtKey,
+    CCoinExtPubKey: CBitcoinRegtestExtPubKey,
+    CScript: CBitcoinScript
+})
 
 
-def _SetAddressClassParams(address_cls, key_cls, xpriv_cls):
-    def sfc(frontend_cls, concrete_cls):
-        set_frontend_class(frontend_cls, concrete_cls, _thread_local)
-
-    sfc(CCoinAddress, address_cls)
-    sfc(CCoinKey, key_cls)
-    sfc(CCoinExtKey, xpriv_cls)
-    sfc(CCoinExtPubKey, xpriv_cls._xpub_class)
+def _SetWalletCoinIdentity(wallet_identity):
+    for frontend, concrete in wallet_identity._clsmap.items():
+        set_frontend_class(frontend, concrete, _thread_local)
 
 
-_SetAddressClassParams(CBitcoinAddress, CBitcoinKey, CBitcoinExtKey)
+_SetWalletCoinIdentity(BitcoinWalletIdentityMeta)
 
 __all__ = (
     'CCoinAddressError',

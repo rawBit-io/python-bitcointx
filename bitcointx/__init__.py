@@ -35,9 +35,8 @@ class ChainParamsMeta(ABCMeta):
         ('CONFIG_LOCATION', isinstance, tuple),
         ('TRANSACTION_IDENTITY',
          issubclass, bitcointx.core.CoinTransactionIdentityMeta),
-        ('ADDRESS_CLASS', issubclass, bitcointx.wallet.CCoinAddress),
-        ('KEY_CLASS', issubclass, bitcointx.wallet.CCoinKey),
-        ('EXT_KEY_CLASS', issubclass, bitcointx.wallet.CCoinExtKey)
+        ('WALLET_IDENTITY',
+         issubclass, bitcointx.wallet.CoinWalletIdentityMeta),
     )
     _registered_classes = OrderedDict()
     _common_base_cls = None
@@ -122,25 +121,19 @@ class BitcoinMainnetParams(ChainParamsBase):
     MAX_MONEY = 21000000 * bitcointx.core.COIN
     NAME = 'bitcoin'
     TRANSACTION_IDENTITY = bitcointx.core.BitcoinTransactionIdentityMeta
-    ADDRESS_CLASS = bitcointx.wallet.CBitcoinAddress
-    KEY_CLASS = bitcointx.wallet.CBitcoinKey
-    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinExtKey
+    WALLET_IDENTITY = bitcointx.wallet.BitcoinWalletIdentityMeta
 
 
 class BitcoinTestnetParams(BitcoinMainnetParams):
     RPC_PORT = 18332
     NAME = 'bitcoin/testnet'
-    ADDRESS_CLASS = bitcointx.wallet.CBitcoinTestnetAddress
-    KEY_CLASS = bitcointx.wallet.CBitcoinTestnetKey
-    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinTestnetExtKey
+    WALLET_IDENTITY = bitcointx.wallet.BitcoinTestnetWalletIdentityMeta
 
 
 class BitcoinRegtestParams(BitcoinMainnetParams):
     RPC_PORT = 18443
     NAME = 'bitcoin/regtest'
-    ADDRESS_CLASS = bitcointx.wallet.CBitcoinRegtestAddress
-    KEY_CLASS = bitcointx.wallet.CBitcoinRegtestKey
-    EXT_KEY_CLASS = bitcointx.wallet.CBitcoinRegtestExtKey
+    WALLET_IDENTITY = bitcointx.wallet.BitcoinRegtestWalletIdentityMeta
 
 
 def CurrentChainParams():
@@ -182,11 +175,9 @@ def SelectChainParams(params):
         raise ValueError('Supplied chain params is not a subclass of '
                          'ChainParamsBase')
 
-    bitcointx.wallet._SetAddressClassParams(params.ADDRESS_CLASS,
-                                            params.KEY_CLASS,
-                                            params.EXT_KEY_CLASS)
+    bitcointx.wallet._SetWalletCoinIdentity(params.WALLET_IDENTITY)
     bitcointx.core.script._SetScriptClassParams(
-        params.ADDRESS_CLASS._script_class)
+        bitcointx.core.script.CBitcoinScript)
     bitcointx.core._SetChainParams(params)
 
 

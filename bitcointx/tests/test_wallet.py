@@ -29,6 +29,10 @@ from bitcointx.wallet import (
     P2SHBitcoinAddress,
     P2WPKHBitcoinAddress,
     P2WSHBitcoinAddress,
+    P2PKHCoinAddress,
+    P2SHCoinAddress,
+    P2WPKHCoinAddress,
+    P2WSHCoinAddress,
     CBitcoinSecret,
 )
 
@@ -40,35 +44,36 @@ class Test_CCoinAddress(unittest.TestCase):
         if paramclasses is None:
             paramclasses = bitcointx.ChainParamsMeta.get_registered_chain_params()
         for paramclass in paramclasses:
-            top_aclass = paramclass.ADDRESS_CLASS
-            script_class = top_aclass._script_class
+            identity = paramclass.WALLET_IDENTITY
+            script_class = identity._clsmap[CScript]
             self.assertTrue(issubclass(script_class, CScript))
-            for enclass in top_aclass._address_encoding_classes:
-                for aclass in enclass._address_subclasses:
-                    self.assertTrue(issubclass(aclass, CCoinAddress))
-                    caclass = None
-                    if getattr(aclass, 'from_unconfidential', None):
-                        caclass = aclass
-                        aclass = aclass._unconfidential_address_class
-                    if getattr(aclass, 'from_pubkey', None):
-                        a = aclass.from_pubkey(pub)
-                    else:
-                        a = aclass.from_redeemScript(
-                            script_class(b'\xa9' + Hash160(pub) + b'\x87'))
+            for cclass in (P2SHCoinAddress, P2PKHCoinAddress,
+                           P2WSHCoinAddress, P2WPKHCoinAddress):
+                aclass = identity._clsmap[cclass]
+                self.assertTrue(issubclass(aclass, CCoinAddress))
+                caclass = None
+                if getattr(aclass, 'from_unconfidential', None):
+                    caclass = aclass
+                    aclass = aclass._unconfidential_address_class
+                if getattr(aclass, 'from_pubkey', None):
+                    a = aclass.from_pubkey(pub)
+                else:
+                    a = aclass.from_redeemScript(
+                        script_class(b'\xa9' + Hash160(pub) + b'\x87'))
 
-                    if caclass:
-                        ca = caclass.from_unconfidential(a, pub)
-                        self.assertEqual(ca.blinding_pubkey, pub)
-                        self.assertEqual(ca.to_unconfidential(), a)
-                    else:
-                        spk = a.to_scriptPubKey()
-                        self.assertEqual(a, aclass.from_scriptPubKey(spk))
-                        a2 = aclass.from_bytes(a)
-                        self.assertEqual(bytes(a), bytes(a2))
-                        self.assertEqual(str(a), str(a2))
-                        a3 = aclass(str(a))
-                        self.assertEqual(bytes(a), bytes(a3))
-                        self.assertEqual(str(a), str(a3))
+                if caclass:
+                    ca = caclass.from_unconfidential(a, pub)
+                    self.assertEqual(ca.blinding_pubkey, pub)
+                    self.assertEqual(ca.to_unconfidential(), a)
+                else:
+                    spk = a.to_scriptPubKey()
+                    self.assertEqual(a, aclass.from_scriptPubKey(spk))
+                    a2 = aclass.from_bytes(a)
+                    self.assertEqual(bytes(a), bytes(a2))
+                    self.assertEqual(str(a), str(a2))
+                    a3 = aclass(str(a))
+                    self.assertEqual(bytes(a), bytes(a3))
+                    self.assertEqual(str(a), str(a3))
 
 
 class Test_CBitcoinAddress(unittest.TestCase):

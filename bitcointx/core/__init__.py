@@ -847,7 +847,7 @@ BitcoinMutableTransactionIdentityMeta.set_classmap({
 }, immutable_identity=BitcoinTransactionIdentityMeta)
 
 
-def _SetTransactionClassParams(transaction_identity):
+def _SetTransactionCoinIdentity(transaction_identity):
     for frontend, concrete in transaction_identity._clsmap.items():
         set_frontend_class(frontend, concrete, _thread_local)
 
@@ -858,14 +858,14 @@ def _SetTransactionClassParams(transaction_identity):
 
 def _SetChainParams(params):
     _thread_local.chain_params = params
-    _SetTransactionClassParams(params.TRANSACTION_IDENTITY)
+    _SetTransactionCoinIdentity(params.TRANSACTION_IDENTITY)
 
 
 def _CurrentChainParams():
     return _thread_local.chain_params
 
 
-_SetTransactionClassParams(BitcoinTransactionIdentityMeta)
+_SetTransactionCoinIdentity(BitcoinTransactionIdentityMeta)
 
 __all__ = (
     'Hash',
