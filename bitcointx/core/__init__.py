@@ -23,7 +23,7 @@ from .serialize import (
     ImmutableSerializable, MutableSerializableMeta,
     BytesSerializer, VectorSerializer,
     ser_read, uint256_to_str, uint256_from_str,
-    Hash, Hash160, make_mutable
+    Hash, Hash160
 )
 
 from .util import (
@@ -588,7 +588,6 @@ class CBitcoinTxWitness(CTxWitnessBase,
     __slots__ = []
 
 
-@make_mutable
 class CBitcoinMutableTxWitness(CBitcoinTxWitness,
                                metaclass=BitcoinMutableTransactionIdentityMeta):
     """Witness data for all inputs to a transaction, mutable version"""
@@ -743,11 +742,13 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
 class CBitcoinMutableTransaction(CTransactionBase,
                                  metaclass=BitcoinMutableTransactionIdentityMeta):
     """Bitcoin transaction"""
+    __slots__ = []
 
 
 class CBitcoinTransaction(CTransactionBase,
                           metaclass=BitcoinTransactionIdentityMeta):
     """Bitcoin transaction, mutable version"""
+    __slots__ = []
 
 
 class CheckTransactionError(ValidationError):
@@ -936,6 +937,18 @@ __all__ = (
     'CMutableTxOutWitness',
     'CTxInWitness',
     'CTxOutWitness',
+    'CBitcoinOutPoint',
+    'CBitcoinMutableOutPoint',
+    'CBitcoinTxIn',
+    'CBitcoinMutableTxIn',
+    'CBitcoinTxOut',
+    'CBitcoinMutableTxOut',
+    'CBitcoinTransaction',
+    'CBitcoinMutableTransaction',
+    'CBitcoinTxWitness',
+    'CBitcoinMutableTxWitness',
+    'CBitcoinMutableTxInWitness',
+    'CBitcoinTxInWitness',
     'CheckTransactionError',
     'CheckTransaction',
     'GetLegacySigOpCount',
