@@ -928,6 +928,18 @@ class CScriptBase(bytes):
             raise ValueError(err)
         return h
 
+    def raw_sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+        """Consensus-correct SignatureHash
+
+        Returns (hash, err) to precisely match the consensus-critical behavior of
+        the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
+
+        Default implementation calls bitcoin-specific sighash function.
+
+        If you're just writing wallet software you probably want sighash() method instead."""
+        return RawBitcoinSignatureHash(self, txTo, inIdx, hashtype,
+                                       amount=amount, sigversion=sigversion)
+
 
 class CScriptWitness(ImmutableSerializable):
     """An encoding of the data elements on the initial stack for (segregated
@@ -1170,19 +1182,11 @@ def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION
 
 
 class CScript(metaclass=_frontend_metaclass):
-    pass
+    ...
 
 
 class CBitcoinScript(CScriptBase):
-    def raw_sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
-        """Consensus-correct SignatureHash
-
-        Returns (hash, err) to precisely match the consensus-critical behavior of
-        the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
-
-        If you're just writing wallet software you probably want sighash() method instead."""
-        return RawBitcoinSignatureHash(self, txTo, inIdx, hashtype,
-                                       amount=amount, sigversion=sigversion)
+    ...
 
 
 def _SetScriptClassParams(script_cls):
