@@ -225,6 +225,32 @@ class CoinTransactionIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
                     CTxInWitness, CTxOutWitness)),
                 set([script.CScript]))
 
+    @classmethod
+    def set_mutable_immutable_links(cls, other_identity):
+        is_mut = issubclass(cls, MutableSerializableMeta)
+        if is_mut:
+            mut_identity = cls
+            imm_identity = other_identity
+        else:
+            mut_identity = other_identity
+            imm_identity = cls
+
+        mut_access = mut_identity._get_attr_access_helper()
+        imm_access = imm_identity._get_attr_access_helper()
+
+        assert 'immutable' not in mut_identity._namemap,\
+            ("set_mutable_immutable_links must be called only once, "
+             "either on mutable or on immutable identity, not both")
+
+        mut_identity._namemap['mutable'] = mut_access
+        mut_identity._namemap['immutable'] = imm_access
+
+        imm_identity._namemap['mutable'] = mut_access
+        imm_identity._namemap['immutable'] = imm_access
+
+        mut_identity._immutable_identity = imm_identity
+        imm_identity._mutable_identity = mut_identity
+
 
 class BitcoinTransactionIdentityMeta(CoinTransactionIdentityMeta):
     @classmethod
@@ -234,18 +260,7 @@ class BitcoinTransactionIdentityMeta(CoinTransactionIdentityMeta):
 
 class BitcoinMutableTransactionIdentityMeta(BitcoinTransactionIdentityMeta,
                                             MutableSerializableMeta):
-    @classmethod
-    def set_classmap(cls, clsmap, *, immutable_identity):
-        super(BitcoinMutableTransactionIdentityMeta,
-              cls).set_classmap(clsmap)
-        mut_access = cls._get_attr_access_helper()
-        imm_access = immutable_identity._get_attr_access_helper()
-        cls._namemap['mutable'] = mut_access
-        cls._namemap['immutable'] = imm_access
-        cls._immutable_identity = immutable_identity
-        immutable_identity._namemap['mutable'] = mut_access
-        immutable_identity._namemap['immutable'] = imm_access
-        immutable_identity._mutable_identity = cls
+    ...
 
 
 class CBitcoinOutPoint(ImmutableSerializable,
@@ -861,7 +876,10 @@ BitcoinMutableTransactionIdentityMeta.set_classmap({
     CMutableTxInWitness: CBitcoinMutableTxInWitness,
     CMutableTxOutWitness: _CBitcoinDummyTxOutWitness,
     CMutableOutPoint: CBitcoinMutableOutPoint,
-}, immutable_identity=BitcoinTransactionIdentityMeta)
+})
+
+BitcoinMutableTransactionIdentityMeta.set_mutable_immutable_links(
+    BitcoinTransactionIdentityMeta)
 
 
 def _SetTransactionCoinIdentity(transaction_identity):
