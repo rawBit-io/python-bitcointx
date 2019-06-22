@@ -263,8 +263,7 @@ class BitcoinMutableTransactionIdentityMeta(BitcoinTransactionIdentityMeta,
     ...
 
 
-class CBitcoinOutPoint(ImmutableSerializable,
-                       metaclass=BitcoinTransactionIdentityMeta):
+class COutPointBase(ImmutableSerializable):
     """The combination of a transaction hash and an index n into its vout"""
     __slots__ = ['hash', 'n']
 
@@ -322,9 +321,15 @@ class CBitcoinOutPoint(ImmutableSerializable,
         return cls(outpoint.hash, outpoint.n)
 
 
+class CBitcoinOutPoint(COutPointBase,
+                       metaclass=BitcoinTransactionIdentityMeta):
+    """Bitcoin COutPoint"""
+    __slots__ = []
+
+
 class CBitcoinMutableOutPoint(CBitcoinOutPoint,
                               metaclass=BitcoinMutableTransactionIdentityMeta):
-    """A mutable COutPoint"""
+    """A mutable Bitcoin COutPoint"""
     __slots__ = []
 
 
