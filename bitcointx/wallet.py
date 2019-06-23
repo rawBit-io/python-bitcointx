@@ -243,7 +243,7 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
                 pass
 
         raise CBase58AddressError(
-            'scriptPubKey not a valid base58-encoded address')
+            'scriptPubKey not valid for base58-encoded address')
 
 
 class P2SHCoinAddressCommon():
