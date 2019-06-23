@@ -564,10 +564,10 @@ class CBase58CoinKeyBase(bitcointx.base58.CBase58PrefixedData, CKeyMixin):
 
     is_compressed() - True if compressed
 
-    Note that CCoinKeyCommon instance is 33 bytes long if compressed, 32 bytes otherwise
-    (due to WIF format that states b'\x01' should be appended for compressed keys).
+    Note that CBase58CoinKeyBase instance is 33 bytes long if compressed,
+    32 bytes otherwise (due to WIF format that states b'\x01' should be
+    appended for compressed keys).
     secret_bytes property is 32 bytes long in both cases.
-
     """
 
     @classmethod
