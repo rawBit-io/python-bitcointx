@@ -153,9 +153,6 @@ in other bitcoin-related blockchains.
 
 * Refactoring and cleanup
 
-XXX  examples/litecoin-alt-p2sh-prefix.py not working due to breaking changes
-     ? remove it completely and create python-litecointx ?
-
 ## v0.10.3.post0
 
 * Fix import issue with SelectParams()
