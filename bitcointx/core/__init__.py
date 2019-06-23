@@ -43,7 +43,7 @@ _frontend_metaclass = make_frontend_metaclass('_Transaction', _thread_local)
 
 def MoneyRange(nValue, params=None):
     if not params:
-        params = _CurrentChainParams()
+        params = _GetCurrentChainParams()
     return 0 <= nValue <= params.MAX_MONEY
 
 
@@ -776,7 +776,7 @@ def CheckTransaction(tx):  # noqa
     for txout in tx.vout:
         if txout.nValue < 0:
             raise CheckTransactionError("CheckTransaction() : txout.nValue negative")
-        if txout.nValue > _CurrentChainParams().MAX_MONEY:
+        if txout.nValue > _GetCurrentChainParams().MAX_MONEY:
             raise CheckTransactionError("CheckTransaction() : txout.nValue too high")
         nValueOut += txout.nValue
         if not MoneyRange(nValueOut):
@@ -905,7 +905,7 @@ def _SetChainParams(params):
     _SetTransactionCoinIdentity(params.TRANSACTION_IDENTITY)
 
 
-def _CurrentChainParams():
+def _GetCurrentChainParams():
     return _thread_local.chain_params
 
 

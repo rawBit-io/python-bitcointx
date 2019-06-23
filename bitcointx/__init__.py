@@ -136,15 +136,15 @@ class BitcoinRegtestParams(BitcoinMainnetParams):
     WALLET_IDENTITY = bitcointx.wallet.BitcoinRegtestWalletIdentityMeta
 
 
-def CurrentChainParams():
-    return bitcointx.core._CurrentChainParams()
+def GetCurrentChainParams():
+    return bitcointx.core._GetCurrentChainParams()
 
 
 @contextmanager
 def ChainParams(params, **kwargs):
     """Context manager to temporarily switch chain parameters.
     """
-    prev_params = CurrentChainParams()
+    prev_params = GetCurrentChainParams()
     SelectChainParams(params, **kwargs)
     try:
         yield
