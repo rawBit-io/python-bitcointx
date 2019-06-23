@@ -141,18 +141,18 @@ def CurrentChainParams():
 
 
 @contextmanager
-def ChainParams(params):
+def ChainParams(params, **kwargs):
     """Context manager to temporarily switch chain parameters.
     """
     prev_params = CurrentChainParams()
-    SelectChainParams(params)
+    SelectChainParams(params, **kwargs)
     try:
         yield
     finally:
         SelectChainParams(prev_params)
 
 
-def SelectChainParams(params):
+def SelectChainParams(params, **kwargs):
     """Select the chain parameters to use
 
     name is one of 'mainnet', 'testnet', or 'regtest'
@@ -167,9 +167,9 @@ def SelectChainParams(params):
         params_cls = ChainParamsMeta.find_chain_params(name=params)
         if params_cls is None:
             raise ValueError('Unknown chain %r' % params)
-        params = params_cls()
+        params = params_cls(**kwargs)
     elif isinstance(params, type):
-        params = params()
+        params = params(**kwargs)
 
     if not isinstance(params, ChainParamsBase):
         raise ValueError('Supplied chain params is not a subclass of '
