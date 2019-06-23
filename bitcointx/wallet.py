@@ -100,8 +100,7 @@ class P2WPKHCoinAddress(metaclass=_frontend_metaclass):
 class CCoinAddressBase():
 
     def __new__(cls, s):
-        for enc_class in (cls._concrete_class.CBech32CoinAddress,
-                          cls._concrete_class.CBase58CoinAddress):
+        for enc_class in cls._get_encoding_address_classes():
             try:
                 return enc_class(s)
             except bitcointx.core.AddressEncodingError:
@@ -111,10 +110,14 @@ class CCoinAddressBase():
             'Unrecognized encoding for {}' .format(cls.__name__))
 
     @classmethod
+    def _get_encoding_address_classes(cls):
+        return (cls._concrete_class.CBech32CoinAddress,
+                cls._concrete_class.CBase58CoinAddress)
+
+    @classmethod
     def from_scriptPubKey(cls, scriptPubKey):
         """Convert a scriptPubKey to a subclass of CCoinAddress"""
-        for enc_class in (cls._concrete_class.CBech32CoinAddress,
-                          cls._concrete_class.CBase58CoinAddress):
+        for enc_class in cls._get_encoding_address_classes():
             try:
                 return enc_class.from_scriptPubKey(scriptPubKey)
             except CCoinAddressError:
@@ -161,14 +164,18 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
     _witness_version = None
 
     @classmethod
+    def _get_bech32_address_classes(cls):
+        return (cls._concrete_class.P2WSHCoinAddress,
+                cls._concrete_class.P2WPKHCoinAddress)
+
+    @classmethod
     def from_bytes(cls, witprog, witver=None):
 
         if cls._witness_version is None:
             assert witver is not None, \
                 ("witver must be specified for {}.from_bytes()"
                  .format(cls.__name__))
-            for candidate in (cls._concrete_class.P2WSHCoinAddress,
-                              cls._concrete_class.P2WPKHCoinAddress):
+            for candidate in cls._get_bech32_address_classes():
                 if len(witprog) == candidate._data_length and \
                         witver == candidate._witness_version:
                     break
@@ -193,8 +200,7 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
         Returns a CBech32CoinAddressCommon subclass.
         If the scriptPubKey is not recognized CCoinAddressError will be raised.
         """
-        for candidate in (cls._concrete_class.P2WSHCoinAddress,
-                          cls._concrete_class.P2WPKHCoinAddress):
+        for candidate in cls._get_bech32_address_classes():
             try:
                 return candidate.from_scriptPubKey(scriptPubKey)
             except CCoinAddressError:
@@ -210,11 +216,15 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
     base58_prefix = b''
 
     @classmethod
+    def _get_base58_address_classes(cls):
+        return (cls._concrete_class.P2SHCoinAddress,
+                cls._concrete_class.P2PKHCoinAddress)
+
+    @classmethod
     def from_bytes_with_prefix(cls, data):
         if not cls.base58_prefix:
             return cls.match_base58_classes(
-                data, (cls._concrete_class.P2SHCoinAddress,
-                       cls._concrete_class.P2PKHCoinAddress))
+                data, cls._get_base58_address_classes())
         return super(CBase58CoinAddressCommon, cls).from_bytes_with_prefix(data)
 
     @classmethod
@@ -235,8 +245,7 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
             If the scriptPubKey is not recognized,
             CCoinAddressError will be raised.
         """
-        for candidate in (cls._concrete_class.P2SHCoinAddress,
-                          cls._concrete_class.P2PKHCoinAddress):
+        for candidate in cls._get_base58_address_classes():
             try:
                 return candidate.from_scriptPubKey(scriptPubKey)
             except CCoinAddressError:
