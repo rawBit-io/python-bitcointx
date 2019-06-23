@@ -381,6 +381,22 @@ class MutableSerializableMeta(type):
         return new_cls
 
 
+def is_mut_cls(cls):
+    # The base class is always ImmutableSerializable
+    assert issubclass(cls, ImmutableSerializable)
+
+    # But MutableSerializableMeta might be added that will make it mutable
+    return issubclass(type(cls), MutableSerializableMeta)
+
+
+def is_mut_inst(inst):
+    # The base class is always ImmutableSerializable
+    assert isinstance(inst, ImmutableSerializable)
+
+    # But MutableSerializableMeta might be added that will make it mutable
+    return issubclass(type(type(inst)), MutableSerializableMeta)
+
+
 __all__ = (
     'MAX_SIZE',
     'Hash',
@@ -405,4 +421,6 @@ __all__ = (
     'uint256_to_shortstr',
     'make_mutable',
     'MutableSerializableMeta',
+    'is_mut_cls',
+    'is_mut_inst'
 )

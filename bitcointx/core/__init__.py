@@ -23,7 +23,7 @@ from .serialize import (
     ImmutableSerializable, MutableSerializableMeta,
     BytesSerializer, VectorSerializer,
     ser_read, uint256_to_str, uint256_from_str,
-    Hash, Hash160
+    Hash, Hash160, is_mut_cls, is_mut_inst
 )
 
 from .util import (
@@ -133,22 +133,6 @@ def _check_inst_compatible(inst, imm_concrete_class):
         raise ValueError(
             'incompatible class: expected instance of {}, got {}'
             .format(imm_concrete_class.__name__, inst.__class__.__name__))
-
-
-def _is_mut_cls(cls):
-    # The base class is always ImmutableSerializable
-    assert issubclass(cls, ImmutableSerializable)
-
-    # But MutableSerializableMeta might be added that will make it mutable
-    return issubclass(type(cls), MutableSerializableMeta)
-
-
-def _is_mut_inst(inst):
-    # The base class is always ImmutableSerializable
-    assert isinstance(inst, ImmutableSerializable)
-
-    # But MutableSerializableMeta might be added that will make it mutable
-    return issubclass(type(type(inst)), MutableSerializableMeta)
 
 
 class _UintBitVectorMeta(type):
@@ -315,7 +299,7 @@ class COutPointBase(ImmutableSerializable):
         _check_inst_compatible(outpoint,
                                cls._concrete_class.immutable.COutPoint)
 
-        if not _is_mut_cls(cls) and not _is_mut_inst(outpoint):
+        if not is_mut_cls(cls) and not is_mut_inst(outpoint):
             return outpoint
 
         return cls(outpoint.hash, outpoint.n)
@@ -383,7 +367,7 @@ class CTxInBase(ImmutableSerializable):
 
         _check_inst_compatible(txin, cls._concrete_class.immutable.CTxIn)
 
-        if not _is_mut_cls(cls) and not _is_mut_inst(txin):
+        if not is_mut_cls(cls) and not is_mut_inst(txin):
             return txin
 
         return cls(
@@ -455,7 +439,7 @@ class CTxOutBase(ImmutableSerializable):
 
         _check_inst_compatible(txout, cls._concrete_class.immutable.CTxOut)
 
-        if not _is_mut_cls(cls) and not _is_mut_inst(txout):
+        if not is_mut_cls(cls) and not is_mut_inst(txout):
             return txout
 
         return cls(txout.nValue, txout.scriptPubKey)
@@ -496,7 +480,7 @@ class CTxInWitnessBase(ImmutableSerializable):
         _check_inst_compatible(txin_witness,
                                cls._concrete_class.immutable.CTxInWitness)
 
-        if not _is_mut_cls(cls) and not _is_mut_inst(txin_witness):
+        if not is_mut_cls(cls) and not is_mut_inst(txin_witness):
             return txin_witness
 
         return cls(txin_witness.scriptWitness)
@@ -535,12 +519,12 @@ class CTxWitnessBase(ImmutableSerializable):
         for w in vtxinwit:
             _check_inst_compatible(
                 w, self._concrete_class.immutable.CTxInWitness)
-            if _is_mut_inst(self) or _is_mut_inst(w):
+            if is_mut_inst(self) or is_mut_inst(w):
                 txinwit.append(self._concrete_class.CTxInWitness.from_txin_witness(w))
             else:
                 txinwit.append(w)
 
-        if not _is_mut_inst(self):
+        if not is_mut_inst(self):
             txinwit = tuple(txinwit)
 
         # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
@@ -569,7 +553,7 @@ class CTxWitnessBase(ImmutableSerializable):
         _check_inst_compatible(witness,
                                cls._concrete_class.immutable.CTxWitness)
 
-        if not _is_mut_cls(cls) and not _is_mut_inst(witness):
+        if not is_mut_cls(cls) and not is_mut_inst(witness):
             return witness
 
         vtxinwit = (cls._concrete_class.CTxInWitness.from_txin_witness(w)
@@ -617,7 +601,7 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         txout_wclass = self._concrete_class.CTxOutWitness
 
         if witness is None or witness.is_null():
-            if witness is None and not _is_mut_inst(self):
+            if witness is None and not is_mut_inst(self):
                 witness = wclass()
             else:
                 witness = wclass(
@@ -626,7 +610,7 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         else:
             witness = wclass.from_witness(witness)
 
-        tuple_or_list = list if _is_mut_inst(self) else tuple
+        tuple_or_list = list if is_mut_inst(self) else tuple
 
         object.__setattr__(self, 'nLockTime', nLockTime)
         object.__setattr__(self, 'nVersion', nVersion)
@@ -673,7 +657,7 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         _check_inst_compatible(tx,
                                cls._concrete_class.immutable.CTransaction)
 
-        if not _is_mut_cls(cls) and not _is_mut_inst(tx):
+        if not is_mut_cls(cls) and not is_mut_inst(tx):
             return tx
 
         vin = [cls._concrete_class.CTxIn.from_txin(txin) for txin in tx.vin]
