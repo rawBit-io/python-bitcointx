@@ -124,16 +124,6 @@ class CCoinAddressBase():
             'scriptPubKey is not in a recognized address format')
 
 
-class CConfidentialAddressBase(metaclass=ABCMeta):
-    """Base class for all confidential addresses"""
-
-    def to_scriptPubKey(self):
-        return self.to_unconfidential().to_scriptPubKey()
-
-    def to_redeemScript(self):
-        return self.to_unconfidential().to_scriptPubKey()
-
-
 class CCoinAddressError(Exception):
     """Raised when an invalid coin address is encountered"""
 
@@ -146,10 +136,6 @@ class CBase58AddressError(CCoinAddressError):
 class CBech32AddressError(CCoinAddressError):
     """Raised when an invalid bech32-encoded address is encountered
     (error is not necessary related to encoding)"""
-
-
-class CConfidentialAddressError(CCoinAddressError):
-    """Raised when an invalid confidential address is encountered"""
 
 
 class P2SHCoinAddressError(CBase58AddressError):

@@ -39,7 +39,8 @@ from bitcointx.wallet import (
 
 class Test_CCoinAddress(unittest.TestCase):
 
-    def test_address_implementations(self, paramclasses=None):
+    def test_address_implementations(self, paramclasses=None,
+                                     extra_addr_testfunc=None):
         pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
         if paramclasses is None:
             paramclasses = bitcointx.ChainParamsMeta.get_registered_chain_params()
@@ -51,29 +52,25 @@ class Test_CCoinAddress(unittest.TestCase):
                            P2WSHCoinAddress, P2WPKHCoinAddress):
                 aclass = identity._clsmap[cclass]
                 self.assertTrue(issubclass(aclass, CCoinAddress))
-                caclass = None
-                if getattr(aclass, 'from_unconfidential', None):
-                    caclass = aclass
-                    aclass = aclass._unconfidential_address_class
+
+                if extra_addr_testfunc is not None \
+                        and extra_addr_testfunc(cclass, identity, pub):
+                    continue
+
                 if getattr(aclass, 'from_pubkey', None):
                     a = aclass.from_pubkey(pub)
                 else:
                     a = aclass.from_redeemScript(
                         script_class(b'\xa9' + Hash160(pub) + b'\x87'))
 
-                if caclass:
-                    ca = caclass.from_unconfidential(a, pub)
-                    self.assertEqual(ca.blinding_pubkey, pub)
-                    self.assertEqual(ca.to_unconfidential(), a)
-                else:
-                    spk = a.to_scriptPubKey()
-                    self.assertEqual(a, aclass.from_scriptPubKey(spk))
-                    a2 = aclass.from_bytes(a)
-                    self.assertEqual(bytes(a), bytes(a2))
-                    self.assertEqual(str(a), str(a2))
-                    a3 = aclass(str(a))
-                    self.assertEqual(bytes(a), bytes(a3))
-                    self.assertEqual(str(a), str(a3))
+                spk = a.to_scriptPubKey()
+                self.assertEqual(a, aclass.from_scriptPubKey(spk))
+                a2 = aclass.from_bytes(a)
+                self.assertEqual(bytes(a), bytes(a2))
+                self.assertEqual(str(a), str(a2))
+                a3 = aclass(str(a))
+                self.assertEqual(bytes(a), bytes(a3))
+                self.assertEqual(str(a), str(a3))
 
 
 class Test_CBitcoinAddress(unittest.TestCase):
