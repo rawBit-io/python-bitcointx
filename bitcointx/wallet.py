@@ -200,6 +200,9 @@ class CBech32CoinAddressCommon(bitcointx.bech32.CBech32Data):
         Returns a CBech32CoinAddressCommon subclass.
         If the scriptPubKey is not recognized CCoinAddressError will be raised.
         """
+        assert cls._witness_version is None, \
+            "classes that defind _witness_version must override from_scriptPubKey"
+
         for candidate in cls._get_bech32_address_classes():
             try:
                 return candidate.from_scriptPubKey(scriptPubKey)
@@ -245,6 +248,9 @@ class CBase58CoinAddressCommon(bitcointx.base58.CBase58PrefixedData):
             If the scriptPubKey is not recognized,
             CCoinAddressError will be raised.
         """
+        assert cls.base58_prefix == b'', \
+            "subclasses that set non-empty base58_prefix must override from_scriptPubKey"
+
         for candidate in cls._get_base58_address_classes():
             try:
                 return candidate.from_scriptPubKey(scriptPubKey)
