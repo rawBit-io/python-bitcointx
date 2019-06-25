@@ -22,9 +22,9 @@ The switch to v1.0.0 does not signify that the library is in any way more
 new major version was done purely because of the big refactoring effort
 that was made to improve the consistency of the library API,
 make it more composeable and maintainable. This required significant API
-breakage, and it made sense to If anything, the first release
-of the v1.0.x version is bound to be less stable than the v0.10.x, because of
-the amount of new code that was introduced.
+breakage, and it made sense to bump the version.
+If anything, the first release of the v1.0.x version is bound to be less stable
+than the v0.10.x, because of the amount of new code that was introduced.
 
 ## Requirements
 
