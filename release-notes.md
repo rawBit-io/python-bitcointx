@@ -1,158 +1,150 @@
 # python-bitcointx release notes
 
-## v1.0.0-rc0
+## v1.0.0
 
-A lot of changes, a lot of breaking changes.
-This release notes are work in progress.
+Significant changes, refactoring, API breakage.
 
-The list of things to be described here:
+The code is now more composable, API is more consistent,
+building support for other bitcoin-based coins on top of
+python-bitcointx is now much easier. See for example
+[python-litecointx](https://github.com/Simplexum/python-litecointx) and
+[python-elementstx](https://github.com/Simplexum/python-elementstx)
 
-    Frontend classes
+* NOTE: The switch to v1.0.0 does not signify that the library
+  is in any way more 'mature' or 'stable' or 'production-ready'
+  than the v0.10.x.The switch to the new major version was done purely
+  because of the big refactoring effort that was made to improve
+  the consistency of the library API, make it more composeable
+  and maintainable. This required significant API breakage,
+  and it made sense to bump the version. If anything, the first
+  release of the v1.0.x version should be viewed as less mature
+  than the v0.10.x, because of the amount of new code that was introduced.
 
-    Chain params:
-        - new param class names
-        - new function names
-        - contexts
-        - thread-local
-        - new specialization params (`TRANSACTION_CLASS` etc)
-        - new naming (bitcoin, bitcoin/testnet ...)
-        - CurrentChainParams()
+* The 'frontend class' abstraction is introduced for address
+  classes, keys classes, and transaction classes (`CTransaction`, `CTxIn`, etc.)
+  
+  For example, when you create `CTransaction`, with default chain
+  params in effect, you will get an instance of `CBitcoinTransaction`.
+  If you are using python-elementstx, and Elements chain params are
+  in effect, you will get `CElementsSidechainTransaction`.
+  Same with `CTxIn`, `CTxWitness`, and other transaction component classes,
+  and also `CScript`.
+  
+  To support the same abstraction for addresses, `CCoinAddress` (and
+  related classes) was introduced. You can still use `CBitcoinAddress`,
+  and when you use `CCoinAddress` with default chain parameters, you will
+  also get `CBitcoinAddress` instances. But if you switch to testnet
+  chain params, `CCoinAddress(some_addr)` will give you `CBitcoinTestnetAddress`
+  instance.
+  
+  The good thing about this is that even after you switch the current chain
+  parameters, the instances retain their representation in accordance to
+  their class. An instance of `CBitcoinTestnetAddress` will still show up
+  with testnet prefix when converted to string. With old architecture,
+  that was used in python-bitcoinlib, your address instances that was
+  created with testnet chain params in effect, will all automatically switch
+  to 'mainnet' representation.
+  
+  While this may not be a serious inconvenience when working only with Bitcoin,
+  if you want to build a cross-chain atomic swap code between Bitcoin and
+  Elements, for example, you will need to switch back and forth between the
+  chain params. And having all your addresses change their representation
+  complicates things a lot. Having frontend classes and separate address
+  class for each address representation makes the library and the code that
+  uses it more composable, and interoperable.
 
-    AddressEncodingError - more general, includes Base58Error and Bech32Error
-
-    core frontend class conventions
-
-    wallet: address frontend class conventions, CoinAddress, etc
-    CoinKey(), CoinExtKey()
-
-    script frontend class conventions
-
-    rpc: RPCCaller - the same as RawProxy. Proxy is removed
-
-    `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
-
-    repr/str distinction
-
-    Uint256 class
-
-    `is_valid` -> `is_valid()` etc. (list them: valid, fullyvalid, compressed,...),
-    `@no_bool_use_as_property`, correctness over speed
-
-
-    CTransaction default version changed to 2
-
-    `to_mutable()`/`to_immutable()`
-
-    BIP32Path(), `CExtKeyBase.derive_path()`
-
-    bytesarray accepted where bytes accepted
-
-    core.key.ECDH
-
-    CKey, CPubkey combine(), add(), sub(), negated()
-
-    check that first byte of xprivkey is zero (Bitcoin core ignores this, we are not)
-
-    core.script: add CHECKSEQUENCEVERIFY (no processing though)
-    add `DATA()`, `NUMBER()`, `OPCODE()`
-
-    CScript: add `to_p2wsh_scriptPubKey()`, add `sighash()`
-
-    tx.serialize: add `for_sighash` flag
-
-    move secp256k1 into separate file
-
-    core.sha256 for midstate calc
-
-
-BREAKING CHANGES:
-
-    CPubKey's is_valid, is_fullyvalid, is_compressed
-    CKeyMixin's is_compressed
-
-    Cannot be used as a properties anymore.
-    You have to use `pub.is_valid()`, `pub.is_compressed()`, etc.
-
-    If pub.is_valid is used without `()` in boolean context, like:
-
+* Notable new classes, functions and methods
+  - `AddressEncodingError` exception - more general than `Base58Error`
+     or `Bech32Error`, and it includes them.
+  - `@no_bool_use_as_property` function decorator, to be applied to methods
+    like `is_something()`, that will enforce the correct usage, so that
     ```
-        if pub.is_valid:
-            do_someting()
+    if instance.is_something:
+        got_someting()
     ```
+    will cause `TypeError` to be raised.
+    This prevents bugs by accidentally treating method as property.
+    Note that method-call convention vs property convention for `is_*`
+    was selected for historical reasons - in the existing code, there was
+    much more method-like `is_*` usage then property-like. That needed to
+    be made consistent, but with less breakage. Therefore, the convention
+    that was more used thorugh code was chosen.
+  - `CScriptBase` now have `sighash()` and `raw_sighash()` methods,
+    that return appropriate signature hash for the script instance.
+    Useful when sighash implementation is not the same as Bitcoin's.
+    Also, `to_p2wsh_scriptPubKey()` method was added
+  - In addition to `CBitcoinSecret`, `CCoinKey` is introduced
+    `CCoinKey` naming is more consistent with `CKey`, `CCoinExtKey`, etc.
+    `CBitcoinSecret` is retained for backwards compatibility.
+    `CCoinKey`, `CCoinExtKey`, `CCoinExtPubKey` are frontend classes
+    that will give appropriate instances according to current chain params.
+    (`CBitcoinKey`, `CBitcoinTestnetExtKey`, etc.)
+  - `CTransaction` convenience methods `to_mutable()`/`to_immutable()`:
+    To easily convert between mutable and immutable versions
+    `serialize()` method now have `for_sighash` flag - for cases when the
+    serialization is different for sighash calculations (Elements)
+  - ECDH, key addition and substraction
+    If support in secp256k1 library is available, `CKey` has `ECDH()` method to
+    compute an EC Diffie-Hellman secret.
+    If support in secp256k1 library is available, `CKey` and `CPubKey` has
+    classmethods `add()`, `combine()`, `sub()`, `negated()` that allow to
+    perform these operations on the keys. `add()` implemented
+    thorugh `combine()`, `sub()` implemented using `negated()`.
+  - `BIP32Path` class, `CExtKeyBase.derive_path()`, to deal with hierarchial
+    deterministic derivation. For usage see `bitcointx/tests/test_hd_keys.py`
+  - Guard functions for script: `DATA()`, `NUMBER()`, `OPCODE()` -
+    can be used to prevent accidental use of unintended values in the script
+    where certain types of values are expected. For example,
+    the code `CScript([var])` does not communicate to the reader if `var`
+    is expected to be just data, or a number, or an opcode.
+    with `CScript([NUMBER(var)])`, it is apparent that the number is expected.
+  - Uint256 class
+    `bitcointx.core.Uint256` - a convenience class to represent 256-bit
+    integers. have `from_int()` and `to_int()` methods.
 
-    TypeError will be raised.
+* The api for selecting the chain parameters was changed, as is the name for
+  the chain parameters ('mainnet' -> 'bitcoin', etc.)
+  see "Selecting the chain to use" section in README.md
 
-    Now, all `is_*` methods of all classes are consistent in that
-    they always have to be called as method, not used as property.
+* Classes representations for `repr()` and `str()` can significantly
+  differ, with `repr()` giving more detailed view, and for example for
+  confidential data in Elements blockchain, `str()` may show
+  'CONFIDENTIAL', if the data cannot be meaningfully interpreted.
+  `repr()` will show the data as-is.
 
-    All `is_*` other methods will throw Type error, too, if used
-    as property in a boolean context.
-
-    It could have been done the other way around - convert other
-    `is_*` methods to properties. But because there was a lot more
-    non-property `is_*` methods, this would break more code.
-
-    For details, see no_bool_use_as_property() decorator in
-    bitcointx/util.py
-
-    ----
-
-    CBitcoinAddressError is removed, CCoinAddressError should be used instead
-
-    Chain params for bitcoin is renamed, instead of mainnet, testnet, regtest
-    it is now bitcoin, bitcoin/testnet, bitcoin/mainnet
-
-    CBitcoinSecret is renamed to CBitcoinKey
-    (CBitcoinSecret is still available for backward compatibility)
-
-    rpc.Proxy is removed, replaced with RPCCaller (ex-RawProxy)
-
-    add DATA,NUMBER,OPCODE guards to script module: CScript([DATA(var)]) will
-    raise ValueError if var is not bytes or bytearray instance, etc.
-
-
-NOTE: references to Elements sidechain below are in relation
-to python-elementstx - a separate module that uses python-bitcointx to
-build support for Elements sidechain. Other modules can be built
-in a similar fashion to support working with transactions
-in other bitcoin-related blockchains.
-
-* Core transaction class and accompanying transaction component classes
-  are now only a front-ends to implementation-specific classes.
-  When you create CTransaction, for example, you will get an instance
-  of CBitcoinTransaction if default chain parameters are in effect,
-  or, for example, CElementsSidechainTransaction - if you are using
-  python-bitcointx module and have choosen Elements
-  sidechain parameters. Same with CTxIn, CTxWitness, and other
-  transaction component classes, and also CScript. This allows to support
-  different (Bitcoin-based) transaction formats and various
-  blockchain-specific functionality while the basic code that is not
-  affected by the differences between specifications still can work
-  unmodified. If you need to check for transaction component class types
-  with isinstance, you can use CTransactionBase, CTxInBase, etc.
-
-* CTxWitness now is immutable, CMutableTxWitness is added.
-
-* More consistent mutable/immutable transaction component class handling.
-  Creating CMutableTransaction and specifying CTxIn for inputs will result
-  in CMutableTransaction instance that have CMutableTxIn in their inputs
-  (Actually, CBitcoinMutableTxIn or CElementsSidechainMutableTxIn, etc..)
-
-* Default transaction nVersion is now 2 (the same as in current Bitcoin Core)
-
-* CPubKey() can be instantiated without parameters (will return invalid pubkey instance)
-
-* CBlock, CBlockHeader and all related code is removed
-
-* repr() and str() can return different representations for CTransaction contents.
-  For example, CConfidentialAsset of Elements sidechain will render as
-  CConfidentialAsset(CONFIDENTIAL) when rendered with str,
-  but will show the bytes of the commitment when rendered with repr
-
-* CPubKey's `verify` and `verify_nonstrict` now assert that supplied hash and sig
-  are bytes or bytesarray instances
-
-* Refactoring and cleanup
+* Misc
+  - `CTransaction` default version changed to 2
+  - if `bytes` is accepted by some method, `bytesarray` will be, too
+  - core.script: `CHECKSEQUENCEVERIFY` added (no support in VerifyScript yet)
+  - the bite before private data of extended private key must be zero.
+    Bitcoin core ignores this, but the standard says that is should be zero.
+    `CKeyMixin.__init__()` will raise ValueError if it is not.
+  - secp256k1 C library definitions moved to separate file
+  - `bitcointx.core.sha256` module added - slow, python-only implementation
+    of SHA256, but with useful property that it allows to get the SHA256
+    mid-state. Needed for Elements, might be useful for other things.
+  - CPubKey() can be instantiated without parameters
+    (will return invalid pubkey instance)
+ 
+* Breaking public API changes:
+    - `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`)
+    - `CTransaction` default version changed to 2
+    - `CKey.is_valid`, `CKey.is_fullyvalid` and `CKey.is_compressed`
+      should now be called as methods: `key.is_valid()`, not `key.is_valid`.
+    - `CBitcoinAddressError` is removed, `CCoinAddressError`
+      should be used instead
+    - Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet',
+      'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
+    - `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
+    - `CTxWitness` is now immutable, `CMutableTxWitness` is added.
+    - If mutable components supplied to `CTransaction`, they will be internally
+      converted to immutable, and vise versa with `CMutableTransaction`
+    - string representations (returned by `repr` and `str`) of various objects
+      will often differ from that of python-bitcoinlib's.
+    - `CBlock`, `CBlockHeader` and all related code is removed (leftover from
+      previous cleaning of network-related code)
+    - `verify` and `verify_nonstrict` methods of `CPubKey` now assert
+      that supplied hash and sig are bytes or bytesarray instances
 
 ## v0.10.3.post0
 

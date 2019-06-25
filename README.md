@@ -94,7 +94,7 @@ Note: only public API changes is listed here
 
 * `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old RawProxy)
 * `CTransaction` default version changed to 2
-* `CKey.is_valid` and `CKey.is_compressed` shold now be called as methods: `key.is_valid()`, not `key.is_valid`.
+* `CKey.is_valid`, `CKey.is_fullyvalid` and `CKey.is_compressed` should now be called as methods: `key.is_valid()`, not `key.is_valid`.
 * `CBitcoinAddressError` is removed, `CCoinAddressError` should be used instead
 * Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet', 'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
 * `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
