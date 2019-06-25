@@ -139,7 +139,7 @@ class RPCCaller:
         authpair = None
 
         if service_url is None:
-            params = bitcointx.CurrentChainParams()
+            params = bitcointx.GetCurrentChainParams()
 
             # Figure out the path to the config file
             if btc_conf_file is None:
