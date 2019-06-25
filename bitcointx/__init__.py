@@ -1,5 +1,5 @@
 # Copyright (C) 2012-2018 The python-bitcoinlib developers
-# Copyright (C) 2018 The python-bitcointx developers
+# Copyright (C) 2018-2019 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
