@@ -64,6 +64,7 @@ Non-consensus critical modules include the following:
     bitcointx.rpc      - Bitcoin Core RPC interface support
     bitcointx.wallet   - Wallet-related code, currently Bitcoin address and
                          private key support
+    bitcointx.util     - various code-related utitlity classes and functions
 
 Effort has been made to follow the Satoshi source relatively closely, for
 instance Python code and classes that duplicate the functionality of

@@ -26,7 +26,7 @@ from .serialize import (
     Hash, Hash160, is_mut_cls, is_mut_inst
 )
 
-from .util import (
+from ..util import (
     no_bool_use_as_property, make_frontend_metaclass, set_frontend_class,
     CoinIdentityMeta
 )

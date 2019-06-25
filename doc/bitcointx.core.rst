@@ -37,8 +37,3 @@ Everything consensus critical is found in the core subpackage.
 ----------------
 
 .. automodule:: bitcointx.core.sha256
-
-:mod:`util`
-----------------
-
-.. automodule:: bitcointx.core.sha256

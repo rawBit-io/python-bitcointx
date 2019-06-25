@@ -93,7 +93,7 @@ BREAKING CHANGES:
     non-property `is_*` methods, this would break more code.
 
     For details, see no_bool_use_as_property() decorator in
-    bitcointx/core/util.py
+    bitcointx/util.py
 
     ----
 

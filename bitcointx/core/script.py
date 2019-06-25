@@ -28,7 +28,7 @@ import bitcointx.core._bignum
 
 from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
 
-from .util import (
+from ..util import (
     make_frontend_metaclass, no_bool_use_as_property, set_frontend_class
 )
 

@@ -26,7 +26,7 @@ import bitcointx.base58
 import bitcointx.bech32
 import bitcointx.core
 
-from bitcointx.core.util import (
+from bitcointx.util import (
     make_frontend_metaclass, set_frontend_class, CoinIdentityMeta
 )
 from bitcointx.core.key import (

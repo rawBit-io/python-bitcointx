@@ -35,3 +35,8 @@ bitcointx
 -------------
 
 .. automodule:: bitcointx.wallet
+
+:mod:`util`
+-------------
+
+.. automodule:: bitcointx.util

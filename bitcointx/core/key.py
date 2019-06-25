@@ -25,8 +25,8 @@ import ctypes
 import ctypes.util
 import hashlib
 
+from bitcointx.util import no_bool_use_as_property
 from bitcointx.core import Hash160
-from bitcointx.core.util import no_bool_use_as_property
 from bitcointx.core.secp256k1 import (
     _secp256k1, secp256k1_context_sign, secp256k1_context_verify,
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
