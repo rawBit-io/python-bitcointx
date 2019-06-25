@@ -140,18 +140,24 @@ spending a pay-to-script-hash transaction output:
 Do the following:
 
     import bitcointx
-    bitcointx.SelectParams(NAME)
+    bitcointx.SelectChainParams(NAME)
 
-Where NAME is one of 'testnet', 'mainnet', or 'regtest'. The chain currently
-selected is a global variable that changes behavior everywhere, just like in
-the Satoshi codebase.
+Where NAME is one of 'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'.
+The chain parameters currently selected is a thread-local variable that changes
+behavior everywhere. If you need to change the parameters temporary, you can use
+`ChainParams` context manager. To get current chain params, you can use
+`GetCurrentChainParams()`:
 
-To use alternative chain parameters:
+```
+from bitcointx import ChainParams, GetCurrentChainParams
+with ChainParams('bitcoin/testnet'):
+    print("current params is", GetCurrentChainParams().NAME)
+```
+will print
 
-    import bitcointx
-    bitcointx.SelectAlternativeParams(AltCoreParams, AltParams)`
-
-See `examples/litecoin-alt-p2sh-prefix.py` for an example usage.
+```
+current params is bitcoin/testnet
+```
 
 ## Unit tests
 
