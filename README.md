@@ -98,7 +98,7 @@ Note: only public API changes is listed here
 * Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet', 'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
 * `CTxWitness` is now immutable, `CMutableTxWitness` is added.
 * If mutable components supplied to CTransaction, they will be internally converted to immutable, and vise versa with CMutableTransaction
-* string representations (returned by `repr` and `str`) of different objects will often differ from that of python-bitcoinlib's.
+* string representations (returned by `repr` and `str`) of various objects will often differ from that of python-bitcoinlib's.
 
 ## Note on VerifyScript() usage
 
