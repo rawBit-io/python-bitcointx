@@ -285,7 +285,7 @@ class RPCCaller:
             raise AttributeError
 
         # Create a callable to do the actual call
-        def f(*args): self._call(name, *args)
+        def f(*args): return self._call(name, *args)
 
         # Make debuggers show <function bitcointx.rpc.name>
         # rather than <function bitcointx.rpc.<lambda>>
