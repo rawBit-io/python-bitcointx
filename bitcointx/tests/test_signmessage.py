@@ -13,6 +13,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import unittest
 
+from bitcointx.core.secp256k1 import secp256k1_has_pubkey_recovery
 from bitcointx.wallet import CBitcoinSecret
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
 import sys
@@ -32,6 +33,11 @@ def load_test_vectors(name):
 
 
 class Test_SignVerifyMessage(unittest.TestCase):
+
+    @unittest.skipIf(
+        not secp256k1_has_pubkey_recovery,
+        "secp256k1 compiled without pubkey recovery functions"
+    )
     def test_verify_message_simple(self):
         address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
         message = address
@@ -41,12 +47,25 @@ class Test_SignVerifyMessage(unittest.TestCase):
 
         self.assertTrue(VerifyMessage(address, message, signature))
 
+    @unittest.skipIf(
+        not secp256k1_has_pubkey_recovery,
+        "secp256k1 compiled without pubkey recovery functions"
+    )
     def test_verify_message_vectors(self):
         for vector in load_test_vectors('signmessage.json'):
             message = BitcoinMessage(vector['address'])
-            self.assertTrue(VerifyMessage(vector['address'], message, vector['signature']))
+            self.assertTrue(VerifyMessage(
+                vector['address'],
+                message,
+                vector['signature']
+            ))
 
+    @unittest.skipIf(
+        not secp256k1_has_pubkey_recovery,
+        "secp256k1 compiled without pubkey recovery functions"
+    )
     def test_sign_message_simple(self):
+
         key = CBitcoinSecret("L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")
         address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
         message = address
@@ -57,6 +76,10 @@ class Test_SignVerifyMessage(unittest.TestCase):
         self.assertTrue(signature)
         self.assertTrue(VerifyMessage(address, message, signature))
 
+    @unittest.skipIf(
+        not secp256k1_has_pubkey_recovery,
+        "secp256k1 compiled without pubkey recovery functions"
+    )
     def test_sign_message_vectors(self):
         for vector in load_test_vectors('signmessage.json'):
             key = CBitcoinSecret(vector['wif'])
@@ -64,8 +87,14 @@ class Test_SignVerifyMessage(unittest.TestCase):
 
             signature = SignMessage(key, message)
 
-            self.assertTrue(signature, "Failed to sign for [%s]" % vector['address'])
-            self.assertTrue(VerifyMessage(vector['address'], message, vector['signature']), "Failed to verify signature for [%s]" % vector['address'])
+            self.assertTrue(
+                signature,
+                "Failed to sign for [%s]" % vector['address']
+            )
+            self.assertTrue(
+                VerifyMessage(vector['address'], message, vector['signature']),
+                "Failed to verify signature for [%s]" % vector['address']
+            )
 
 
 if __name__ == "__main__":

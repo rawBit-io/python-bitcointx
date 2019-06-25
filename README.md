@@ -1,4 +1,7 @@
-[![Build Status](https://travis-ci.org/Simplexum/python-bitcointx.svg?branch=master)](https://travis-ci.org/Simplexum/python-bitcointx)
+[![Package version](https://img.shields.io/pypi/v/python-bitcointx.svg)](https://pypi.python.org/pypi/python-bitcointx)
+[![Package license](https://img.shields.io/pypi/l/python-bitcointx.svg)](https://pypi.python.org/pypi/python-bitcointx)
+[![Python versions](https://img.shields.io/pypi/pyversions/python-bitcointx.svg)](https://pypi.python.org/pypi/python-bitcointx)
+[![Build Status](https://travis-ci.org/Simplexum/python-bitcointx.svg?branch=master)](https://pypi.python.org/pypi/python-bitcointx)
 
 # python-bitcointx
 

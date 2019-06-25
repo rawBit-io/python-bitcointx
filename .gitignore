@@ -9,3 +9,5 @@ build/
 htmlcov/
 python_bitcoinlib.egg-info/
 dist/
+*.egg-info
+.idea

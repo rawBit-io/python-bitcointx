@@ -1,0 +1,23 @@
+language: python
+
+dist: xenial
+
+python:
+  - "3.4"
+  - "3.5"
+  - "3.6"
+  - "3.7"
+  - "3.8-dev"
+
+branches:
+  only:
+  - gh-pages
+  - /.*/
+
+install:
+    - pip install coverage
+    - sh -c 'git clone git://github.com/bitcoin/secp256k1.git libsecp256k1 && cd libsecp256k1 && ./autogen.sh && ./configure && make && sudo make install && cd ..;'
+    - sh -c 'sudo ln -s /usr/local/lib/libsecp256k1.so.0 /usr/lib/libsecp256k1.so.0'
+
+script:
+  - "coverage run --append --omit='tests/*,*/site-packages/*,*/distutils/*' setup.py test -q"
