@@ -150,7 +150,7 @@ behavior everywhere. If you need to change the parameters temporary, you can use
 `ChainParams` context manager. To get current chain params, you can use
 `GetCurrentChainParams()`:
 
-```
+```python
 from bitcointx import ChainParams, GetCurrentChainParams
 with ChainParams('bitcoin/testnet'):
     print("current params is", GetCurrentChainParams().NAME)

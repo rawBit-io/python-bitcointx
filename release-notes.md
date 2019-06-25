@@ -58,7 +58,7 @@ python-bitcointx is now much easier. See for example
      or `Bech32Error`, and it includes them.
   - `@no_bool_use_as_property` function decorator, to be applied to methods
     like `is_something()`, that will enforce the correct usage, so that
-    ```
+    ```python
     if instance.is_something:
         got_someting()
     ```
