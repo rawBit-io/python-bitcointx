@@ -150,8 +150,12 @@ class RPCCaller:
             if service_port is None:
                 service_port = params.RPC_PORT
 
-            conf['rpcport'] = int(conf.get('rpcport', service_port))
-            conf['rpchost'] = conf.get('rpcconnect', 'localhost')
+            extraname = params.get_datadir_extra_name()
+
+            conf['rpcport'] = int(conf.get('{}.rpcport'.format(extraname),
+                                           conf.get('rpcport', service_port)))
+            conf['rpchost'] = conf.get('{}.rpcconnect'.format(extraname),
+                                       conf.get('rpcconnect', 'localhost'))
 
             service_url = ('%s://%s:%d' %
                            ('http', conf['rpchost'], conf['rpcport']))
