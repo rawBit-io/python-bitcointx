@@ -8,11 +8,23 @@ bitcoin transactions, and related data structures.
 ## Notable differences from python-bitcoinlib:
 
 * Network-related code that deals with network messages and blocks is removed.
+* Some API have changed and may be not compatible with old code (see below)
 * libsecp256k1 are used for signing and verifying.
   Signing by libsecp256k1 is deterministic, per RFC6979.
 * Bech32-encoded address support
 * HD keys support
 * Easier to build code that supports and interacts with other bitcoin-based blockchains
+
+## Note on v1.0.0 release
+
+It should be noted that the switch to v1.0.0 does not signify that the library
+is in any way more 'mature' or 'stable' or 'production-ready' than the v0.10.x.
+The switch to the new major version was done purely because of the big
+refactoring effort that was made to improve the consistency of the library
+API, make it more composeable and maintainable. This required significant API
+breakage, and it made sense to If anything, the first release
+of the v1.0.x version is bound to be less stable than the v0.10.x, because of
+the amount of new code that was introduced.
 
 ## Requirements
 
@@ -35,8 +47,13 @@ consensus critical and non-consensus-critical.
     bitcointx.core.script     - Scripts and opcodes
     bitcointx.core.scripteval - Script evaluation/verification
     bitcointx.core.serialize  - Serialization
+    bitcointx.core.secp256k1  - functions to interface with secp256k1 C library
+                                (Note: to safely use it, experience with C
+                                and understanting of python-C interop is a must)
+    bitcointx.core.sha256     - (Slow) python implementation of SHA256,
+                                but with ability to get SHA256 mid-state
 
-Note that this code may not be fully consensus-compatible with current
+Note that this code is does not aim to be fully consensus-compatible with current
 bitcoin core codebase. Corner cases that is not relevant to creating valid bitcoin
 transactions is unlikely to be considered. See also note on VerifyScript usage below.
 
@@ -68,6 +85,19 @@ SHA256. python-bitcointx provides the convenience functions x() and lx() in
 bitcointx.core to convert from big-endian and little-endian hex to raw bytes to
 accomodate this. In addition see b2x() and b2lx() for conversion from bytes to
 big/little-endian hex.
+
+## API changes vs python-bitcoinlib
+
+Note: only public API changes is listed here
+
+* `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old RawProxy)
+* `CTransaction` default version changed to 2
+* `CKey.is_valid` and `CKey.is_compressed` shold now be called as methods: `key.is_valid()`, not `key.is_valid`.
+* `CBitcoinAddressError` is removed, `CCoinAddressError` should be used instead
+* Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet', 'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
+* `CTxWitness` is now immutable, `CMutableTxWitness` is added.
+* If mutable components supplied to CTransaction, they will be internally converted to immutable, and vise versa with CMutableTransaction
+* string representations (returned by `repr` and `str`) of different objects will often differ from that of python-bitcoinlib's.
 
 ## Note on VerifyScript() usage
 

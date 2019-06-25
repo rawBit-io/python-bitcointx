@@ -103,6 +103,7 @@ BREAKING CHANGES:
     it is now bitcoin, bitcoin/testnet, bitcoin/mainnet
 
     CBitcoinSecret is renamed to CBitcoinKey
+    (CBitcoinSecret is still available for backward compatibility)
 
     rpc.Proxy is removed, replaced with RPCCaller (ex-RawProxy)
 
@@ -149,7 +150,7 @@ in other bitcoin-related blockchains.
   but will show the bytes of the commitment when rendered with repr
 
 * CPubKey's `verify` and `verify_nonstrict` now assert that supplied hash and sig
-  are bytes instances
+  are bytes or bytesarray instances
 
 * Refactoring and cleanup
 
