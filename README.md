@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/Simplexum/python-bitcointx.svg?branch=master)](https://travis-ci.org/Simplexum/python-bitcointx)
+
 # python-bitcointx
 
 This Python3 library provides an easy interface to the bitcoin transaction data
