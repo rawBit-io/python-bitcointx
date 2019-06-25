@@ -61,6 +61,7 @@ Non-consensus critical modules include the following:
 
     bitcointx          - Chain selection
     bitcointx.base58   - Base58 encoding
+    bitcointx.bech32   - Bech32 encoding
     bitcointx.rpc      - Bitcoin Core RPC interface support
     bitcointx.wallet   - Wallet-related code, currently Bitcoin address and
                          private key support
@@ -96,6 +97,7 @@ Note: only public API changes is listed here
 * `CKey.is_valid` and `CKey.is_compressed` shold now be called as methods: `key.is_valid()`, not `key.is_valid`.
 * `CBitcoinAddressError` is removed, `CCoinAddressError` should be used instead
 * Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet', 'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
+* `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
 * `CTxWitness` is now immutable, `CMutableTxWitness` is added.
 * If mutable components supplied to CTransaction, they will be internally converted to immutable, and vise versa with CMutableTransaction
 * string representations (returned by `repr` and `str`) of various objects will often differ from that of python-bitcoinlib's.
