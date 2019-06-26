@@ -56,6 +56,11 @@ def set_frontend_class(frontend_cls, concrete_cls, frontend_class_store):
     frontend_class_store.clsmap[frontend_cls] = concrete_cls
 
 
+class FrontendClassMetaBase:
+    """to be used in subclass() checks to check that particular class
+    is a frontend class"""
+
+
 def make_frontend_metaclass(prefix, frontend_class_store):
     def base_new(cls, *args, **kwargs):
         if cls not in frontend_class_store.clsmap:
@@ -66,7 +71,8 @@ def make_frontend_metaclass(prefix, frontend_class_store):
         return real_class(*args, **kwargs)
 
     base_class = type(prefix + 'FrontendClassBase', (), {'__new__': base_new})
-    meta_class = type(prefix + 'FrontendClassMeta', (ABCMeta, ), {})
+    meta_class = type(prefix + 'FrontendClassMeta',
+                      (ABCMeta, FrontendClassMetaBase), {})
 
     def meta_getattr(cls, name):
         if cls not in frontend_class_store.clsmap:
@@ -177,8 +183,9 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
                              .format([c.__name__ for c in extra]))
 
         for front, concrete in clsmap.items():
-            assert type(front).__name__.endswith('FrontendClassMeta'),\
-                ("metaclass {} must be a frontend metaclass, but is {}"
+            assert issubclass(type(front), FrontendClassMetaBase), \
+                ("metaclass {} must be a frontend metaclass, but {} "
+                 "is not a subclass of FrontendClassMetaBase"
                  .format(front.__name__, type(front)))
             assert issubclass(type(concrete), CoinIdentityMeta), \
                 ("metaclass {} of {} must be a subclass of CoinIdentityMeta."
