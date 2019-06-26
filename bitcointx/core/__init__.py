@@ -505,7 +505,8 @@ class CTxOutWitnessBase(ImmutableSerializable):
     pass
 
 
-class _CBitcoinDummyTxOutWitness(CTxOutWitnessBase):
+class _CBitcoinDummyTxOutWitness(CTxOutWitnessBase,
+                                 metaclass=BitcoinTransactionIdentityMeta):
     pass
 
 

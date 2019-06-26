@@ -155,8 +155,6 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
         assert not (extra & required),\
             "extra classmap cannot intersect with required classmap"
 
-        frontend_metaclass = cls._frontend_metaclass
-
         supplied = set()
         namemap = extra_classmap.copy()
         for front, concrete in clsmap.items():
@@ -179,9 +177,14 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
                              .format([c.__name__ for c in extra]))
 
         for front, concrete in clsmap.items():
-            assert type(front) is frontend_metaclass, \
-                ("metaclass of {} must be {}"
-                 .format(front.__name__, frontend_metaclass.__name__))
+            assert issubclass(type(front), cls._frontend_metaclass), \
+                ("metaclass {} of {} must be a subclass of {}"
+                 .format(type(front), front.__name__,
+                         cls._frontend_metaclass.__name__))
+            assert issubclass(type(concrete), CoinIdentityMeta), \
+                ("metaclass {} of {} must be a subclass of CoinIdentityMeta."
+                 "Did you forget to set the identity metaclass for {} ?"
+                 .format(type(concrete), concrete.__name__, concrete.__name__))
             assert not issubclass(concrete, front), \
                 ("double-registering {} as subclass of {} is not allowed"
                  .format(concrete.__name__, front.__name__))
