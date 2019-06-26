@@ -25,6 +25,7 @@ from bitcointx.core import (
 )
 from bitcointx.core.script import CScript, CScriptWitness
 from bitcointx.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
+from bitcointx.core.serialize import is_mut_inst
 
 from bitcointx.tests.test_scripteval import parse_script
 
@@ -222,11 +223,11 @@ class Test_CTransaction(unittest.TestCase):
             witness=CTxWitness([CTxInWitness()]))
 
         def check_mutable_parts(tx):
-            self.assertTrue(tx.vin[0]._immutable_restriction_lifted)
-            self.assertTrue(tx.vin[0].prevout._immutable_restriction_lifted)
-            self.assertTrue(tx.vout[0]._immutable_restriction_lifted)
-            self.assertTrue(tx.wit._immutable_restriction_lifted)
-            self.assertTrue(tx.wit.vtxinwit[0]._immutable_restriction_lifted)
+            self.assertTrue(is_mut_inst(tx.vin[0]))
+            self.assertTrue(is_mut_inst(tx.vin[0].prevout))
+            self.assertTrue(is_mut_inst(tx.vout[0]))
+            self.assertTrue(is_mut_inst(tx.wit))
+            self.assertTrue(is_mut_inst(tx.wit.vtxinwit[0]))
 
         check_mutable_parts(tx)
 
@@ -240,10 +241,10 @@ class Test_CTransaction(unittest.TestCase):
         # methods, and not directly
 
         txin = CMutableTxIn(prevout=COutPoint(hash=b'a'*32, n=0))
-        self.assertTrue(txin.prevout._immutable_restriction_lifted)
+        self.assertTrue(is_mut_inst(txin.prevout))
 
         wit = CMutableTxWitness((CTxInWitness(),))
-        self.assertTrue(wit.vtxinwit[0]._immutable_restriction_lifted)
+        self.assertTrue(is_mut_inst(wit.vtxinwit[0]))
 
     def test_immutable_tx_creation_with_mutable_parts_specified(self):
         tx = CTransaction(
@@ -253,11 +254,11 @@ class Test_CTransaction(unittest.TestCase):
                 [CMutableTxInWitness(CScriptWitness([CScript([0])]))]))
 
         def check_immutable_parts(tx):
-            self.assertTrue(not tx.vin[0]._immutable_restriction_lifted)
-            self.assertTrue(not tx.vin[0].prevout._immutable_restriction_lifted)
-            self.assertTrue(not tx.vout[0]._immutable_restriction_lifted)
-            self.assertTrue(not tx.wit._immutable_restriction_lifted)
-            self.assertTrue(not tx.wit.vtxinwit[0]._immutable_restriction_lifted)
+            self.assertTrue(not is_mut_inst(tx.vin[0]))
+            self.assertTrue(not is_mut_inst(tx.vin[0]))
+            self.assertTrue(not is_mut_inst(tx.vout[0]))
+            self.assertTrue(not is_mut_inst(tx.wit))
+            self.assertTrue(not is_mut_inst(tx.wit.vtxinwit[0]))
 
         check_immutable_parts(tx)
 
@@ -271,7 +272,7 @@ class Test_CTransaction(unittest.TestCase):
         # methods, and not directly
 
         txin = CTxIn(prevout=CMutableOutPoint(hash=b'a'*32, n=0))
-        self.assertTrue(not txin.prevout._immutable_restriction_lifted)
+        self.assertTrue(not is_mut_inst(txin.prevout))
 
         wit = CTxWitness((CMutableTxInWitness(),))
-        self.assertTrue(not wit.vtxinwit[0]._immutable_restriction_lifted)
+        self.assertTrue(not is_mut_inst(wit.vtxinwit[0]))

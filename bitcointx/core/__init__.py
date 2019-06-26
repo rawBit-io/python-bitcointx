@@ -333,7 +333,7 @@ class CTxInBase(ImmutableSerializable):
             scriptSig = self._concrete_class.CScript(scriptSig)
         if prevout is None:
             prevout = self._concrete_class.COutPoint()
-        elif self._immutable_restriction_lifted != prevout._immutable_restriction_lifted:
+        elif is_mut_inst(self) or is_mut_inst(prevout):
             prevout = self._concrete_class.COutPoint.from_outpoint(prevout)
         object.__setattr__(self, 'nSequence', nSequence)
         object.__setattr__(self, 'prevout', prevout)
@@ -628,8 +628,8 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         return not self.wit.is_null()
 
     def _repr_or_str(self, strfn):
-        return "C%sTransaction(%s, %s, %i, %i, %s)" % (
-            'Mutable' if self._immutable_restriction_lifted else '',
+        return "%s(%s, %s, %i, %i, %s)" % (
+            self.__class__.__name__,
             ', '.join(strfn(v) for v in self.vin), ', '.join(strfn(v) for v in self.vout),
             self.nLockTime, self.nVersion, strfn(self.wit))
 

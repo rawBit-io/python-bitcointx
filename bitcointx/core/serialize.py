@@ -136,8 +136,6 @@ class ImmutableSerializable(Serializable):
 
     __slots__ = ['_cached_GetHash', '_cached__hash__']
 
-    _immutable_restriction_lifted = False
-
     def __setattr__(self, name, value):
         raise AttributeError('Object is immutable')
 
@@ -366,7 +364,6 @@ def make_mutable(cls):
     cls.__delattr__ = object.__delattr__
     cls.GetHash = Serializable.GetHash
     cls.__hash__ = Serializable.__hash__
-    cls._immutable_restriction_lifted = True
     return cls
 
 
