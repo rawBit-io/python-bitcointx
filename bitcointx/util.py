@@ -143,35 +143,35 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
 
         cls.__clsid = cls
 
-        required, extra = cls._get_required_classes()
+        main_classes, extra_classes = cls._get_required_classes()
 
         extra_classmap = cls._get_extra_classmap()
-        assert extra == set(extra_classmap.keys()), \
+        assert extra_classes == set(extra_classmap.keys()), \
             ('extra classes returned by {}._get_extra_classmap() ({})'
              'must match the set of extra classes returned by '
              '{}._get_required_classes() ({})'
-             .format(cls.__name__, extra,
+             .format(cls.__name__, extra_classes,
                      cls.__name__, extra_classmap.keys()))
-        assert not (extra & required),\
+        assert not (extra_classes & main_classes),\
             "extra classmap cannot intersect with required classmap"
 
         supplied = set()
         namemap = extra_classmap.copy()
         for front, concrete in clsmap.items():
-            if front not in required:
+            if front not in main_classes:
                 for base in front.__mro__:
-                    if base in required:
+                    if base in main_classes:
                         front = base
                         break
 
             supplied.add(front)
             namemap[front.__name__] = concrete
 
-        missing = required-supplied
+        missing = main_classes-supplied
         if missing:
             raise ValueError('Required class(es) was not found in clsmap: {}'
                              .format([c.__name__ for c in missing]))
-        extra = supplied-required
+        extra = supplied-main_classes
         if extra:
             raise ValueError('Unexpected class(es) in clsmap: {}'
                              .format([c.__name__ for c in extra]))
