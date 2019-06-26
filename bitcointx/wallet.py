@@ -44,8 +44,6 @@ _frontend_metaclass = make_frontend_metaclass('_Wallet', _thread_local)
 
 class CoinWalletIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
 
-    _frontend_metaclass = _frontend_metaclass
-
     @classmethod
     def _get_required_classes(cls):
         return (set((CCoinAddress, CBase58CoinAddress, CBech32CoinAddress,

@@ -196,8 +196,6 @@ class Uint256(_UintBitVector):
 
 class CoinTransactionIdentityMeta(CoinIdentityMeta, metaclass=ABCMeta):
 
-    _frontend_metaclass = _frontend_metaclass
-
     @classmethod
     def _get_required_classes(cls):
         """Return two sets of frontend classes: one that is expected

@@ -177,10 +177,9 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
                              .format([c.__name__ for c in extra]))
 
         for front, concrete in clsmap.items():
-            assert issubclass(type(front), cls._frontend_metaclass), \
-                ("metaclass {} of {} must be a subclass of {}"
-                 .format(type(front), front.__name__,
-                         cls._frontend_metaclass.__name__))
+            assert type(front).__name__.endswith('FrontendClassMeta'),\
+                ("metaclass {} must be a frontend metaclass, but is {}"
+                 .format(front.__name__, type(front)))
             assert issubclass(type(concrete), CoinIdentityMeta), \
                 ("metaclass {} of {} must be a subclass of CoinIdentityMeta."
                  "Did you forget to set the identity metaclass for {} ?"
