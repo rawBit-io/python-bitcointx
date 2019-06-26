@@ -143,6 +143,11 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
         return AttrAccessHelper()
 
     @classmethod
+    def activate(cls, frontend_class_store):
+        for frontend, concrete in cls._clsmap.items():
+            set_frontend_class(frontend, concrete, frontend_class_store)
+
+    @classmethod
     def set_classmap(cls, clsmap):
         assert cls._clsmap is None or cls.__clsid != cls, \
             "set_classmap can be called only once for each class"

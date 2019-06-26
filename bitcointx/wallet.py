@@ -27,7 +27,7 @@ import bitcointx.bech32
 import bitcointx.core
 
 from bitcointx.util import (
-    make_frontend_metaclass, set_frontend_class, CoinIdentityMeta
+    make_frontend_metaclass, CoinIdentityMeta
 )
 from bitcointx.core.key import (
     CPubKey, CKeyMixin, CExtKeyMixin, CExtPubKeyMixin
@@ -749,23 +749,18 @@ BitcoinRegtestWalletIdentityMeta.set_classmap({
 })
 
 
-def _SetWalletCoinIdentity(wallet_identity):
-    for frontend, concrete in wallet_identity._clsmap.items():
-        set_frontend_class(frontend, concrete, _thread_local)
-
-
 def _SetChainParams(params):
     script_class_tx = \
         params.TRANSACTION_IDENTITY._clsmap[CScript]
     script_class_wlt = \
-        params.TRANSACTION_IDENTITY._clsmap[CScript]
+        params.WALLET_IDENTITY._clsmap[CScript]
     assert script_class_tx == script_class_wlt,\
         ("script class for transaction identity and wallet identity "
          "must be the same")
-    _SetWalletCoinIdentity(params.WALLET_IDENTITY)
+    params.WALLET_IDENTITY.activate(_thread_local)
 
 
-_SetWalletCoinIdentity(BitcoinWalletIdentityMeta)
+BitcoinWalletIdentityMeta.activate(_thread_local)
 
 
 __all__ = (

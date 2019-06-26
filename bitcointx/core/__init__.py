@@ -27,7 +27,7 @@ from .serialize import (
 )
 
 from ..util import (
-    no_bool_use_as_property, make_frontend_metaclass, set_frontend_class,
+    no_bool_use_as_property, make_frontend_metaclass,
     CoinIdentityMeta
 )
 
@@ -874,13 +874,8 @@ BitcoinMutableTransactionIdentityMeta.set_mutable_immutable_links(
 def _SetTransactionCoinIdentity(transaction_identity):
     assert not issubclass(transaction_identity, MutableSerializableMeta),\
         "immutable idenity expected"
-
-    for frontend, concrete in transaction_identity._clsmap.items():
-        set_frontend_class(frontend, concrete, _thread_local)
-
-    for frontend, concrete in \
-            transaction_identity._mutable_identity._clsmap.items():
-        set_frontend_class(frontend, concrete, _thread_local)
+    transaction_identity.activate(_thread_local)
+    transaction_identity._mutable_identity.activate(_thread_local)
 
 
 def _SetChainParams(params):
