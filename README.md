@@ -183,7 +183,8 @@ skipped):
 
     * CPython 3.4
     * CPython 3.5
-    * PyPy
+    * CPython 3.6
+    * CPython 3.7
     * PyPy3
 
 HTML coverage reports can then be found in the htmlcov/ subdirectory.
