@@ -102,10 +102,6 @@ python-bitcointx is now much easier. See for example
     `bitcointx.core.Uint256` - a convenience class to represent 256-bit
     integers. have `from_int()` and `to_int()` methods.
 
-* The api for selecting the chain parameters was changed, as is the name for
-  the chain parameters ('mainnet' -> 'bitcoin', etc.)
-  see "Selecting the chain to use" section in README.md
-
 * Classes representations for `repr()` and `str()` can significantly
   differ, with `repr()` giving more detailed view, and for example for
   confidential data in Elements blockchain, `str()` may show
@@ -135,7 +131,9 @@ python-bitcointx is now much easier. See for example
     - `CBitcoinAddressError` is removed, `CCoinAddressError`
       should be used instead
     - Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet',
-      'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
+      'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'.
+      chain params selection functions also renamed.
+      for details, see "Selecting the chain to use" section in README.md
     - `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
     - `CTxWitness` is now immutable, `CMutableTxWitness` is added.
     - If mutable components supplied to `CTransaction`, they will be internally

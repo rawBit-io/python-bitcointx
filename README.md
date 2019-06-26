@@ -148,23 +148,24 @@ spending a pay-to-script-hash transaction output:
 Do the following:
 
     import bitcointx
-    bitcointx.SelectChainParams(NAME)
+    bitcointx.select_chain_params(NAME)
 
 Where NAME is one of 'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'.
 The chain parameters currently selected is a thread-local variable that changes
 behavior everywhere. If you need to change the parameters temporary, you can use
 `ChainParams` context manager. To get current chain params, you can use
-`GetCurrentChainParams()`:
+`get_current_chain_params()`:
 
 ```python
-from bitcointx import ChainParams, GetCurrentChainParams
+from bitcointx import ChainParams, get_current_chain_params
 with ChainParams('bitcoin/testnet'):
-    print("current params is", GetCurrentChainParams().NAME)
+    params = get_current_chain_params()
+    print("{} params ({}) is in effect".format(params.readable_name, params.name))
 ```
 will print
 
 ```
-current params is bitcoin/testnet
+Bitcoin testnet params (bitcoin/testnet) is in effect
 ```
 
 ## Unit tests

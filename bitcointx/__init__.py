@@ -110,7 +110,12 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
             return ''
         return name_parts[1]
 
-    def get_readable_name(self):
+    @property
+    def name(self):
+        return self.NAME
+
+    @property
+    def readable_name(self):
         name_parts = self.NAME.split('/')
         name_parts[0] = name_parts[0].capitalize()
         return ' '.join(name_parts)
@@ -136,23 +141,23 @@ class BitcoinRegtestParams(BitcoinMainnetParams):
     WALLET_IDENTITY = bitcointx.wallet.BitcoinRegtestWalletIdentityMeta
 
 
-def GetCurrentChainParams():
-    return bitcointx.core._GetCurrentChainParams()
+def get_current_chain_params():
+    return bitcointx.core._get_current_chain_params()
 
 
 @contextmanager
 def ChainParams(params, **kwargs):
     """Context manager to temporarily switch chain parameters.
     """
-    prev_params = GetCurrentChainParams()
-    SelectChainParams(params, **kwargs)
+    prev_params = get_current_chain_params()
+    select_chain_params(params, **kwargs)
     try:
         yield
     finally:
-        SelectChainParams(prev_params)
+        select_chain_params(prev_params)
 
 
-def SelectChainParams(params, **kwargs):
+def select_chain_params(params, **kwargs):
     """Select the chain parameters to use
 
     name is one of 'mainnet', 'testnet', or 'regtest'
@@ -180,4 +185,4 @@ def SelectChainParams(params, **kwargs):
     bitcointx.wallet._SetChainParams(params)
 
 
-SelectChainParams(BitcoinMainnetParams)
+select_chain_params(BitcoinMainnetParams)

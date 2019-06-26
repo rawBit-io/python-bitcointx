@@ -24,7 +24,7 @@ import payments_pb2
 o = payments_pb2
 
 import bitcointx
-#bitcointx.SelectChainParams('bitcoin/testnet')
+#bitcointx.select_chain_params('bitcoin/testnet')
 from bitcointx.wallet import CBitcoinAddress
 from bitcointx.core.script import CScript
 from bitcointx.rpc import Proxy
