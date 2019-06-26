@@ -127,7 +127,8 @@ python-bitcointx is now much easier. See for example
     (will return invalid pubkey instance)
  
 * Breaking public API changes:
-    - `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`)
+    - `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`,
+      but btc_conf_file kwarg renamed to just conf_file)
     - `CTransaction` default version changed to 2
     - `CKey.is_valid`, `CKey.is_fullyvalid` and `CKey.is_compressed`
       should now be called as methods: `key.is_valid()`, not `key.is_valid`.

@@ -101,14 +101,14 @@ class InWarmupError(JSONRPCError):
     RPC_ERROR_CODE = -28
 
 
-def _try_read_conf_file(btc_conf_file):
+def _try_read_conf_file(conf_file):
     # Bitcoin Core accepts empty rpcuser,
-    # not specified in btc_conf_file
+    # not specified in conf_file
     conf = {'rpcuser': ""}
 
     # Extract contents of bitcoin.conf to build service_url
     try:
-        with open(btc_conf_file, 'r') as fd:
+        with open(conf_file, 'r') as fd:
             for line in fd.readlines():
                 if '#' in line:
                     line = line[:line.index('#')]
@@ -128,7 +128,7 @@ class RPCCaller:
     def __init__(self,
                  service_url=None,
                  service_port=None,
-                 btc_conf_file=None,
+                 conf_file=None,
                  timeout=DEFAULT_HTTP_TIMEOUT,
                  connection=None):
 
@@ -142,10 +142,10 @@ class RPCCaller:
             params = bitcointx.GetCurrentChainParams()
 
             # Figure out the path to the config file
-            if btc_conf_file is None:
-                btc_conf_file = params.get_config_path()
+            if conf_file is None:
+                conf_file = params.get_config_path()
 
-            conf = _try_read_conf_file(btc_conf_file)
+            conf = _try_read_conf_file(conf_file)
 
             if service_port is None:
                 service_port = params.RPC_PORT
@@ -160,7 +160,7 @@ class RPCCaller:
             service_url = ('%s://%s:%d' %
                            ('http', conf['rpchost'], conf['rpcport']))
 
-            cookie_dir = conf.get('datadir', os.path.dirname(btc_conf_file))
+            cookie_dir = conf.get('datadir', os.path.dirname(conf_file))
             cookie_dir = os.path.join(cookie_dir,
                                       params.get_datadir_extra_name())
             cookie_file = os.path.join(cookie_dir, ".cookie")
@@ -175,7 +175,7 @@ class RPCCaller:
                     raise ValueError(
                         'Cookie file unusable (%s) and rpcpassword '
                         'not specified in the configuration file: %r'
-                        % (err, btc_conf_file))
+                        % (err, conf_file))
 
         else:
             url = urllib.parse.urlparse(service_url)
