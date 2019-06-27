@@ -305,7 +305,7 @@ class CPubKey(bytes):
         result = _secp256k1.secp256k1_ec_pubkey_parse(
             secp256k1_context_verify, raw_pub, self, len(self))
         assert 1 == result
-        return raw_pub.raw
+        return raw_pub
 
     @classmethod
     def recover_compact(cls, hash, sig): # pylint: disable=redefined-builtin
@@ -442,7 +442,7 @@ class CPubKey(bytes):
 
         pubkey_arr = (ctypes.c_char_p*len(pubkeys))()
         for i, p in enumerate(pubkeys):
-            pubkey_arr[i] = p._to_raw()
+            pubkey_arr[i] = bytes(p._to_raw())
 
         result_data = ctypes.create_string_buffer(64)
         ret = _secp256k1.secp256k1_ec_pubkey_combine(
