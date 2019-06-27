@@ -125,7 +125,7 @@ python-bitcointx is now much easier. See for example
     (will return invalid pubkey instance)
  
 * Breaking public API changes:
-    - `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly.
+    - `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.
     - `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`,
       but btc_conf_file kwarg renamed to just conf_file)
     - `CTransaction` default version changed to 2
