@@ -97,8 +97,8 @@ big/little-endian hex.
 
 Note: only public API changes is listed here
 
-* `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`,
-    but btc_conf_file kwarg renamed to just conf_file)
+* `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly.
+* `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`, but `btc_conf_file` kwarg renamed to just `conf_file`)
 * `CTransaction` default version changed to 2
 * `CKey.is_valid`, `CKey.is_fullyvalid` and `CKey.is_compressed` should now be called as methods: `key.is_valid()`, not `key.is_valid`.
 * `CBitcoinAddressError` is removed, `CCoinAddressError` should be used instead

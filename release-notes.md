@@ -35,7 +35,9 @@ python-bitcointx is now much easier. See for example
   and when you use `CCoinAddress` with default chain parameters, you will
   also get `CBitcoinAddress` instances. But if you switch to testnet
   chain params, `CCoinAddress(some_addr)` will give you `CBitcoinTestnetAddress`
-  instance.
+  instance. Note that this breaks code that expect `CBitcoinAddress` to work with
+  regtest and testnet addresses. For that code to work, you will need to switch
+  from `CBitcoinAddress` to `CCoinAddress`
   
   The good thing about this is that even after you switch the current chain
   parameters, the instances retain their representation in accordance to
@@ -123,6 +125,7 @@ python-bitcointx is now much easier. See for example
     (will return invalid pubkey instance)
  
 * Breaking public API changes:
+    - `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly.
     - `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`,
       but btc_conf_file kwarg renamed to just conf_file)
     - `CTransaction` default version changed to 2
