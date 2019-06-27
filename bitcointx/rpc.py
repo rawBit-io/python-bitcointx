@@ -138,6 +138,8 @@ class RPCCaller:
         self.__conn = None
         authpair = None
 
+        self.__timeout = timeout
+
         if service_url is None:
             params = bitcointx.get_current_chain_params()
 
@@ -188,9 +190,9 @@ class RPCCaller:
             raise ValueError('Unsupported URL scheme %r' % self.__url.scheme)
 
         if self.__url.port is None:
-            port = service_port or http.client.HTTP_PORT
+            self.__port = service_port or http.client.HTTP_PORT
         else:
-            port = self.__url.port
+            self.__port = self.__url.port
 
         self.__id_count = 0
 
@@ -200,11 +202,14 @@ class RPCCaller:
             authpair = authpair.encode('utf8')
             self.__auth_header = b"Basic " + base64.b64encode(authpair)
 
+        self.connect(connection=connection)
+
+    def connect(self, connection=None):
         if connection:
             self.__conn = connection
         else:
             self.__conn = http.client.HTTPConnection(
-                self.__url.hostname, port=port, timeout=timeout)
+                self.__url.hostname, port=self.__port, timeout=self.__timeout)
 
     def _call(self, service_name, *args):
         self.__id_count += 1
