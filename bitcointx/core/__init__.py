@@ -252,11 +252,11 @@ class COutPointBase(ImmutableSerializable):
     def __init__(self, hash=b'\x00'*32, n=0xffffffff):
         if not len(hash) == 32:
             raise ValueError('%s: hash must be exactly 32 bytes; got %d bytes'
-                             % self.__class__.__name__, len(hash))
+                             % (self.__class__.__name__, len(hash)))
         object.__setattr__(self, 'hash', hash)
         if not (0 <= n <= 0xffffffff):
             raise ValueError('%s: n must be in range 0x0 to 0xffffffff; got %x'
-                             % self.__class__.__name__, n)
+                             % (self.__class__.__name__, n))
         object.__setattr__(self, 'n', n)
 
     @classmethod
