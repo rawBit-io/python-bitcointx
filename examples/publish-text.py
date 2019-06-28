@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 #
 # Copyright (C) 2015 Peter Todd
+# Copyright (C) 2019 Dmitry Petukhov (adaptation for python-bitcointx)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -29,46 +30,51 @@
 # https://github.com/petertodd/python-bitcoinlib/commit/6a0a2b9429edea318bea7b65a68a950cae536790
 
 import sys
-if sys.version_info.major < 3:
-    sys.stderr.write('Sorry, Python 3.x required by this example.\n')
-    sys.exit(1)
 
 import argparse
-import hashlib
 import logging
-import sys
 import os
 
 import bitcointx.rpc
-from bitcointx.core import *
-from bitcointx.core.script import *
-from bitcointx.wallet import *
+from bitcointx.core import (
+    x, lx, b2x, Hash160, COutPoint, CTxOut, CTxIn, CTransaction,
+    str_money_value, COIN
+)
+from bitcointx.core.script import (
+    CScript, MAX_SCRIPT_ELEMENT_SIZE,
+    OP_HASH160, OP_CHECKSIGVERIFY, OP_DROP, OP_DEPTH,
+    OP_EQUAL, OP_EQUALVERIFY, OP_RETURN, SIGHASH_NONE
+)
+from bitcointx.wallet import CCoinKey, P2SHCoinAddress
 
 parser = argparse.ArgumentParser(
-        description="Publish text in the blockchain, suitably padded for easy recovery with strings",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    description=("Publish text in the blockchain, suitably padded "
+                 "for easy recovery with strings"),
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('-n', action='store_true',
-                    dest='dryrun',
-                    help="Dry-run; don't actually send the transactions")
-parser.add_argument("-q","--quiet",action="count",default=0,
-                    help="Be more quiet.")
-parser.add_argument("-v","--verbose",action="count",default=0,
-                    help="Be more verbose. Both -v and -q may be used multiple times.")
-parser.add_argument("--min-len",action="store",type=int,default=20,
-                    help="Minimum text length; shorter text is padded to this length")
-parser.add_argument("-f","--fee-per-kb",action="store",type=float,default=0.0002,
-                    help="Fee-per-KB")
-parser.add_argument("-k","--privkey",action="store",type=str,default=None,
-                    help="Specify private key")
+parser.add_argument(
+    '-n', action='store_true', dest='dryrun',
+    help="Dry-run; don't actually send the transactions")
+parser.add_argument(
+    "-q", "--quiet", action="count", default=0, help="Be more quiet.")
+parser.add_argument(
+    "-v", "--verbose", action="count", default=0,
+    help="Be more verbose. Both -v and -q may be used multiple times.")
+parser.add_argument(
+    "--min-len", action="store", type=int, default=20,
+    help="Minimum text length; shorter text is padded to this length")
+parser.add_argument(
+    "-f", "--fee-per-kb", action="store", type=float, default=0.0002,
+    help="Fee-per-KB")
+parser.add_argument(
+    "-k", "--privkey", action="store", type=str, default=None,
+    help="Specify private key")
 
 net_parser = parser.add_mutually_exclusive_group()
-net_parser.add_argument('-t','--testnet', action='store_true',
-                        dest='testnet',
-                        help='Use testnet')
-net_parser.add_argument('-r','--regtest', action='store_true',
-                        dest='regtest',
-                        help='Use regtest')
+net_parser.add_argument('-t', '--testnet', action='store_true',
+                        dest='testnet', help='Use testnet')
+net_parser.add_argument('-r', '--regtest', action='store_true',
+                        dest='regtest', help='Use regtest')
 
 parser.add_argument('fd', type=argparse.FileType('rb'), metavar='FILE',
                     help='Text file')
@@ -87,17 +93,17 @@ elif args.verbosity <= -2:
     logging.root.setLevel(logging.ERROR)
 
 if args.testnet:
-    bitcointx.SelectParams('testnet')
+    bitcointx.select_chain_params('bitcoin/testnet')
 elif args.regtest:
-    bitcointx.SelectParams('regtest')
+    bitcointx.select_chain_params('bitcoin/regtest')
 
-proxy = bitcointx.rpc.Proxy()
+rpc = bitcointx.rpc.RPCCaller()
 
 if args.privkey is None:
-    args.privkey = CBitcoinSecret.from_secret_bytes(os.urandom(32))
+    args.privkey = CCoinKey.from_secret_bytes(os.urandom(32))
 
 else:
-    args.privkey = CBitcoinSecret(args.privkey)
+    args.privkey = CCoinKey(args.privkey)
 
 logging.info('Using keypair %s %s' % (b2x(args.privkey.pub), args.privkey))
 
@@ -106,7 +112,8 @@ if args.fd is sys.stdin:
     # work around a bug where even though we specified binary encoding we get
     # the sys.stdin instead.
     args.fd = sys.stdin.buffer
-raw_padded_lines = [b'\x00' + line.rstrip().ljust(args.min_len) + b'\x00' for line in args.fd.readlines()]
+raw_padded_lines = [b'\x00' + line.rstrip().ljust(args.min_len)
+                    + b'\x00' for line in args.fd.readlines()]
 
 # combine lines if < MAX_SCRIPT_ELEMENT_SIZE
 padded_lines = []
@@ -130,19 +137,24 @@ while padded_lines:
         redeemScript = []
         for chunk in reversed(lines):
             if len(chunk) > MAX_SCRIPT_ELEMENT_SIZE:
-                parser.exit('Lines must be less than %d characters; got %d characters' %\
-                                    (MAX_SCRIPT_ELEMENT_SIZE, len(chunk)))
+                parser.exit(
+                    'Lines must be less than %d characters; '
+                    'got %d characters' %
+                    (MAX_SCRIPT_ELEMENT_SIZE, len(chunk)))
             redeemScript.extend([OP_HASH160, Hash160(chunk), OP_EQUALVERIFY])
-        redeemScript = CScript(redeemScript +
-                               [args.privkey.pub, OP_CHECKSIGVERIFY,
-                                n, OP_DROP, # deduplicate push dropped to meet BIP62 rules
-                                OP_DEPTH, 0, OP_EQUAL]) # prevent scriptSig malleability
+        redeemScript = CScript(
+            redeemScript + [args.privkey.pub, OP_CHECKSIGVERIFY,
+                            # deduplicate push dropped to meet BIP62 rules
+                            n, OP_DROP,
+                            # prevent scriptSig malleability
+                            OP_DEPTH, 0, OP_EQUAL])
 
         return CScript(lines) + redeemScript, redeemScript
 
     scriptSig = redeemScript = None
     for i in range(len(padded_lines)):
-        next_scriptSig, next_redeemScript = make_scripts(padded_lines[0:i+1], len(scripts))
+        next_scriptSig, next_redeemScript = \
+            make_scripts(padded_lines[0:i+1], len(scripts))
 
         # FIXME: magic numbers!
         if len(next_redeemScript) > 520 or len(next_scriptSig) > 1600-100:
@@ -161,24 +173,35 @@ while padded_lines:
 # pay to the redeemScripts to make them spendable
 
 # the 41 accounts for the size of the CTxIn itself
-payments = {P2SHBitcoinAddress.from_redeemScript(redeemScript):int(((len(scriptSig)+41)/1000 * args.fee_per_kb)*COIN)
-                for scriptSig, redeemScript in scripts}
+payments = {
+    str(P2SHCoinAddress.from_redeemScript(redeemScript)): int(round(
+        ((len(scriptSig)+41)/1000 * args.fee_per_kb)*COIN))
+    for scriptSig, redeemScript in scripts
+}
 
 prevouts_by_scriptPubKey = None
 if not args.dryrun:
-    txid = proxy.sendmany('', payments, 0)
+    txid = rpc.sendmany(
+        '', {adr: float(float(amount)/COIN)
+             for adr, amount in payments.items()}, 0)
 
-    logging.info('Sent pre-pub tx: %s' % b2lx(txid))
+    logging.info('Sent pre-pub tx: %s' % txid)
 
-    tx = proxy.getrawtransaction(txid)
+    tx = CTransaction.deserialize(x(rpc.getrawtransaction(txid)))
 
-    prevouts_by_scriptPubKey = {txout.scriptPubKey:COutPoint(txid, i) for i, txout in enumerate(tx.vout)}
+    prevouts_by_scriptPubKey = {
+        txout.scriptPubKey: COutPoint(lx(txid), i)
+        for i, txout in enumerate(tx.vout)
+    }
 
 else:
-    prevouts_by_scriptPubKey = {redeemScript.to_p2sh_scriptPubKey():COutPoint(b'\x00'*32, i)
-                                    for i, (scriptSig, redeemScript) in enumerate(scripts)}
+    prevouts_by_scriptPubKey = {
+        redeemScript.to_p2sh_scriptPubKey(): COutPoint(b'\x00'*32, i)
+        for i, (scriptSig, redeemScript) in enumerate(scripts)}
     logging.debug('Payments: %r' % payments)
-    logging.info('Total cost: %s BTC' % str_money_value(sum(amount for addr, amount in payments.items())))
+    logging.info('Total cost: %s BTC' %
+                 str_money_value(
+                     sum(amount for addr, amount in payments.items())))
 
 # Create unsigned tx for SignatureHash
 vout = [CTxOut(0, CScript([OP_RETURN]))]
@@ -194,7 +217,7 @@ unsigned_tx = CTransaction(unsigned_vin, vout)
 # Sign!
 signed_vin = []
 for i, (scriptSig, redeemScript) in enumerate(scripts):
-    sighash = SignatureHash(redeemScript, unsigned_tx, i, SIGHASH_NONE)
+    sighash = redeemScript.sighash(unsigned_tx, i, SIGHASH_NONE)
     sig = args.privkey.sign(sighash) + bytes([SIGHASH_NONE])
 
     signed_scriptSig = CScript([sig] + list(scriptSig))
@@ -215,7 +238,7 @@ else:
     # to *not* broadcast the transaction first. This is a proof-of-concept, so
     # punting.
 
-    logging.debug('Sending publish tx, hex: %s' % b2x(signed_tx.serialize()))
-    txid = proxy.sendrawtransaction(signed_tx)
-    logging.info('Sent publish tx: %s' % b2lx(txid))
-
+    tx_hex = b2x(signed_tx.serialize())
+    logging.debug('Sending publish tx, hex: %s' % tx_hex)
+    txid = rpc.sendrawtransaction(tx_hex)
+    logging.info('Sent publish tx: %s' % txid)
