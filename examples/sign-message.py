@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 #
 # Copyright (C) 2013-2015 The python-bitcoinlib developers
+# Copyright (C) 2019 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
@@ -11,35 +12,40 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from bitcointx.wallet import CBitcoinSecret, P2PKHBitcoinAddress
+from bitcointx import select_chain_params
+from bitcointx.wallet import CCoinKey, P2PKHCoinAddress
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
 
+
 def sign_message(key, msg):
-    secret = CBitcoinSecret(key)
+    secret = CCoinKey(key)
     message = BitcoinMessage(msg)
     return SignMessage(secret, message)
+
 
 def print_default(signature, key=None, msg=None):
     print(signature.decode('ascii'))
 
+
 def print_verbose(signature, key, msg):
-    secret = CBitcoinSecret(key)
-    address = P2PKHBitcoinAddress.from_pubkey(secret.pub)
+    secret = CCoinKey(key)
+    address = P2PKHCoinAddress.from_pubkey(secret.pub)
     message = BitcoinMessage(msg)
     print('Address: %s' % address)
     print('Message: %s' % msg)
     print('Signature: %s' % signature)
     print('Verified: %s' % VerifyMessage(address, message, signature))
     print('\nTo verify using bitcoin core:')
-    print('\n`bitcoin-cli verifymessage %s \'%s\' \'%s\'`\n' % (address, signature.decode('ascii'), msg))
+    print('\n`bitcoin-cli verifymessage %s \'%s\' \'%s\'`\n'
+          % (address, signature.decode('ascii'), msg))
+
 
 def parser():
     import argparse
     parser = argparse.ArgumentParser(
         description='Sign a message with a private key.',
-        epilog='Security warning: arguments may be visible to other users on the same host.')
+        epilog=('Security warning: arguments may be visible to other users '
+                'on the same host.'))
     parser.add_argument(
         '-v', '--verbose', dest='print_result',
         action='store_const', const=print_verbose, default=print_default,
@@ -52,10 +58,19 @@ def parser():
         '-m', '--msg',
         required=True,
         help='message to sign')
+    parser.add_argument('-t', '--testnet', action='store_true',
+                        dest='testnet', help='Use testnet')
+    parser.add_argument('-r', '--regtest', action='store_true',
+                        dest='regtest', help='Use regtest')
     return parser
+
 
 if __name__ == '__main__':
     args = parser().parse_args()
+    if args.testnet:
+        select_chain_params('bitcoin/testnet')
+    elif args.regtest:
+        select_chain_params('bitcoin/regtest')
     try:
         signature = sign_message(args.key, args.msg)
     except Exception as error:
