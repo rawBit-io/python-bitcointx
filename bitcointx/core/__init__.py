@@ -722,14 +722,14 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
         f.write(struct.pack(b"<I", self.nLockTime))
 
 
-class CBitcoinMutableTransaction(CTransactionBase,
-                                 metaclass=BitcoinMutableTransactionIdentityMeta):
+class CBitcoinTransaction(CTransactionBase,
+                          metaclass=BitcoinTransactionIdentityMeta):
     """Bitcoin transaction"""
     __slots__ = []
 
 
-class CBitcoinTransaction(CTransactionBase,
-                          metaclass=BitcoinTransactionIdentityMeta):
+class CBitcoinMutableTransaction(CBitcoinTransaction,
+                                 metaclass=BitcoinMutableTransactionIdentityMeta):
     """Bitcoin transaction, mutable version"""
     __slots__ = []
 
