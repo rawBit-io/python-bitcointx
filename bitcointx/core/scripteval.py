@@ -322,7 +322,7 @@ def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(),
             if len(stack) == 0:
                 raise VerifyScriptError("witness is empty")
 
-            scriptPubKey = stack.pop()
+            scriptPubKey = script_class(stack.pop())
             hashScriptPubKey = hashlib.sha256(scriptPubKey).digest()
             if hashScriptPubKey != program:
                 raise VerifyScriptError("witness program mismatch")
@@ -343,9 +343,17 @@ def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(),
 
     assert sigversion is not None
 
-    # Disallow stack item size > MAX_SCRIPT_ELEMENT_SIZE in witness stack
-    if any(len(elt) > MAX_SCRIPT_ELEMENT_SIZE for elt in stack):
-        raise VerifyScriptError("maximum push size exceeded by an item on witness stack")
+    for i, elt in enumerate(stack):
+        if isinstance(elt, int):
+            elt_len = len(script_class([elt]))
+        else:
+            elt_len = len(elt)
+
+        # Disallow stack item size > MAX_SCRIPT_ELEMENT_SIZE in witness stack
+        if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
+            raise VerifyScriptError(
+                "maximum push size exceeded by an item at position {} "
+                "on witness stack".format(i))
 
     EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, amount=amount, sigversion=sigversion)
 
