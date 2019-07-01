@@ -1195,9 +1195,9 @@ class CBitcoinScript(CScriptBase):
     ...
 
 
-def p2sh_multisig_parse_script(script):
-    """parse p2sh script, raise ValueError if it does not match the
-    format of the script produced by p2sh_multisig_redeem_script"""
+def parse_standard_multisig_redeem_script(script):
+    """parse multisig script, raise ValueError if it does not match the
+    format of the script produced by construct_multisig_redeem_script"""
     si = iter(script)
     try:
         required = next(si)
@@ -1252,9 +1252,9 @@ def p2sh_multisig_parse_script(script):
     return {'total': total, 'required': required, 'pubkeys': pubkeys}
 
 
-def p2sh_multisig_script_sig(sigs, redeem_script):
+def standard_multisig_witness(sigs, redeem_script):
 
-    p2sh_multisig_parse_script(redeem_script) # check valid p2sh script
+    parse_standard_multisig_redeem_script(redeem_script) # check valid p2sh script
 
     if not all(isinstance(s, (bytes, bytearray)) for s in sigs):
         raise ValueError('sigs must be an array of bytes (or bytearrays)')
@@ -1265,8 +1265,8 @@ def p2sh_multisig_script_sig(sigs, redeem_script):
     return CScript(script)
 
 
-def p2sh_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
-    """Construct P2SH multisignature redeem script.
+def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
+    """Construct multisignature redeem script.
     We require to supply total number of pubkeys as separate argument
     to be able to catch bugs when pubkeys array is wrong for some reason.
     If the callers do not care about the possibility of such bug, they

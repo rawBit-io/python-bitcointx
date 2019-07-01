@@ -29,7 +29,7 @@ from bitcointx.core.key import CKey
 from bitcointx.core.script import (
     OPCODES_BY_NAME, CScript, CScriptWitness,
     OP_0, SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
-    p2sh_multisig_redeem_script, p2sh_multisig_script_sig,
+    standard_multisig_redeem_script, standard_multisig_witness,
 )
 from bitcointx.core.scripteval import (
     VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH,
@@ -169,7 +169,7 @@ class Test_EvalScript(unittest.TestCase):
             if alt_total is not None:
                 total = alt_total  # for assertRaises checks
 
-            redeem_script = p2sh_multisig_redeem_script(
+            redeem_script = standard_multisig_redeem_script(
                 total=total, required=required, pubkeys=pubkeys)
 
             # Test with P2SH
@@ -188,7 +188,7 @@ class Test_EvalScript(unittest.TestCase):
             sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
                     for k in keys[:required]]
 
-            tx.vin[0].scriptSig = p2sh_multisig_script_sig(sigs, redeem_script)
+            tx.vin[0].scriptSig = standard_multisig_witness(sigs, redeem_script)
 
             VerifyScript(tx.vin[0].scriptSig, scriptPubKey, tx, 0,
                          (SCRIPT_VERIFY_P2SH,))
@@ -209,7 +209,7 @@ class Test_EvalScript(unittest.TestCase):
             sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
                     for k in keys[:required]]
 
-            witness = p2sh_multisig_script_sig(sigs, redeem_script)
+            witness = standard_multisig_witness(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([])
             tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness))
 
@@ -234,7 +234,7 @@ class Test_EvalScript(unittest.TestCase):
             sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
                     for k in keys[:required]]
 
-            witness = p2sh_multisig_script_sig(sigs, redeem_script)
+            witness = standard_multisig_witness(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([scriptPubKey])
             tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness))
 

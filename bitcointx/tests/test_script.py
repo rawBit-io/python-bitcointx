@@ -23,7 +23,7 @@ from bitcointx.core.script import (
     OP_CHECKSIG, OP_1NEGATE, OP_BOOLOR, OP_BOOLAND,
     OP_INVALIDOPCODE, OP_CHECKMULTISIG, OP_DROP,
     DATA, NUMBER, OPCODE,
-    IsLowDERSignature, p2sh_multisig_parse_script
+    IsLowDERSignature, parse_standard_multisig_redeem_script
 )
 
 
@@ -92,9 +92,10 @@ class Test_CScriptOp(unittest.TestCase):
 
 
 class Test_CScript(unittest.TestCase):
-    def test_p2sh_multisig_parse_script(self):
+    def test_parse_standard_multisig_redeem_script(self):
         def T(script, result):
-            self.assertEqual(p2sh_multisig_parse_script(script), result)
+            self.assertEqual(parse_standard_multisig_redeem_script(script),
+                             result)
 
         # NOTE: p2sh_multisig_parse_script does not check validity of pubkeys
         pubkeys = [CKey.from_secret_bytes(os.urandom(32)).pub

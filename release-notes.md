@@ -123,8 +123,8 @@ python-bitcointx is now much easier. See for example
     mid-state. Needed for Elements, might be useful for other things.
   - CPubKey() can be instantiated without parameters
     (will return invalid pubkey instance)
-  - utility functions to handle p2sh scripts: `p2sh_multisig_redeem_script`,
-    `p2sh_multisig_script_sig`, `p2sh_multisig_parse_script`
+  - utility functions to handle multisig scripts: `standard_multisig_redeem_script`,
+    `standard_multisig_witness`, `parse_standard_multisig_redeem_script`
   - bugfix in VerifyWitnessProgram (part of VerifyScript) - it was breaking on
     p2wsh, and on integer values on witness stack
  
