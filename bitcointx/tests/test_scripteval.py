@@ -28,11 +28,12 @@ from bitcointx.core import (
 from bitcointx.core.key import CKey
 from bitcointx.core.script import (
     OPCODES_BY_NAME, CScript, CScriptWitness,
-    OP_0, SIGHASH_ALL, SIGVERSION_BASE,
-    p2sh_multisig_redeem_script, p2sh_multisig_script_sig
+    OP_0, SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
+    p2sh_multisig_redeem_script, p2sh_multisig_script_sig,
 )
 from bitcointx.core.scripteval import (
-    VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH
+    VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH,
+    SCRIPT_VERIFY_WITNESS
 )
 
 
@@ -171,26 +172,77 @@ class Test_EvalScript(unittest.TestCase):
             redeem_script = p2sh_multisig_redeem_script(
                 total=total, required=required, pubkeys=pubkeys)
 
+            # Test with P2SH
+
             scriptPubKey = redeem_script.to_p2sh_scriptPubKey()
 
-            (_, txSpend) = self.create_test_txs(CScript(), scriptPubKey,
-                                                CScriptWitness([]), amount)
+            (_, tx) = self.create_test_txs(CScript(), scriptPubKey,
+                                           CScriptWitness([]), amount)
 
-            txSpend = txSpend.to_mutable()
+            tx = tx.to_mutable()
 
-            sighash = redeem_script.sighash(txSpend, 0, SIGHASH_ALL,
+            sighash = redeem_script.sighash(tx, 0, SIGHASH_ALL,
                                             amount=amount,
                                             sigversion=SIGVERSION_BASE)
 
             sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
                     for k in keys[:required]]
 
-            txSpend.vin[0].scriptSig = p2sh_multisig_script_sig(
-                sigs, redeem_script)
+            tx.vin[0].scriptSig = p2sh_multisig_script_sig(sigs, redeem_script)
 
-            VerifyScript(txSpend.vin[0].scriptSig,
-                         redeem_script.to_p2sh_scriptPubKey(), txSpend, 0,
+            VerifyScript(tx.vin[0].scriptSig, scriptPubKey, tx, 0,
                          (SCRIPT_VERIFY_P2SH,))
+
+            # Test with P2WSH
+
+            scriptPubKey = redeem_script.to_p2wsh_scriptPubKey()
+
+            (_, tx) = self.create_test_txs(CScript(), scriptPubKey,
+                                           CScriptWitness([]), amount)
+
+            tx = tx.to_mutable()
+
+            sighash = redeem_script.sighash(tx, 0, SIGHASH_ALL,
+                                            amount=amount,
+                                            sigversion=SIGVERSION_WITNESS_V0)
+
+            sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
+                    for k in keys[:required]]
+
+            witness = p2sh_multisig_script_sig(sigs, redeem_script)
+            tx.vin[0].scriptSig = CScript([])
+            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness))
+
+            VerifyScript(tx.vin[0].scriptSig, scriptPubKey, tx, 0,
+                         flags=(SCRIPT_VERIFY_WITNESS, SCRIPT_VERIFY_P2SH),
+                         amount=amount,
+                         witness=tx.wit.vtxinwit[0].scriptWitness)
+
+            # Test with P2SH_P2WSH
+
+            scriptPubKey = redeem_script.to_p2wsh_scriptPubKey()
+
+            (_, tx) = self.create_test_txs(CScript(), scriptPubKey,
+                                           CScriptWitness([]), amount)
+
+            tx = tx.to_mutable()
+
+            sighash = redeem_script.sighash(tx, 0, SIGHASH_ALL,
+                                            amount=amount,
+                                            sigversion=SIGVERSION_WITNESS_V0)
+
+            sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
+                    for k in keys[:required]]
+
+            witness = p2sh_multisig_script_sig(sigs, redeem_script)
+            tx.vin[0].scriptSig = CScript([scriptPubKey])
+            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness))
+
+            VerifyScript(tx.vin[0].scriptSig,
+                         scriptPubKey.to_p2sh_scriptPubKey(), tx, 0,
+                         flags=(SCRIPT_VERIFY_WITNESS, SCRIPT_VERIFY_P2SH),
+                         amount=amount,
+                         witness=tx.wit.vtxinwit[0].scriptWitness)
 
         T(1, 3)
         T(2, 12)
