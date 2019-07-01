@@ -11,9 +11,11 @@
 
 # pylama:ignore=E501
 
+import os
 import unittest
 
 from bitcointx.core import b2x, x
+from bitcointx.core.key import CKey
 from bitcointx.core.script import (
     CScript, CScriptOp, CScriptInvalidError,
     OP_0, OP_1, OP_2, OP_3, OP_4, OP_5, OP_6, OP_7, OP_8,
@@ -21,7 +23,7 @@ from bitcointx.core.script import (
     OP_CHECKSIG, OP_1NEGATE, OP_BOOLOR, OP_BOOLAND,
     OP_INVALIDOPCODE, OP_CHECKMULTISIG, OP_DROP,
     DATA, NUMBER, OPCODE,
-    IsLowDERSignature
+    IsLowDERSignature, p2sh_multisig_parse_script
 )
 
 
@@ -90,6 +92,52 @@ class Test_CScriptOp(unittest.TestCase):
 
 
 class Test_CScript(unittest.TestCase):
+    def test_p2sh_multisig_parse_script(self):
+        def T(script, result):
+            self.assertEqual(p2sh_multisig_parse_script(script), result)
+
+        # NOTE: p2sh_multisig_parse_script does not check validity of pubkeys
+        pubkeys = [CKey.from_secret_bytes(os.urandom(32)).pub
+                   for _ in range(15)]
+
+        T(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
+          {'total': 2, 'required': 1, 'pubkeys': pubkeys[:2]})
+        T(CScript([11] + pubkeys[:12] + [12, OP_CHECKMULTISIG]),
+          {'total': 12, 'required': 11, 'pubkeys': pubkeys[:12]})
+        T(CScript([15] + pubkeys + [15, OP_CHECKMULTISIG]),
+          {'total': 15, 'required': 15, 'pubkeys': pubkeys})
+
+        with self.assertRaises(ValueError):
+            T(CScript([]), {})
+        with self.assertRaises(ValueError):
+            T(CScript([b'\x01', pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
+              {})
+        with self.assertRaises(ValueError):
+            T(CScript([16, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
+              {})
+        with self.assertRaises(ValueError):
+            T(CScript([11] + pubkeys[:12] + [b'\x0c', OP_CHECKMULTISIG]),
+              {})
+        with self.assertRaises(ValueError):
+            T(CScript([11] + pubkeys + [14, OP_CHECKMULTISIG]), {})
+        with self.assertRaises(ValueError):
+            T(CScript([11] + pubkeys + pubkeys + [15, OP_CHECKMULTISIG]), {})
+        with self.assertRaises(ValueError):
+            T(CScript([1, pubkeys[0], pubkeys[1], 1, OP_CHECKMULTISIG]),
+              {})
+        with self.assertRaises(ValueError):
+            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKMULTISIG]),
+              {})
+        with self.assertRaises(ValueError):
+            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKSIG]),
+              {})
+        with self.assertRaises(ValueError):
+            T(CScript([11] + pubkeys[:12]),  # short script 1
+              {})
+        with self.assertRaises(ValueError):
+            T(CScript([11] + pubkeys[:12] + [11]),  # short script 2
+              {})
+
     def test_tokenize_roundtrip(self):
         def T(serialized_script, expected_tokens, test_roundtrip=True):
             serialized_script = x(serialized_script)

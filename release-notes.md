@@ -123,6 +123,8 @@ python-bitcointx is now much easier. See for example
     mid-state. Needed for Elements, might be useful for other things.
   - CPubKey() can be instantiated without parameters
     (will return invalid pubkey instance)
+  - utility functions to handle p2sh scripts: `p2sh_multisig_redeem_script`,
+    `p2sh_multisig_script_sig`, `p2sh_multisig_parse_script`
  
 * Breaking public API changes:
     - `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.

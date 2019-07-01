@@ -21,12 +21,19 @@ import logging
 
 from binascii import unhexlify
 
-from bitcointx.core import CTxOut, CTxIn, CTransaction, COutPoint, ValidationError, x as ParseHex
-from bitcointx.core import CTxWitness, CTxInWitness
-from bitcointx.core.script import OPCODES_BY_NAME, CScript, CScriptWitness
-from bitcointx.core.script import OP_0
-from bitcointx.core.scripteval import VerifyScript
-from bitcointx.core.scripteval import SCRIPT_VERIFY_FLAGS_BY_NAME
+from bitcointx.core import (
+    x, ValidationError,
+    CTxOut, CTxIn, CTransaction, COutPoint, CTxWitness, CTxInWitness
+)
+from bitcointx.core.key import CKey
+from bitcointx.core.script import (
+    OPCODES_BY_NAME, CScript, CScriptWitness,
+    OP_0, SIGHASH_ALL, SIGVERSION_BASE,
+    p2sh_multisig_redeem_script, p2sh_multisig_script_sig
+)
+from bitcointx.core.scripteval import (
+    VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH
+)
 
 
 def parse_script(s):
@@ -89,7 +96,7 @@ def load_test_vectors(name):
             nValue = 0
             if isinstance(to_unpack[0], list):
                 wdata = to_unpack.pop(0)
-                stack = [CScript(ParseHex(d)) for d in wdata[:-1]]
+                stack = [CScript(x(d)) for d in wdata[:-1]]
                 witness = CScriptWitness(stack)
                 nValue = int(round(wdata[-1] * 1e8))
 
@@ -150,3 +157,50 @@ class Test_EvalScript(unittest.TestCase):
 
             if expected_result != 'OK':
                 self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
+
+    def test_p2sh_redeemscript(self):
+        def T(required, total, alt_total=None):
+            amount = 10000
+            keys = [CKey.from_secret_bytes(os.urandom(32))
+                    for _ in range(total)]
+            pubkeys = [k.pub for k in keys]
+
+            if alt_total is not None:
+                total = alt_total  # for assertRaises checks
+
+            redeem_script = p2sh_multisig_redeem_script(
+                total=total, required=required, pubkeys=pubkeys)
+
+            scriptPubKey = redeem_script.to_p2sh_scriptPubKey()
+
+            (_, txSpend) = self.create_test_txs(CScript(), scriptPubKey,
+                                                CScriptWitness([]), amount)
+
+            txSpend = txSpend.to_mutable()
+
+            sighash = redeem_script.sighash(txSpend, 0, SIGHASH_ALL,
+                                            amount=amount,
+                                            sigversion=SIGVERSION_BASE)
+
+            sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
+                    for k in keys[:required]]
+
+            txSpend.vin[0].scriptSig = p2sh_multisig_script_sig(
+                sigs, redeem_script)
+
+            VerifyScript(txSpend.vin[0].scriptSig,
+                         redeem_script.to_p2sh_scriptPubKey(), txSpend, 0,
+                         (SCRIPT_VERIFY_P2SH,))
+
+        T(1, 3)
+        T(2, 12)
+        T(10, 13)
+        T(11, 15)
+        T(15, 15)
+
+        with self.assertRaises(ValueError):
+            T(1, 1)
+            T(2, 1)
+            T(1, 16)
+            T(11, 11, alt_total=12)
+            T(1, 3, alt_total=2)

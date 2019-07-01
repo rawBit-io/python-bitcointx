@@ -42,6 +42,12 @@ MAX_SCRIPT_OPCODES = 201
 SIGVERSION_BASE = 0
 SIGVERSION_WITNESS_V0 = 1
 
+# (partial) comment from Bitcoin Core IsStandardTx() function:
+# Biggest 'standard' txin is a 15-of-15 P2SH multisig with compressed
+# keys (remember the 520 byte limit on redeemScript size). That works
+# out to a (15*(33+1))+3=513 byte redeemScript
+MAX_P2SH_MULTISIG_PUBKEYS = 15
+
 OPCODE_NAMES = {}
 
 _opcode_instances = []
@@ -1187,6 +1193,117 @@ class CScript(metaclass=_frontend_metaclass):
 
 class CBitcoinScript(CScriptBase):
     ...
+
+
+def p2sh_multisig_parse_script(script):
+    """parse p2sh script, raise ValueError if it does not match the
+    format of the script produced by p2sh_multisig_redeem_script"""
+    si = iter(script)
+    try:
+        required = next(si)
+    except StopIteration:
+        raise ValueError(
+            'script is too short: stoped at required number of signatures')
+    if not isinstance(required, int):
+        raise ValueError('script is not a p2sh script, required number '
+                         'of signatures is not a number')
+    if required < 1:
+        raise ValueError('required number of signatures are less than 1')
+    if required > MAX_P2SH_MULTISIG_PUBKEYS:
+        raise ValueError('required number of signatures are more than {}'
+                         .format(MAX_P2SH_MULTISIG_PUBKEYS))
+    total = None
+    pubkeys = []
+    for i in range(MAX_P2SH_MULTISIG_PUBKEYS+1):  # +1 for `total`
+        try:
+            pub = next(si)
+            if isinstance(pub, int):
+                total = pub  # pubkeys ended
+                break
+            assert isinstance(pub, bytes)
+            pubkeys.append(pub)
+        except StopIteration:
+            raise ValueError(
+                'script is too short for specified number of required '
+                'signatures ({})'.format(required))
+
+    if len(pubkeys) > MAX_P2SH_MULTISIG_PUBKEYS:
+        raise ValueError('script contains more than {} pubkeys'
+                         .format(MAX_P2SH_MULTISIG_PUBKEYS))
+
+    if total != len(pubkeys):
+        raise ValueError('number of pubkeys in the script is not the same '
+                         'as the number of pubkeys required')
+    if total < 2:
+        raise ValueError('total number of pubkeys are less than 2')
+    if total > MAX_P2SH_MULTISIG_PUBKEYS:
+        raise ValueError('required number of pubkeys are more than {}'
+                         .format(MAX_P2SH_MULTISIG_PUBKEYS))
+    try:
+        last_op = next(si)
+    except StopIteration:
+            raise ValueError('script is too short, ended before we gan get '
+                             'last opcode')
+
+    if last_op != OP_CHECKMULTISIG:
+        raise ValueError('script is not a p2sh script, last opcode '
+                         'is not OP_CHECKMULTISIG')
+
+    return {'total': total, 'required': required, 'pubkeys': pubkeys}
+
+
+def p2sh_multisig_script_sig(sigs, redeem_script):
+
+    p2sh_multisig_parse_script(redeem_script) # check valid p2sh script
+
+    if not all(isinstance(s, (bytes, bytearray)) for s in sigs):
+        raise ValueError('sigs must be an array of bytes (or bytearrays)')
+
+    script = [0]
+    script.extend(sigs)
+    script.append(redeem_script)
+    return CScript(script)
+
+
+def p2sh_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
+    """Construct P2SH multisignature redeem script.
+    We require to supply total number of pubkeys as separate argument
+    to be able to catch bugs when pubkeys array is wrong for some reason.
+    If the callers do not care about the possibility of such bug, they
+    can just supply total=len(pubkeys).
+
+    For '1-of-1' case the function will return
+        CScript([pubkeys[0], OP_CHECKSIG])
+    because it is shorter than OP_CHECKMULTISIG variant,
+    but have the same behavior.
+
+    Arguments:
+
+    total    - total number of pubkeys (must match the length of pubkeys array)
+    required - the number of signatures required to satisfy the script,
+               must be less than or equal to `total`
+    pubkeys  - an array of pubkeys"""
+
+    if total != len(pubkeys):
+        raise ValueError("'total' argument must match length of pubkeys array")
+    if required <= 0:
+        raise ValueError("'required' argument must be > 1")
+    if required > total:
+        raise ValueError(
+            "'required' argument must be less than or equal to 'total'")
+    if total > MAX_P2SH_MULTISIG_PUBKEYS:
+        raise ValueError("%d pubkeys do not fit into standard p2sh multisig"
+                         % total)
+    if total == 1:
+        # for 1-of-1, there is ambiguity in possible scripts:
+        # using CHECKMULTISIG, or using just CHECKSIG.
+        # scriptSig for these variants would differ, because CHECKMULTISIG
+        # requires extra '0' on the stack, which CHECKSIG does not require.
+        # therefore, if the callers want to support 1-of-1 in P2SH,
+        # they need to handle it themselves.
+        raise ValueError('1-of-1 multisig is not supported')
+
+    return CScript([required] + pubkeys + [total, OP_CHECKMULTISIG])
 
 
 def _SetScriptClassParams(script_cls):
