@@ -91,6 +91,18 @@ def str_money_value_for_repr(nValue):
         "%d" % (nValue,)
 
 
+def coins_to_satoshi(value):
+    """Simple utility function to convert from
+    floating-point coins amount to integer satoshi amonut"""
+    return int(round(float(value) * COIN))
+
+
+def satoshi_to_coins(value):
+    """Simple utility function to convert from
+    integer satoshi amonut to floating-point coins amount"""
+    return float(float(value) / COIN)
+
+
 def bytes_for_repr(buf, hexfun=x):
     if hexfun is x:
         bfun = b2x
