@@ -16,6 +16,7 @@ import binascii
 import struct
 from abc import ABCMeta, abstractmethod
 from threading import local
+from io import BytesIO
 
 from . import script
 
@@ -101,6 +102,51 @@ def satoshi_to_coins(value):
     """Simple utility function to convert from
     integer satoshi amonut to floating-point coins amount"""
     return float(float(value) / COIN)
+
+
+def get_size_of_compact_size(size):
+    # comment from GetSizeOfCompactSize() src/serialize.h in Bitcoin Core:
+    #
+    # Compact Size
+    # size <  253        -- 1 byte
+    # size <= USHRT_MAX  -- 3 bytes  (253 + 2 bytes)
+    # size <= UINT_MAX   -- 5 bytes  (254 + 4 bytes)
+    # size >  UINT_MAX   -- 9 bytes  (255 + 8 bytes)
+
+    if size < 0xFD:
+        return 1
+    elif size <= 0xFFFF:
+        return 3
+    elif size <= 0xFFFFFFFF:
+        return 5
+    else:
+        return 9
+
+
+def calculate_transaction_virtual_size(num_inputs=None,
+                                       inputs_serialized_size=None,
+                                       num_outputs=None,
+                                       outputs_serialized_size=None,
+                                       witness_size=None):
+
+    """Calculate vsize of transaction given the number of inputs and
+       outputs, the serialized size of inputs and outputs, and witness size.
+       Useful for fee calculation at the time of coin selection, where you
+       might not have CTransaction ready, but know all the parameters on
+       that vsize depends on"""
+
+    base_size = (
+        4    # version
+        + get_size_of_compact_size(num_inputs)
+        + inputs_serialized_size
+        + get_size_of_compact_size(num_outputs)
+        + outputs_serialized_size
+        + 4  # sequence
+    )
+
+    unscaled_size = (base_size * WITNESS_SCALE_FACTOR
+                     + witness_size + WITNESS_SCALE_FACTOR-1)
+    return unscaled_size // WITNESS_SCALE_FACTOR
 
 
 def bytes_for_repr(buf, hexfun=x):
@@ -733,6 +779,26 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
                 self._concrete_class.CTxOut, self.vout, f)
         f.write(struct.pack(b"<I", self.nLockTime))
 
+    def get_virtual_size(self):
+        f = BytesIO()
+        for vin in self.vin:
+            vin.stream_serialize(f)
+        inputs_size = len(f.getbuffer())
+        f = BytesIO()
+        for vout in self.vout:
+            vout.stream_serialize(f)
+        outputs_size = len(f.getbuffer())
+        f = BytesIO()
+        self.wit.stream_serialize(f)
+        witness_size = len(f.getbuffer())
+
+        return calculate_transaction_virtual_size(
+            num_inputs=len(self.vin),
+            inputs_serialized_size=inputs_size,
+            num_outputs=len(self.vout),
+            outputs_serialized_size=outputs_size,
+            witness_size=witness_size)
+
 
 class CBitcoinTransaction(CTransactionBase,
                           metaclass=BitcoinTransactionIdentityMeta):
@@ -945,4 +1011,8 @@ __all__ = (
     'Uint256',
     'bytes_for_repr',
     'str_money_value_for_repr',
+    'satoshi_to_coins',
+    'coins_to_satoshi',
+    'get_size_of_compact_size',
+    'calculate_transaction_virtual_size',
 )
