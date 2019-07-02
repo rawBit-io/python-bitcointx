@@ -697,8 +697,8 @@ class CTransactionBase(ImmutableSerializable, ReprOrStrMixin):
             includes it. """
 
         if not self.wit.is_null():
-            txid = Hash(CTransaction(self.vin, self.vout, self.nLockTime,
-                                     self.nVersion).serialize())
+            txid = Hash(self._concrete_class.CTransaction(
+                self.vin, self.vout, self.nLockTime, self.nVersion).serialize())
         else:
             txid = Hash(self.serialize())
         return txid
