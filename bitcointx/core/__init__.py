@@ -953,7 +953,8 @@ def _SetTransactionCoinIdentity(transaction_identity):
     assert not issubclass(transaction_identity, MutableSerializableMeta),\
         "immutable idenity expected"
     transaction_identity.activate(_thread_local)
-    transaction_identity._mutable_identity.activate(_thread_local)
+    transaction_identity._mutable_identity.activate(_thread_local,
+                                                    clear_current_clsmap=False)
 
 
 def _SetChainParams(params):

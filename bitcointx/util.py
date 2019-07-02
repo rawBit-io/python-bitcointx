@@ -143,7 +143,9 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
         return AttrAccessHelper()
 
     @classmethod
-    def activate(cls, frontend_class_store):
+    def activate(cls, frontend_class_store, clear_current_clsmap=True):
+        if clear_current_clsmap:
+            frontend_class_store.clsmap = {}
         for frontend, concrete in cls._clsmap.items():
             set_frontend_class(frontend, concrete, frontend_class_store)
 
