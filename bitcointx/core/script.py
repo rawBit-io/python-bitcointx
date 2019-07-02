@@ -1272,10 +1272,9 @@ def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
     If the callers do not care about the possibility of such bug, they
     can just supply total=len(pubkeys).
 
-    For '1-of-1' case the function will return
-        CScript([pubkeys[0], OP_CHECKSIG])
-    because it is shorter than OP_CHECKMULTISIG variant,
-    but have the same behavior.
+    For '1-of-1' case the function raise ValueError exception,
+    because this case is ambiguous - can be done via CHECKSIG or CHECKMULTISIG,
+    and is not really a multisig.
 
     Arguments:
 
