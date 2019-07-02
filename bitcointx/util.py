@@ -191,7 +191,7 @@ class CoinIdentityMeta(type, metaclass=ABCMeta):
 
         for front, concrete in clsmap.items():
             assert issubclass(type(front), FrontendClassMetaBase), \
-                ("metaclass {} must be a frontend metaclass, but {} "
+                ("metaclass of {} must be a frontend metaclass, but {} "
                  "is not a subclass of FrontendClassMetaBase"
                  .format(front.__name__, type(front)))
             assert issubclass(type(concrete), CoinIdentityMeta), \
