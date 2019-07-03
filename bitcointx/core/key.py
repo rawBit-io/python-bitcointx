@@ -208,7 +208,8 @@ class CKeyMixin():
     def combine(cls, *privkeys, compressed=True):
         assert(len(privkeys) > 1)
         if not all(isinstance(k, CKeyMixin) for k in privkeys):
-            return NotImplemented
+            return ValueError(
+                'each supplied privkey must be an instance of CKeyMixin')
 
         result_data = ctypes.create_string_buffer(privkeys[0].secret_bytes)
         for p in privkeys[1:]:
@@ -438,7 +439,8 @@ class CPubKey(bytes):
     def combine(cls, *pubkeys, compressed=True):
         assert(len(pubkeys) > 1)
         if not all(isinstance(p, CPubKey) for p in pubkeys):
-            return NotImplemented
+            return ValueError(
+                'each supplied pubkey must be an instance of CPubKey')
 
         pubkey_arr = (ctypes.c_char_p*len(pubkeys))()
         for i, p in enumerate(pubkeys):
