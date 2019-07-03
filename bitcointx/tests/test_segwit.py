@@ -43,11 +43,10 @@ class Test_Segwit(unittest.TestCase):
 
     def test_p2sh_p2wpkh_signaturehash(self):
         unsigned_tx   = x('0100000001db6b1b20aa0fd7b23880be2ecbd4a98130974cf4748fb66092ac4d3ceb1a54770100000000feffffff02b8b4eb0b000000001976a914a457b684d7f0d539a46a45bbc043f35b59d0d96388ac0008af2f000000001976a914fd270b1ee6abcaea97fea7ad0402e8bd8ad6d77c88ac92040000')
-        scriptpubkey  = CScript(x('a9144733f37cf4db86fbc2efed2500b4f4e49f31202387'))
-        redeemscript  = CScript(x('001479091972186c449eb1ded22b78e40d009bdf0089'))
+        scriptpubkey  = CScript(x('001479091972186c449eb1ded22b78e40d009bdf0089'))
         value         = int(10*COIN)
 
-        address = CBase58BitcoinAddress.from_scriptPubKey(redeemscript)
+        address = CCoinAddress.from_scriptPubKey(scriptpubkey)
         self.assertEqual(SignatureHash(address.to_redeemScript(), CTransaction.deserialize(unsigned_tx),
                 0, SIGHASH_ALL, value, SIGVERSION_WITNESS_V0),
             x('64f3b0f4dd2bb3aa1ce8566d220cc74dda9df97d8490cc81d89d735c92e59fb6'))

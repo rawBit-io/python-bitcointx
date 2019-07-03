@@ -357,6 +357,9 @@ def uint256_to_shortstr(u):
 
 
 def make_mutable(cls):
+    assert issubclass(cls, ImmutableSerializable), \
+        ("make_mutable can only be applied to subclasses "
+            "of ImmutableSerializable")
     # For speed we use a class decorator that removes the immutable
     # restrictions directly. In addition the modified behavior of GetHash() and
     # hash() is undone.
@@ -365,33 +368,6 @@ def make_mutable(cls):
     cls.GetHash = Serializable.GetHash
     cls.__hash__ = Serializable.__hash__
     return cls
-
-
-class MutableSerializableMeta(type):
-    def __new__(cls, name, bases, dct):
-        new_cls = super(MutableSerializableMeta,
-                        cls).__new__(cls, name, bases, dct)
-        assert issubclass(new_cls, ImmutableSerializable), \
-            ("MutableSerializableMeta can only be applied to subclasses "
-             "of ImmutableSerializable")
-        make_mutable(new_cls)
-        return new_cls
-
-
-def is_mut_cls(cls):
-    # The base class is always ImmutableSerializable
-    assert issubclass(cls, ImmutableSerializable)
-
-    # But MutableSerializableMeta might be added that will make it mutable
-    return issubclass(type(cls), MutableSerializableMeta)
-
-
-def is_mut_inst(inst):
-    # The base class is always ImmutableSerializable
-    assert isinstance(inst, ImmutableSerializable)
-
-    # But MutableSerializableMeta might be added that will make it mutable
-    return issubclass(type(type(inst)), MutableSerializableMeta)
 
 
 __all__ = (
@@ -417,7 +393,4 @@ __all__ = (
     'uint256_to_str',
     'uint256_to_shortstr',
     'make_mutable',
-    'MutableSerializableMeta',
-    'is_mut_cls',
-    'is_mut_inst'
 )

@@ -22,7 +22,7 @@ import bitcointx.core
 B58_DIGITS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 
-class Base58Error(bitcointx.core.AddressEncodingError):
+class Base58Error(bitcointx.core.AddressDataEncodingError):
     pass
 
 

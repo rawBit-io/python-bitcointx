@@ -33,10 +33,11 @@ class ChainParamsMeta(ABCMeta):
         ('NAME', isinstance, str),
         ('RPC_PORT', isinstance, int),
         ('CONFIG_LOCATION', isinstance, tuple),
-        ('TRANSACTION_IDENTITY',
-         issubclass, bitcointx.core.CoinTransactionIdentityMeta),
-        ('WALLET_IDENTITY',
-         issubclass, bitcointx.wallet.CoinWalletIdentityMeta),
+        ('CORE_DISPATCHER', issubclass, bitcointx.core.CoreClassDispatcher),
+        ('WALLET_DISPATCHER', issubclass,
+         bitcointx.wallet.WalletClassDispatcher),
+        ('SCRIPT_DISPATCHER', issubclass,
+         bitcointx.core.script.ScriptClassDispatcher),
     )
     _registered_classes = OrderedDict()
     _common_base_cls = None
@@ -125,20 +126,21 @@ class BitcoinMainnetParams(ChainParamsBase):
     RPC_PORT = 8332
     MAX_MONEY = 21000000 * bitcointx.core.COIN
     NAME = 'bitcoin'
-    TRANSACTION_IDENTITY = bitcointx.core.BitcoinTransactionIdentityMeta
-    WALLET_IDENTITY = bitcointx.wallet.BitcoinWalletIdentityMeta
+    CORE_DISPATCHER = bitcointx.core.CoreBitcoinClassDispatcher
+    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinClassDispatcher
+    SCRIPT_DISPATCHER = bitcointx.core.script.ScriptBitcoinClassDispatcher
 
 
 class BitcoinTestnetParams(BitcoinMainnetParams):
     RPC_PORT = 18332
     NAME = 'bitcoin/testnet'
-    WALLET_IDENTITY = bitcointx.wallet.BitcoinTestnetWalletIdentityMeta
+    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinTestnetClassDispatcher
 
 
 class BitcoinRegtestParams(BitcoinMainnetParams):
     RPC_PORT = 18443
     NAME = 'bitcoin/regtest'
-    WALLET_IDENTITY = bitcointx.wallet.BitcoinRegtestWalletIdentityMeta
+    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinRegtestClassDispatcher
 
 
 def get_current_chain_params():

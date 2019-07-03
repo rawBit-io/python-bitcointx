@@ -14,7 +14,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import unittest
 
 from bitcointx.core.secp256k1 import secp256k1_has_pubkey_recovery
-from bitcointx.wallet import CBitcoinSecret
+from bitcointx.wallet import CBitcoinKey
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
 import sys
 import os
@@ -66,7 +66,7 @@ class Test_SignVerifyMessage(unittest.TestCase):
     )
     def test_sign_message_simple(self):
 
-        key = CBitcoinSecret("L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")
+        key = CBitcoinKey("L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")
         address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
         message = address
 
@@ -82,7 +82,7 @@ class Test_SignVerifyMessage(unittest.TestCase):
     )
     def test_sign_message_vectors(self):
         for vector in load_test_vectors('signmessage.json'):
-            key = CBitcoinSecret(vector['wif'])
+            key = CBitcoinKey(vector['wif'])
             message = BitcoinMessage(vector['address'])
 
             signature = SignMessage(key, message)

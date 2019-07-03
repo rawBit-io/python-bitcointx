@@ -16,6 +16,8 @@ import hashlib
 import unittest
 
 import bitcointx
+from bitcointx import ChainParams
+from bitcointx.util import dispatcher_mapped_list
 from bitcointx.core import b2x, x, Hash160
 from bitcointx.core.script import CScript, IsLowDERSignature
 from bitcointx.core.key import CPubKey
@@ -33,7 +35,7 @@ from bitcointx.wallet import (
     P2SHCoinAddress,
     P2WPKHCoinAddress,
     P2WSHCoinAddress,
-    CBitcoinSecret,
+    CBitcoinKey,
 )
 
 
@@ -45,32 +47,30 @@ class Test_CCoinAddress(unittest.TestCase):
         if paramclasses is None:
             paramclasses = bitcointx.ChainParamsMeta.get_registered_chain_params()
         for paramclass in paramclasses:
-            identity = paramclass.WALLET_IDENTITY
-            script_class = identity._clsmap[CScript]
-            self.assertTrue(issubclass(script_class, CScript))
-            for cclass in (P2SHCoinAddress, P2PKHCoinAddress,
-                           P2WSHCoinAddress, P2WPKHCoinAddress):
-                aclass = identity._clsmap[cclass]
-                self.assertTrue(issubclass(aclass, CCoinAddress))
+            with ChainParams(paramclass):
+                for cclass in (P2SHCoinAddress, P2PKHCoinAddress,
+                               P2WSHCoinAddress, P2WPKHCoinAddress):
+                    for aclass in dispatcher_mapped_list(cclass):
+                        self.assertTrue(issubclass(aclass, CCoinAddress))
 
-                if extra_addr_testfunc is not None \
-                        and extra_addr_testfunc(cclass, identity, pub):
-                    continue
+                        if extra_addr_testfunc is not None \
+                                and extra_addr_testfunc(aclass, pub):
+                            continue
 
-                if getattr(aclass, 'from_pubkey', None):
-                    a = aclass.from_pubkey(pub)
-                else:
-                    a = aclass.from_redeemScript(
-                        script_class(b'\xa9' + Hash160(pub) + b'\x87'))
+                        if getattr(aclass, 'from_pubkey', None):
+                            a = aclass.from_pubkey(pub)
+                        else:
+                            a = aclass.from_redeemScript(
+                                CScript(b'\xa9' + Hash160(pub) + b'\x87'))
 
-                spk = a.to_scriptPubKey()
-                self.assertEqual(a, aclass.from_scriptPubKey(spk))
-                a2 = aclass.from_bytes(a)
-                self.assertEqual(bytes(a), bytes(a2))
-                self.assertEqual(str(a), str(a2))
-                a3 = aclass(str(a))
-                self.assertEqual(bytes(a), bytes(a3))
-                self.assertEqual(str(a), str(a3))
+                        spk = a.to_scriptPubKey()
+                        self.assertEqual(a, aclass.from_scriptPubKey(spk))
+                        a2 = aclass.from_bytes(a)
+                        self.assertEqual(bytes(a), bytes(a2))
+                        self.assertEqual(str(a), str(a2))
+                        a3 = aclass(str(a))
+                        self.assertEqual(bytes(a), bytes(a3))
+                        self.assertEqual(str(a), str(a3))
 
 
 class Test_CBitcoinAddress(unittest.TestCase):
@@ -229,12 +229,10 @@ class Test_P2PKHBitcoinAddress(unittest.TestCase):
     def test_from_non_canonical_scriptPubKey(self):
         def T(hex_scriptpubkey, expected_str_address):
             scriptPubKey = CScript(x(hex_scriptpubkey))
-            addr = P2PKHBitcoinAddress.from_scriptPubKey(scriptPubKey)
-            self.assertEqual(str(addr), expected_str_address)
-
-            # now test that CBitcoinAddressError is raised with accept_non_canonical_pushdata=False
+            # now test that CBitcoinAddressError is raised, non-canonical
+            # pushdata is not allowed
             with self.assertRaises(CBitcoinAddressError):
-                P2PKHBitcoinAddress.from_scriptPubKey(scriptPubKey, accept_non_canonical_pushdata=False)
+                P2PKHBitcoinAddress.from_scriptPubKey(scriptPubKey)
 
         T('76a94c14000000000000000000000000000000000000000088ac', '1111111111111111111114oLvT2')
         T('76a94d1400000000000000000000000000000000000000000088ac', '1111111111111111111114oLvT2'),
@@ -242,17 +240,15 @@ class Test_P2PKHBitcoinAddress(unittest.TestCase):
 
         # make sure invalid scripts raise CBitcoinAddressError
         with self.assertRaises(CBitcoinAddressError):
-            P2PKHBitcoinAddress.from_scriptPubKey(x('76a94c14'))
+            P2PKHBitcoinAddress.from_scriptPubKey(CScript(x('76a94c14')))
 
     def test_from_bare_checksig_scriptPubKey(self):
         def T(hex_scriptpubkey, expected_str_address):
             scriptPubKey = CScript(x(hex_scriptpubkey))
-            addr = P2PKHBitcoinAddress.from_scriptPubKey(scriptPubKey)
-            self.assertEqual(str(addr), expected_str_address)
-
-            # now test that CBitcoinAddressError is raised with accept_non_canonical_pushdata=False
+            # test that CBitcoinAddressError is raised, we do not support
+            # bare checksig
             with self.assertRaises(CBitcoinAddressError):
-                P2PKHBitcoinAddress.from_scriptPubKey(scriptPubKey, accept_bare_checksig=False)
+                P2PKHBitcoinAddress.from_scriptPubKey(scriptPubKey)
 
         # compressed
         T('21000000000000000000000000000000000000000000000000000000000000000000ac', '14p5cGy5DZmtNMQwTQiytBvxMVuTmFMSyU')
@@ -265,7 +261,7 @@ class Test_P2PKHBitcoinAddress(unittest.TestCase):
 
         # odd-lengths are *not* accepted
         with self.assertRaises(CBitcoinAddressError):
-            P2PKHBitcoinAddress.from_scriptPubKey(x('2200000000000000000000000000000000000000000000000000000000000000000000ac'))
+            P2PKHBitcoinAddress.from_scriptPubKey(CScript(x('2200000000000000000000000000000000000000000000000000000000000000000000ac')))
 
     def test_from_valid_pubkey(self):
         """Create P2PKHBitcoinAddress's from valid pubkeys"""
@@ -306,10 +302,10 @@ class Test_P2PKHBitcoinAddress(unittest.TestCase):
             P2PKHBitcoinAddress.from_pubkey(CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c72')))
 
 
-class Test_CBitcoinSecret(unittest.TestCase):
+class Test_CBitcoinKey(unittest.TestCase):
     def test(self):
         def T(base58_privkey, expected_hex_pubkey, expected_is_compressed_value):
-            key = CBitcoinSecret(base58_privkey)
+            key = CBitcoinKey(base58_privkey)
             self.assertEqual(b2x(key.pub), expected_hex_pubkey)
             self.assertEqual(key.is_compressed(), expected_is_compressed_value)
 
@@ -321,7 +317,7 @@ class Test_CBitcoinSecret(unittest.TestCase):
           True)
 
     def test_sign(self):
-        key = CBitcoinSecret('5KJvsngHeMpm884wtkJNzQGaCErckhHJBGFsvd3VyK5qMZXj3hS')
+        key = CBitcoinKey('5KJvsngHeMpm884wtkJNzQGaCErckhHJBGFsvd3VyK5qMZXj3hS')
         hash = b'\x00' * 32
         sig = key.sign(hash)
 
@@ -338,7 +334,7 @@ class Test_CBitcoinSecret(unittest.TestCase):
         self.assertFalse(key.pub.verify(hash, sig[0:-4] + b'\x00\x00\x00\x00'))
 
     def test_sign_invalid_hash(self):
-        key = CBitcoinSecret('5KJvsngHeMpm884wtkJNzQGaCErckhHJBGFsvd3VyK5qMZXj3hS')
+        key = CBitcoinKey('5KJvsngHeMpm884wtkJNzQGaCErckhHJBGFsvd3VyK5qMZXj3hS')
         with self.assertRaises(TypeError):
             key.sign('0' * 32)
 
@@ -348,13 +344,13 @@ class Test_CBitcoinSecret(unittest.TestCase):
 
     def test_from_to_compressed(self):
         def T(keydata, compressed, uncompressed):
-            k = CBitcoinSecret.from_secret_bytes(x(keydata))
-            k_u = CBitcoinSecret.from_secret_bytes(x(keydata), False)
+            k = CBitcoinKey.from_secret_bytes(x(keydata))
+            k_u = CBitcoinKey.from_secret_bytes(x(keydata), False)
 
             self.assertTrue(k.is_compressed())
             self.assertEqual(k.pub, x(compressed))
 
-            k2 = CBitcoinSecret(str(k))
+            k2 = CBitcoinKey(str(k))
             self.assertTrue(k2.is_compressed())
             self.assertEqual(k, k2)
 
@@ -364,7 +360,7 @@ class Test_CBitcoinSecret(unittest.TestCase):
             self.assertFalse(k.is_compressed())
             self.assertEqual(k.pub, x(uncompressed))
 
-            k2 = CBitcoinSecret(str(k))
+            k2 = CBitcoinKey(str(k))
             self.assertFalse(k2.is_compressed())
             self.assertEqual(k, k2)
 
@@ -394,7 +390,7 @@ class Test_RFC6979(unittest.TestCase):
             (0xe91671c46231f833a6406ccbea0e3e392c76c167bac1cb013f6f1013980455c2, "There is a computer disease that anybody who works with computers knows about. It's a very serious disease and it interferes completely with the work. The trouble with computers is that you 'play' with them!", 0x1F4B84C23A86A221D233F2521BE018D9318639D5B8BBD6374A8A59232D16AD3D, "b552edd27580141f3b2a5463048cb7cd3e047b97c9f98076c32dbdf85a68718b279fa72dd19bfae05577e06c7c0c1900c371fcd5893f7e1d56a37d30174671f6")
         ]
         for vector in test_vectors:
-            secret = CBitcoinSecret.from_secret_bytes(x('{:064x}'.format(vector[0])))
+            secret = CBitcoinKey.from_secret_bytes(x('{:064x}'.format(vector[0])))
             encoded_sig = secret.sign(hashlib.sha256(vector[1].encode('utf8')).digest())
 
             assert(encoded_sig[0] == 0x30)

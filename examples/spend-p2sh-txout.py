@@ -24,13 +24,13 @@ from bitcointx import select_chain_params
 from bitcointx.core import b2x, lx, COIN, COutPoint, CMutableTxOut, CMutableTxIn, CMutableTransaction, Hash160
 from bitcointx.core.script import CScript, OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG, SignatureHash, SIGHASH_ALL
 from bitcointx.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
-from bitcointx.wallet import CBitcoinAddress, CBitcoinSecret
+from bitcointx.wallet import CBitcoinAddress, CBitcoinKey
 
 select_chain_params('bitcoin')
 
 # Create the (in)famous correct brainwallet secret key.
 h = hashlib.sha256(b'correct horse battery staple').digest()
-seckey = CBitcoinSecret.from_secret_bytes(h)
+seckey = CBitcoinKey.from_secret_bytes(h)
 
 # Create a redeemScript. Similar to a scriptPubKey the redeemScript must be
 # satisfied for the funds to be spent.

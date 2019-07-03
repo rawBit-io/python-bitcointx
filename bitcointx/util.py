@@ -9,7 +9,14 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import threading
+from collections import defaultdict
 from abc import ABCMeta
+
+class_mapping_dispatch_data = threading.local()
+class_mapping_dispatch_data.core = None
+class_mapping_dispatch_data.wallet = None
+class_mapping_dispatch_data.script = None
 
 
 class _NoBoolCallable():
@@ -36,183 +43,178 @@ class _NoBoolCallable():
 def no_bool_use_as_property(f):
     """A decorator that disables use of an attribute
     as a property in a boolean context """
+
     @property
     def wrapper(self, *args, **kwargs):
         value = f(self, *args, **kwargs)
         name = '{}().{}'.format(self.__class__.__name__, f.__name__)
         return _NoBoolCallable(name, value)
+
     return wrapper
 
 
-def set_frontend_class(frontend_cls, concrete_cls, frontend_class_store):
-    if not issubclass(concrete_cls, frontend_cls):
-        raise ValueError(
-            '{} is was not registered as {} subclass'
-            .format(concrete_cls.__name__, frontend_cls.__name__))
+def activate_class_dispatcher(dclass):
+    assert ClassMappingDispatcher in dclass.__mro__
 
-    if not hasattr(frontend_class_store, 'clsmap'):
-        frontend_class_store.clsmap = {}
+    assert not dclass._class_dispatcher__no_direct_use,\
+        "{} must not be used directly".format(dclass.__name__)
 
-    frontend_class_store.clsmap[frontend_cls] = concrete_cls
+    prev = getattr(class_mapping_dispatch_data,
+                   dclass._class_dispatcher__identity)
 
+    if dclass is not prev:
+        setattr(class_mapping_dispatch_data,
+                dclass._class_dispatcher__identity,
+                dclass)
 
-class FrontendClassMetaBase:
-    """to be used in subclass() checks to check that particular class
-    is a frontend class"""
-
-
-def make_frontend_metaclass(prefix, frontend_class_store):
-    def base_new(cls, *args, **kwargs):
-        if cls not in frontend_class_store.clsmap:
-            raise TypeError(
-                'Concrete implementation for {} is not defined for current '
-                'chain parameters'.format(cls.__name__))
-        real_class = frontend_class_store.clsmap[cls]
-        return real_class(*args, **kwargs)
-
-    base_class = type(prefix + 'FrontendClassBase', (), {'__new__': base_new})
-    meta_class = type(prefix + 'FrontendClassMeta',
-                      (ABCMeta, FrontendClassMetaBase), {})
-
-    def meta_getattr(cls, name):
-        if cls not in frontend_class_store.clsmap:
-            raise TypeError(
-                'Concrete implementation for {} is not defined for current '
-                'chain parameters'.format(name))
-        real_class = frontend_class_store.clsmap[cls]
-        return getattr(real_class, name)
-
-    meta_class.__getattr__ = meta_getattr
-
-    def meta_new(cls, name, bases, dct):
-        if any(type(b) is cls for b in bases):
-            # If there are base class that has our metaclass as a type,
-            # that means we do not need to add *FrontendClassBase,
-            # because everything is already in place at this base class
-            pass
-        else:
-            # otherwise, we add the base class
-            bases = tuple([base_class] + list(bases))
-        return super(meta_class, cls).__new__(cls, name, bases, dct)
-
-    meta_class.__new__ = meta_new
-
-    return meta_class
+    return prev
 
 
-class CoinIdentityMeta(type, metaclass=ABCMeta):
+def dispatcher_mapped_list(cls):
+    mcs = type(cls)
+    if ClassMappingDispatcher not in mcs.__mro__:
+        raise ValueError('{} is not a dispatcher class'.format(cls.__name__))
 
-    # a dict that holds frontend to concrete class mapping
-    _clsmap = None
-    # a dict that holds immutable frontend classname to concrete class mapping
-    # used for attribute access, like cls._concrete_class.COutPoint() etc.
-    _namemap = None
-    # used to ensure set_classmap called only once per coin identity class
-    __clsid = None
+    dispatcher = getattr(class_mapping_dispatch_data,
+                         mcs._class_dispatcher__identity)
 
-    def __new__(cls, name, bases, dct):
-        new_cls = super(CoinIdentityMeta,
-                        cls).__new__(cls, name, bases, dct)
-        new_cls._concrete_class = cls._get_attr_access_helper()
-        return new_cls
+    clsmap = dispatcher._class_dispatcher__clsmap
 
-    @classmethod
-    def _get_required_classes(cls):
-        """Return two sets of frontend classes: one that is expected
-        to be set via set_classmap() and is the classes that is actually
-        implemented in this module, and another set is frontend classes
-        that are merely used bu the first set of classes, and that must
-        be in the mapping returned by _get_extra_classmap()"""
-        raise NotImplementedError('must be implemented by a subclass')
+    if cls not in clsmap:
+        raise ValueError('{} does not have a mapping in {}'
+                         .format(cls.__name__, dispatcher.__name__))
 
-    @classmethod
-    def _get_extra_classmap(cls):
-        """Must return a dict of frontend to concrete class mapping
-        that will be added to _concrete_class mapping, For example,
-        transaction-related concrete classes might need to know a
-        concrete class for CScript. specific TransactionIdentity class
-        might implement this method to return appropriate mapping for
-        CScript to conrete class."""
-        raise NotImplementedError('must be implemented by a subclass')
+    return clsmap[cls]
 
-    @classmethod
-    def _get_attr_access_helper(cls):
-        class AttrAccessHelper:
-            def __getattr__(self, name):
-                return cls._namemap[name]
-        return AttrAccessHelper()
 
-    @classmethod
-    def activate(cls, frontend_class_store, clear_current_clsmap=True):
-        if clear_current_clsmap:
-            frontend_class_store.clsmap = {}
-        for frontend, concrete in cls._clsmap.items():
-            set_frontend_class(frontend, concrete, frontend_class_store)
+class ClassMappingDispatcher(ABCMeta):
 
-    @classmethod
-    def set_classmap(cls, clsmap):
-        assert cls._clsmap is None or cls.__clsid != cls, \
-            "set_classmap can be called only once for each class"
+    def __init_subclass__(mcs, identity=None, no_direct_use=False):
 
-        cls.__clsid = cls
+        # metaclass attributes pollute the namespace of all the classes
+        # that use the metaclass.
+        # Use '_class_dispatcher__' prefix to minimize pollution.
 
-        main_classes, extra_classes = cls._get_required_classes()
+        if identity is not None:
+            assert getattr(mcs, '_class_dispatcher__identity', None) is None,\
+                "can't replace identity that was already set by the base class"
+            mcs._class_dispatcher__identity = identity
 
-        extra_classmap = cls._get_extra_classmap()
-        assert extra_classes == set(extra_classmap.keys()), \
-            ('extra classes returned by {}._get_extra_classmap() ({})'
-             'must match the set of extra classes returned by '
-             '{}._get_required_classes() ({})'
-             .format(cls.__name__, extra_classes,
-                     cls.__name__, extra_classmap.keys()))
-        assert not (extra_classes & main_classes),\
-            "extra classmap cannot intersect with required classmap"
+        if no_direct_use:
+            mcs._class_dispatcher__no_direct_use = True
+            mcs._class_dispatcher__final_dispatch = set()
+            mcs._class_dispatcher__pre_final_dispatch = set()
+            return
 
-        supplied = set()
-        namemap = extra_classmap.copy()
-        for front, concrete in clsmap.items():
-            if front not in main_classes:
-                for base in front.__mro__:
-                    if base in main_classes:
-                        front = base
-                        break
+        mcs._class_dispatcher__no_direct_use = False
+        mcs._class_dispatcher__clsmap = defaultdict(list)
 
-            supplied.add(front)
-            namemap[front.__name__] = concrete
+    def __new__(mcs, name, bases, dct, next_dispatch_final=False,
+                variant_of=None):
+        return super(ClassMappingDispatcher,
+                     mcs).__new__(mcs, name, bases, dct)
 
-        missing = main_classes-supplied
-        if missing:
-            raise ValueError('Required class(es) was not found in clsmap: {}'
-                             .format([c.__name__ for c in missing]))
-        extra = supplied-main_classes
-        if extra:
-            raise ValueError('Unexpected class(es) in clsmap: {}'
-                             .format([c.__name__ for c in extra]))
+    def __init__(cls, name, bases, dct, next_dispatch_final=False,
+                 variant_of=None):
+        mcs = type(cls)
 
-        for front, concrete in clsmap.items():
-            assert issubclass(type(front), FrontendClassMetaBase), \
-                ("metaclass of {} must be a frontend metaclass, but {} "
-                 "is not a subclass of FrontendClassMetaBase"
-                 .format(front.__name__, type(front)))
-            assert issubclass(type(concrete), CoinIdentityMeta), \
-                ("metaclass {} of {} must be a subclass of CoinIdentityMeta."
-                 "Did you forget to set the identity metaclass for {} ?"
-                 .format(type(concrete), concrete.__name__, concrete.__name__))
-            assert not issubclass(concrete, front), \
-                ("double-registering {} as subclass of {} is not allowed"
-                 .format(concrete.__name__, front.__name__))
+        if next_dispatch_final:
+            # for correctness, the classes that are not meant to be
+            # dispatched to multiple candidate classes, but should only
+            # have a mapping to one particular class, need to be marked
+            # with next_dispatch_final=True parameter.
+            # Here we store these classes to the set, to enable checking
+            # the final classmap against this set.
+            mcs._class_dispatcher__pre_final_dispatch.add(cls)
 
-            # regiser the concrete class to frontend class
-            # so isinstance and issubclass will work as expected
-            front.register(concrete)
+        if mcs._class_dispatcher__no_direct_use:
+            # No need to initialize classmap, this is a base dispatcher class
+            return
 
-            if not issubclass(concrete, front):
-                raise ValueError('{} is not a subclass of {}'
-                                 .format(concrete.__name__, front.__name__))
+        # walk the bases of the class to fill the classmap
+        for bcs in cls.__mro__:
+            if bcs is cls:
+                # skip the current class
+                continue
 
-        for front, concrete in extra_classmap.items():
-            namemap[front.__name__] = concrete
-            clsmap[front] = concrete
+            if ClassMappingDispatcher not in type(bcs).__mro__:
+                # skip if the base does not belong to our dispatch scheme
+                continue
 
-        cls._namemap = namemap
-        cls._clsmap = clsmap
+            if bcs in mcs._class_dispatcher__final_dispatch:
+                # do not map subclasses after final dispatch reached
+                continue
+
+            target_list = mcs._class_dispatcher__clsmap[bcs]
+
+            if any(issubclass(cls, target_cls) for target_cls in target_list):
+                # if the mapped set contains a superclass of the current class,
+                # do not add the class to the set, so that only
+                # the direct subclasses will be in the mapping
+                continue
+
+            if variant_of is not None and variant_of in target_list:
+                # If the class is a variant of the class that is already
+                # in the map, skip it
+                continue
+
+            # check for correctness in regard to next_dispatch_final param
+            if bcs in mcs._class_dispatcher__pre_final_dispatch:
+                mcs._class_dispatcher__final_dispatch.add(cls)
+                if next_dispatch_final:
+                    raise AssertionError(
+                        '{} is marked with next_dispatch_final=True, '
+                        'but {}, also marked with next_dispatch_final=Trye, '
+                        'is mapped to it'.format(bcs.__name__, cls.__name__))
+                if len(target_list) > 0:
+                    raise AssertionError(
+                        '{} is marked with next_dispatch_final=True, '
+                        'adding {} to already-mapped {} will make the mapping '
+                        'non-final. Maybe you want to set variant_of=... on {}'
+                        .format(bcs.__name__, cls.__name__,
+                                [c.__name__ for c in target_list],
+                                cls.__name__))
+
+            # add the class to the mapping
+            target_list.append(cls)
+
+    def __call__(cls, *args, **kwargs):
+        mcs = type(cls)
+
+        cur_dispatcher = getattr(class_mapping_dispatch_data,
+                                 mcs._class_dispatcher__identity)
+
+        if cur_dispatcher is None:
+            return type.__call__(cls, *args, **kwargs)
+
+        assert not cur_dispatcher._class_dispatcher__no_direct_use,\
+            "{} must not be used directly".format(cur_dispatcher.__name__)
+
+        class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
+
+        if len(class_list) != 1:
+            return type.__call__(cls, *args, **kwargs)
+
+        return type.__call__(class_list[0], *args, **kwargs)
+
+    def __getattribute__(cls, name):
+        if name.startswith('__') and name.endswith('__'):
+            return type.__getattribute__(cls, name)
+
+        mcs = type(cls)
+
+        cur_dispatcher = getattr(class_mapping_dispatch_data,
+                                 mcs._class_dispatcher__identity)
+
+        if cur_dispatcher is None:
+            return type.__getattribute__(cls, name)
+
+        assert not cur_dispatcher._class_dispatcher__no_direct_use,\
+            "{} must not be used directly".format(cur_dispatcher.__name__)
+
+        class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
+
+        if len(class_list) != 1:
+            return type.__getattribute__(cls, name)
+
+        return getattr(class_list[0], name)

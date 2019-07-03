@@ -68,19 +68,19 @@ if __name__ == '__main__':
             print("xpriv:", xkey)
 
             # Note:
-            # if xkey is CBitcoinExtKey, xkey.priv is CBitcoinSecret
-            #     CBitcoinSecret is in WIF format, and compressed
+            # if xkey is CBitcoinExtKey, xkey.priv is CBitcoinKey
+            #     CBitcoinKey is in WIF format, and compressed
             #     len(bytes(xkey.privkey)) == 33
             # if xkey is CExtKey, xkey.priv is CKey
             #     CKey is always 32 bytes
             #
-            # Standalone CBitcoinSecret key can be uncompressed,
+            # Standalone CBitcoinKey key can be uncompressed,
             # and be of 32 bytes length, but this is not the case
             # with xpriv encapsulated in CBitcoinExtKey - it is
             # always compressed there.
             #
             # you can always use xkey.priv.secret_bytes
-            # to get raw 32-byte secret data from both CBitcoinSecret and CKey
+            # to get raw 32-byte secret data from both CBitcoinKey and CKey
             #
             print("priv WIF:", xkey.priv)
             print("raw priv:", b2x(xkey.priv.secret_bytes))

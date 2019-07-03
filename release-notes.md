@@ -75,9 +75,9 @@ python-bitcointx is now much easier. See for example
     that return appropriate signature hash for the script instance.
     Useful when sighash implementation is not the same as Bitcoin's.
     Also, `to_p2wsh_scriptPubKey()` method was added
-  - In addition to `CBitcoinSecret`, `CCoinKey` is introduced
+  - `CBitcoinSecret` is now `CCoinKey`. `CBitcoinSecret` is retained
+    for compatibility, but is a subclass of bitcoin-specific `CBitcoinKey`.
     `CCoinKey` naming is more consistent with `CKey`, `CCoinExtKey`, etc.
-    `CBitcoinSecret` is retained for backwards compatibility.
     `CCoinKey`, `CCoinExtKey`, `CCoinExtPubKey` are frontend classes
     that will give appropriate instances according to current chain params.
     (`CBitcoinKey`, `CBitcoinTestnetExtKey`, etc.)

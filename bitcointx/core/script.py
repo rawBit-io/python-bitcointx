@@ -20,8 +20,8 @@ is in bitcointx.core.scripteval
 
 import struct
 import hashlib
+import threading
 from io import BytesIO
-from threading import local
 
 import bitcointx.core
 import bitcointx.core._bignum
@@ -29,11 +29,8 @@ import bitcointx.core._bignum
 from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
 
 from ..util import (
-    make_frontend_metaclass, no_bool_use_as_property, set_frontend_class
+    no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher
 )
-
-_thread_local = local()
-_frontend_metaclass = make_frontend_metaclass('_Script', _thread_local)
 
 MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
@@ -51,6 +48,18 @@ MAX_P2SH_MULTISIG_PUBKEYS = 15
 OPCODE_NAMES = {}
 
 _opcode_instances = []
+
+_thread_local = threading.local()
+_thread_local.clsmap = {}
+
+
+class ScriptClassDispatcher(ClassMappingDispatcher, identity='script',
+                            no_direct_use=True):
+    ...
+
+
+class ScriptBitcoinClassDispatcher(ScriptClassDispatcher):
+    ...
 
 
 class CScriptOp(int):
@@ -581,7 +590,8 @@ class CScriptTruncatedPushDataError(CScriptInvalidError):
         super(CScriptTruncatedPushDataError, self).__init__(msg)
 
 
-class CScriptBase(bytes):
+class CScript(bytes, metaclass=ScriptClassDispatcher,
+              next_dispatch_final=True):
     """Serialized script
 
     A bytes subclass, so you can use this directly whenever bytes are accepted.
@@ -618,7 +628,7 @@ class CScriptBase(bytes):
 
         try:
             # bytes.__add__ always returns bytes instances unfortunately
-            return self.__class__(super(CScriptBase, self).__add__(other))
+            return self.__class__(super(CScript, self).__add__(other))
         except TypeError:
             raise TypeError('Can not add a %r instance to a CScript' % other.__class__)
 
@@ -628,14 +638,14 @@ class CScriptBase(bytes):
 
     def __new__(cls, value=b''):
         if isinstance(value, (bytes, bytearray)):
-            return super(CScriptBase, cls).__new__(cls, value)
+            return super(CScript, cls).__new__(cls, value)
         else:
             def coerce_iterable(iterable):
                 for instance in iterable:
                     yield cls.__coerce_instance(instance)
             # Annoyingly on both python2 and python3 bytes.join() always
             # returns a bytes instance even when subclassed.
-            return super(CScriptBase, cls).__new__(cls, b''.join(coerce_iterable(value)))
+            return super(CScript, cls).__new__(cls, b''.join(coerce_iterable(value)))
 
     def raw_iter(self):
         """Raw iteration
@@ -749,11 +759,25 @@ class CScriptBase(bytes):
         """Test if the script is a p2sh scriptPubKey
 
         Note that this test is consensus-critical.
+
+        Note also that python-bitcointx does not aim to be
+        fully is does not aim to be fully consensus-compatible with current
+        Bitcoin Core codebase
         """
         return (len(self) == 23 and
                 self[0] == OP_HASH160 and
                 self[1] == 0x14 and
                 self[22] == OP_EQUAL)
+
+    @no_bool_use_as_property
+    def is_p2pkh(self):
+        """Test if the script is a p2pkh scriptPubKey"""
+        return (len(self) == 25
+                and self[0]  == OP_DUP
+                and self[1]  == OP_HASH160
+                and self[2]  == 0x14
+                and self[23] == OP_EQUALVERIFY
+                and self[24] == OP_CHECKSIG)
 
     @no_bool_use_as_property
     def is_witness_scriptpubkey(self):
@@ -901,6 +925,22 @@ class CScriptBase(bytes):
         if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
         return self.__class__([0, hashlib.sha256(self).digest()])
+
+    def to_p2wpkh_scriptPubKey(self, checksize=True):
+        """Create P2WPKH scriptPubKey from this redeemScript
+
+        That is, create the P2WPKH scriptPubKey that requires this script as a
+        redeemScript to spend.
+
+        checksize - Check if the redeemScript is larger than the 520-byte max
+        pushdata limit; raise ValueError if limit exceeded.
+
+        Since a >520-byte PUSHDATA makes EvalScript() fail, it's not actually
+        possible to redeem P2WSH outputs with redeem scripts >520 bytes.
+        """
+        if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
+            raise ValueError("redeemScript exceeds max allowed size; P2WPKH output would be unspendable")
+        return self.__class__([0, bitcointx.core.Hash160(self)])
 
     def GetSigOpCount(self, fAccurate):
         """Get the SigOp count.
@@ -1187,11 +1227,7 @@ def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION
     return h
 
 
-class CScript(metaclass=_frontend_metaclass):
-    ...
-
-
-class CBitcoinScript(CScriptBase):
+class CBitcoinScript(CScript, metaclass=ScriptBitcoinClassDispatcher):
     ...
 
 
@@ -1305,20 +1341,11 @@ def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
     return CScript([required] + pubkeys + [total, OP_CHECKMULTISIG])
 
 
-def _SetScriptClassParams(script_cls):
-    set_frontend_class(CScript, script_cls, _thread_local)
-
-
-# Make CBitcoinScript behave like a a subclass of CScript
-# regarding isinstance(script, CScript), etc
-CScript.register(CBitcoinScript)
-
-_SetScriptClassParams(CBitcoinScript)
-
-
 def _SetChainParams(params):
-    _SetScriptClassParams(
-        params.TRANSACTION_IDENTITY._clsmap[CScript])
+    activate_class_dispatcher(params.SCRIPT_DISPATCHER)
+
+
+activate_class_dispatcher(ScriptBitcoinClassDispatcher)
 
 
 __all__ = (

@@ -16,7 +16,7 @@ import bitcointx
 import bitcointx.core
 
 
-class Bech32Error(bitcointx.core.AddressEncodingError):
+class Bech32Error(bitcointx.core.AddressDataEncodingError):
     pass
 
 
