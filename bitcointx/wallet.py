@@ -186,7 +186,7 @@ class P2SHBitcoinAddress(CBase58BitcoinAddress):
         return script.CScript([script.OP_HASH160, self, script.OP_EQUAL])
 
     def to_redeemScript(self):
-        return self.to_scriptPubKey()
+        raise NotImplementedError("not enough data in p2sh address to reconstruct redeem script")
 
 
 class P2PKHBitcoinAddress(CBase58BitcoinAddress):

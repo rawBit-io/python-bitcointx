@@ -119,7 +119,7 @@ class Test_CBitcoinAddress(unittest.TestCase):
         with self.assertRaises(CBitcoinAddressError):
             CBitcoinAddress.from_scriptPubKey(scriptPubKey)
 
-    def test_to_redeemScript(self):
+    def test_to_redeemScript_ok(self):
         def T(str_addr, expected_scriptPubKey_hexbytes):
             addr = CBitcoinAddress(str_addr)
 
@@ -127,14 +127,21 @@ class Test_CBitcoinAddress(unittest.TestCase):
             self.assertEqual(b2x(actual_scriptPubKey),
                              expected_scriptPubKey_hexbytes)
 
-        T('31h1vYVSYuKP6AhS86fbRdMw9XHieotbST',
-          'a914000000000000000000000000000000000000000087')
-
         T('1111111111111111111114oLvT2',
           '76a914000000000000000000000000000000000000000088ac')
 
         T('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
           '76a914751e76e8199196d454941c45d1b3a323f1433bd688ac')
+
+    def test_to_redeemScript_fail(self):
+        def T(str_addr):
+            addr = CBitcoinAddress(str_addr)
+
+            with self.assertRaises(NotImplementedError):
+                addr.to_redeemScript()
+
+        T('31h1vYVSYuKP6AhS86fbRdMw9XHieotbST')
+        T('bc1qc7slrfxkknqcq2jevvvkdgvrt8080852dfjewde450xdlk4ugp7szw5tk9')
 
     def test_to_scriptPubKey(self):
         """CBitcoinAddress.to_scriptPubKey() works"""
