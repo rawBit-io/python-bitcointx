@@ -804,8 +804,8 @@ class CTransaction(ImmutableSerializable, ReprOrStrMixin, CoreCoinClass,
         markerbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         flagbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         if markerbyte == 0 and flagbyte == 1:
-            vin = VectorSerializer.stream_deserialize(CTxIn, f)
-            vout = VectorSerializer.stream_deserialize(CTxOut, f)
+            vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn)
+            vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut)
             wit = CTxWitness(
                 tuple(CTxInWitness() for dummy in range(len(vin))))
             wit = wit.stream_deserialize(f)
@@ -813,8 +813,8 @@ class CTransaction(ImmutableSerializable, ReprOrStrMixin, CoreCoinClass,
             return cls(vin, vout, nLockTime, nVersion, wit)
         else:
             f.seek(pos)  # put marker byte back, since we don't have peek
-            vin = VectorSerializer.stream_deserialize(CTxIn, f)
-            vout = VectorSerializer.stream_deserialize(CTxOut, f)
+            vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn)
+            vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut)
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion)
 
@@ -825,12 +825,12 @@ class CTransaction(ImmutableSerializable, ReprOrStrMixin, CoreCoinClass,
             assert(len(self.wit.vtxinwit) == len(self.vin))
             f.write(b'\x00')  # Marker
             f.write(b'\x01')  # Flag
-            VectorSerializer.stream_serialize(CTxIn, self.vin, f)
-            VectorSerializer.stream_serialize(CTxOut, self.vout, f)
+            VectorSerializer.stream_serialize(self.vin, f)
+            VectorSerializer.stream_serialize(self.vout, f)
             self.wit.stream_serialize(f)
         else:
-            VectorSerializer.stream_serialize(CTxIn, self.vin, f)
-            VectorSerializer.stream_serialize(CTxOut, self.vout, f)
+            VectorSerializer.stream_serialize(self.vin, f)
+            VectorSerializer.stream_serialize(self.vout, f)
         f.write(struct.pack(b"<I", self.nLockTime))
 
     def get_virtual_size(self):
@@ -988,4 +988,5 @@ __all__ = (
     'coins_to_satoshi',
     'get_size_of_compact_size',
     'calculate_transaction_virtual_size',
+    'CoreClassDispatcher',
 )

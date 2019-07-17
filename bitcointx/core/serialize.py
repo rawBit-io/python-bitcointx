@@ -233,22 +233,26 @@ class BytesSerializer(Serializer):
 class VectorSerializer(Serializer):
     """Base class for serializers of object vectors"""
 
-    # FIXME: stream_(de)serialize don't match the signatures of the base class
-    # due to the inner_cls parameter. This probably isn't optimal API design
-    # and should be rethought at some point.
-
     @classmethod
-    def stream_serialize(cls, inner_cls, objs, f, **kwargs):
+    def stream_serialize(cls, objs, f, **kwargs):
+        inner_cls = type(objs[0])
         VarIntSerializer.stream_serialize(len(objs), f)
         for obj in objs:
+            if type(obj) is not inner_cls:
+                raise ValueError(
+                    'supplied objects are of different types, '
+                    'first object is of type {}, but there is also an object '
+                    'of type {}'.format(inner_cls.__name__, type(obj).__name__))
             inner_cls.stream_serialize(obj, f, **kwargs)
 
     @classmethod
-    def stream_deserialize(cls, inner_cls, f, **kwargs):
+    def stream_deserialize(cls, f, element_class=None, **kwargs):
+        assert element_class is not None,\
+            "The class of the elements in the vector must be supplied"
         n = VarIntSerializer.stream_deserialize(f)
         r = []
         for i in range(n):
-            r.append(inner_cls.stream_deserialize(f, **kwargs))
+            r.append(element_class.stream_deserialize(f, **kwargs))
         return r
 
 

@@ -20,7 +20,6 @@ is in bitcointx.core.scripteval
 
 import struct
 import hashlib
-import threading
 from io import BytesIO
 
 import bitcointx.core
@@ -48,9 +47,6 @@ MAX_P2SH_MULTISIG_PUBKEYS = 15
 OPCODE_NAMES = {}
 
 _opcode_instances = []
-
-_thread_local = threading.local()
-_thread_local.clsmap = {}
 
 
 class ScriptClassDispatcher(ClassMappingDispatcher, identity='script',
@@ -1158,7 +1154,7 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
     if inIdx >= len(txTo.vin):
         return (HASH_ONE, "inIdx %d out of range (%d)" % (inIdx, len(txTo.vin)))
 
-    txtmp = bitcointx.core.CMutableTransaction.from_tx(txTo)
+    txtmp = txTo.to_mutable()
 
     for txin in txtmp.vin:
         txin.scriptSig = b''
@@ -1181,7 +1177,7 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
         tmp = txtmp.vout[outIdx]
         txtmp.vout = []
         for i in range(outIdx):
-            txtmp.vout.append(bitcointx.core.CTxOut())
+            txtmp.vout.append(bitcointx.core.CMutableTxOut())
         txtmp.vout.append(tmp)
 
         for i in range(len(txtmp.vin)):
@@ -1193,7 +1189,7 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
         txtmp.vin = []
         txtmp.vin.append(tmp)
 
-    txtmp.wit = bitcointx.core.CTxWitness()
+    txtmp.wit = bitcointx.core.CMutableTxWitness()
     s = txtmp.serialize(for_sighash=True)
     s += struct.pack(b"<i", hashtype)
 
@@ -1494,4 +1490,6 @@ __all__ = (
 
     'SIGVERSION_BASE',
     'SIGVERSION_WITNESS_V0',
+
+    'ScriptClassDispatcher',
 )
