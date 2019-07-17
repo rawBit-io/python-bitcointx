@@ -90,14 +90,14 @@ class Serializable(object):
         """Deserialize from a stream"""
         raise NotImplementedError
 
-    def serialize(self, params={}):
+    def serialize(self, **kwargs):
         """Serialize, returning bytes"""
         f = BytesIO()
-        self.stream_serialize(f, **params)
+        self.stream_serialize(f, **kwargs)
         return f.getvalue()
 
     @classmethod
-    def deserialize(cls, buf, allow_padding=False, params={}):
+    def deserialize(cls, buf, allow_padding=False, **kwargs):
         """Deserialize bytes, returning an instance
 
         allow_padding - Allow buf to include extra padding. (default False)
@@ -106,7 +106,7 @@ class Serializable(object):
         deserialization DeserializationExtraDataError will be raised.
         """
         fd = BytesIO(buf)
-        r = cls.stream_deserialize(fd, **params)
+        r = cls.stream_deserialize(fd, **kwargs)
         if not allow_padding:
             padding = fd.read()
             if len(padding) != 0:
@@ -238,17 +238,17 @@ class VectorSerializer(Serializer):
     # and should be rethought at some point.
 
     @classmethod
-    def stream_serialize(cls, inner_cls, objs, f, inner_params={}):
+    def stream_serialize(cls, inner_cls, objs, f, **kwargs):
         VarIntSerializer.stream_serialize(len(objs), f)
         for obj in objs:
-            inner_cls.stream_serialize(obj, f, **inner_params)
+            inner_cls.stream_serialize(obj, f, **kwargs)
 
     @classmethod
-    def stream_deserialize(cls, inner_cls, f, inner_params={}):
+    def stream_deserialize(cls, inner_cls, f, **kwargs):
         n = VarIntSerializer.stream_deserialize(f)
         r = []
         for i in range(n):
-            r.append(inner_cls.stream_deserialize(f, **inner_params))
+            r.append(inner_cls.stream_deserialize(f, **kwargs))
         return r
 
 

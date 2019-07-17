@@ -56,7 +56,7 @@ python-bitcointx is now much easier. See for example
   uses it more composable, and interoperable.
 
 * Notable new classes, functions and methods
-  - `AddressEncodingError` exception - more general than `Base58Error`
+  - `AddressDataEncodingError` exception - more general than `Base58Error`
      or `Bech32Error`, and it includes them.
   - `@no_bool_use_as_property` function decorator, to be applied to methods
     like `is_something()`, that will enforce the correct usage, so that
@@ -130,6 +130,8 @@ python-bitcointx is now much easier. See for example
     virtual size: `tx.get_virtual_size()`
   - bugfix in VerifyWitnessProgram (part of VerifyScript) - it was breaking on
     p2wsh, and on integer values on witness stack
+  - `de()serialize` and `stream_(de)serialize` now always work with `**kwargs`
+    instead of additional params being passet as dict
  
 * Breaking public API changes:
     - `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.

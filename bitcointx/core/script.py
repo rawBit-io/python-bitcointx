@@ -1194,7 +1194,7 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
         txtmp.vin.append(tmp)
 
     txtmp.wit = bitcointx.core.CTxWitness()
-    s = txtmp.serialize({'for_sighash': True})
+    s = txtmp.serialize(for_sighash=True)
     s += struct.pack(b"<i", hashtype)
 
     hash = bitcointx.core.Hash(s)

@@ -818,6 +818,7 @@ class CTransaction(ImmutableSerializable, ReprOrStrMixin, CoreCoinClass,
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion)
 
+    # NOTE: for_sighash is ignored, but may be used in other implementations
     def stream_serialize(self, f, include_witness=True, for_sighash=False):
         f.write(struct.pack(b"<i", self.nVersion))
         if include_witness and not self.wit.is_null():
@@ -886,7 +887,7 @@ def CheckTransaction(tx):  # noqa
 
     # Size limits
     base_tx = tx.to_immutable()
-    if len(base_tx.serialize({'include_witness': False})) * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT:
+    if len(base_tx.serialize(include_witness=False)) * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT:
         raise CheckTransactionError("CheckTransaction() : size limits failed")
 
     # Check for negative or overflow output values
