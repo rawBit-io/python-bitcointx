@@ -93,7 +93,31 @@ def dispatcher_mapped_list(cls):
     return clsmap[cls]
 
 
-class ClassMappingDispatcher(ABCMeta):
+if not hasattr(object, '__init_subclass__'):
+    class ABCMetaWithBackportedInitSubclass(ABCMeta):
+        """ABCMeta class, but with backport of support of __init_subclass__
+        for python versions that do not have support for pep-0487"""
+        def __new__(mcs, name, bases, dct, **kwargs):
+
+            isc = '__init_subclass__'
+            if isc in dct:
+                dct[isc] = classmethod(dct[isc])
+
+            return super(ABCMetaWithBackportedInitSubclass,
+                         mcs).__new__(mcs, name, bases, dct)
+
+        def __init__(cls, name, bases, dct, **kwargs):
+            super(ABCMetaWithBackportedInitSubclass,
+                  cls).__init__(name, bases, dct)
+
+            scls = super(cls, cls)
+            if hasattr(scls, '__init_subclass__'):
+                scls.__init_subclass__.__func__(cls, **kwargs)
+else:
+    ABCMetaWithBackportedInitSubclass = ABCMeta
+
+
+class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
 
     def __init_subclass__(mcs, identity=None, no_direct_use=False):
 
@@ -122,6 +146,9 @@ class ClassMappingDispatcher(ABCMeta):
 
     def __init__(cls, name, bases, dct, next_dispatch_final=False,
                  variant_of=None):
+
+        super(ClassMappingDispatcher, cls).__init__(name, bases, dct)
+
         mcs = type(cls)
 
         if next_dispatch_final:
