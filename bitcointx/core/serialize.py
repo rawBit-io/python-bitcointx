@@ -235,8 +235,10 @@ class VectorSerializer(Serializer):
 
     @classmethod
     def stream_serialize(cls, objs, f, **kwargs):
-        inner_cls = type(objs[0])
         VarIntSerializer.stream_serialize(len(objs), f)
+        if not len(objs):
+            return
+        inner_cls = type(objs[0])
         for obj in objs:
             if type(obj) is not inner_cls:
                 raise ValueError(
