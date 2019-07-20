@@ -617,4 +617,5 @@ __all__ = (
     'CBitcoinRegtestExtKey',
     'CBitcoinRegtestExtPubKey',
     'WalletClassDispatcher',
+    'WalletCoinClass',
 )

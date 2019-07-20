@@ -54,7 +54,15 @@ class ScriptClassDispatcher(ClassMappingDispatcher, identity='script',
     ...
 
 
+class ScriptCoinClass(metaclass=ScriptClassDispatcher):
+    ...
+
+
 class ScriptBitcoinClassDispatcher(ScriptClassDispatcher):
+    ...
+
+
+class ScriptBitcoinClass(metaclass=ScriptBitcoinClassDispatcher):
     ...
 
 
@@ -586,8 +594,7 @@ class CScriptTruncatedPushDataError(CScriptInvalidError):
         super(CScriptTruncatedPushDataError, self).__init__(msg)
 
 
-class CScript(bytes, metaclass=ScriptClassDispatcher,
-              next_dispatch_final=True):
+class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
     """Serialized script
 
     A bytes subclass, so you can use this directly whenever bytes are accepted.
@@ -1223,7 +1230,7 @@ def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION
     return h
 
 
-class CBitcoinScript(CScript, metaclass=ScriptBitcoinClassDispatcher):
+class CBitcoinScript(CScript, ScriptBitcoinClass):
     ...
 
 
@@ -1492,4 +1499,5 @@ __all__ = (
     'SIGVERSION_WITNESS_V0',
 
     'ScriptClassDispatcher',
+    'ScriptCoinClass',
 )

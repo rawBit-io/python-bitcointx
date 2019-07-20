@@ -991,4 +991,5 @@ __all__ = (
     'get_size_of_compact_size',
     'calculate_transaction_virtual_size',
     'CoreClassDispatcher',
+    'CoreCoinClass',
 )
