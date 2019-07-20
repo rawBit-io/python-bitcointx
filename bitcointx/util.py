@@ -20,11 +20,11 @@ class_mapping_dispatch_data.script = None
 
 
 class _NoBoolCallable():
-    __slots__ = ['method_name', 'value']
+    __slots__ = ['method_name', 'method']
 
-    def __init__(self, name, value):
+    def __init__(self, name, method):
         self.method_name = name
-        self.value = value
+        self.method = method
 
     def __int__(self):
         raise TypeError(
@@ -36,21 +36,27 @@ class _NoBoolCallable():
             'Using this attribute as boolean property is disabled. '
             'please use {}()'.format(self.method_name))
 
-    def __call__(self):
-        return self.value
+    def __call__(self, *args, **kwargs):
+        return self.method(*args, **kwargs)
 
 
-def no_bool_use_as_property(f):
+class no_bool_use_as_property():
     """A decorator that disables use of an attribute
     as a property in a boolean context """
 
-    @property
-    def wrapper(self, *args, **kwargs):
-        value = f(self, *args, **kwargs)
-        name = '{}().{}'.format(self.__class__.__name__, f.__name__)
-        return _NoBoolCallable(name, value)
+    def __init__(self, method):
+        self.method = method
 
-    return wrapper
+    def __get__(self, instance, owner):
+        method = self.method.__get__(instance, owner)
+
+        def wrapper(*args, **kwargs):
+            return method(*args, **kwargs)
+
+        name = '{}{}.{}'.format(owner.__name__,
+                                '' if instance is None else '()',
+                                method.__name__)
+        return _NoBoolCallable(name, wrapper)
 
 
 def activate_class_dispatcher(dclass):

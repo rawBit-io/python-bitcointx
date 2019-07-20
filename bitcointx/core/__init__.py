@@ -125,10 +125,12 @@ class CoreCoinClass(metaclass=CoreClassDispatcher):
     def to_immutable(self):
         return self._immutable_cls.from_instance(self)
 
+    @no_bool_use_as_property
     @classmethod
     def is_immutable(cls):
         return not cls.is_mutable()
 
+    @no_bool_use_as_property
     @classmethod
     def is_mutable(cls):
         if cls is cls._mutable_cls:
