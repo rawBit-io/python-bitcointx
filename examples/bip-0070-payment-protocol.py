@@ -44,7 +44,7 @@ ack_url_path = 'payment_ack'
 def payment_request():
     """Generates a http PaymentRequest object"""
 
-    bc = RPCCaller()
+    bc = RPCCaller(allow_default_conf=True)
     btc = CCoinAddress(bc.getnewaddress())
 
 #   Setting the 'amount' field to 0 (zero) should prompt the user to enter

@@ -53,7 +53,7 @@ if __name__ == '__main__':
     elif args.regtest:
         select_chain_params('bitcoin/regtest')
 
-    rpc = bitcointx.rpc.RPCCaller()
+    rpc = bitcointx.rpc.RPCCaller(allow_default_conf=True)
 
     digests = []
     for f in args.hash_file:

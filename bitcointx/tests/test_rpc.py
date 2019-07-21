@@ -12,7 +12,7 @@
 
 import unittest
 
-from bitcointx.rpc import RPCCaller
+from bitcointx.rpc import RPCCaller, split_hostport
 
 
 class Test_RPC(unittest.TestCase):
@@ -26,6 +26,27 @@ class Test_RPC(unittest.TestCase):
     # then maybe we can add tests that will make sense.
     # For now, just test that we can create the instance.
     RPCCaller(service_url='http://user:pass@host')
+
+    def test_split_hostport(self):
+        def T(hostport, expected_pair):
+            (host, port) = split_hostport(hostport)
+            self.assertEqual((host, port), expected_pair)
+
+        T('localhost', ('localhost', None))
+        T('localhost:123', ('localhost', 123))
+        T('localhost:0', ('localhost:0', None))
+        T('localhost:88888', ('localhost:88888', None))
+        T('lo.cal.host:123', ('lo.cal.host', 123))
+        T('lo.cal.host:123_', ('lo.cal.host:123_', None))
+        T('lo:cal:host:123', ('lo:cal:host:123', None))
+        T('local:host:123', ('local:host:123', None))
+        T('[1a:2b:3c]:491', ('[1a:2b:3c]', 491))
+        # split_hostport doesn't care what's in square brackets
+        T('[local:host]:491', ('[local:host]', 491))
+        T('[local:host]:491934', ('[local:host]:491934', None))
+        T('.[local:host]:491', ('.[local:host]:491', None))
+        T('[local:host].:491', ('[local:host].:491', None))
+        T('[local:host]:p491', ('[local:host]:p491', None))
 
 #    def test_can_validate(self):
 #        working_address = '1CB2fxLGAZEzgaY4pjr4ndeDWJiz3D3AT7'

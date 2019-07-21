@@ -97,7 +97,7 @@ if args.testnet:
 elif args.regtest:
     bitcointx.select_chain_params('bitcoin/regtest')
 
-rpc = bitcointx.rpc.RPCCaller()
+rpc = bitcointx.rpc.RPCCaller(allow_default_conf=True)
 
 if args.privkey is None:
     args.privkey = CCoinKey.from_secret_bytes(os.urandom(32))

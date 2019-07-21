@@ -101,7 +101,7 @@ class InWarmupError(JSONRPCError):
     RPC_ERROR_CODE = -28
 
 
-def _try_read_conf_file(conf_file):
+def _try_read_conf_file(conf_file, allow_default_conf):
     # Bitcoin Core accepts empty rpcuser,
     # not specified in conf_file
     conf = {'rpcuser': ""}
@@ -119,9 +119,31 @@ def _try_read_conf_file(conf_file):
 
     # Treat a missing bitcoin.conf as though it were empty
     except FileNotFoundError:
-        pass
+        assert allow_default_conf, ("missing config file is only allowed when "
+                                    "allow_default_conf is True")
 
     return conf
+
+
+def split_hostport(hostport):
+    r = hostport.rsplit(':', maxsplit=1)
+    if len(r) == 1:
+        return (hostport, None)
+
+    maybe_host, maybe_port = r
+
+    if ':' in maybe_host:
+        if not (maybe_host.startswith('[') and maybe_host.endswith(']')):
+            return (hostport, None)
+
+    if not maybe_port.isdigit():
+        return (hostport, None)
+
+    port = int(maybe_port)
+    if port > 0 and port < 0x10000:
+        return (maybe_host, port)
+
+    return (hostport, None)
 
 
 class RPCCaller:
@@ -129,6 +151,7 @@ class RPCCaller:
                  service_url=None,
                  service_port=None,
                  conf_file=None,
+                 allow_default_conf=False,
                  timeout=DEFAULT_HTTP_TIMEOUT,
                  connection=None):
 
@@ -145,22 +168,24 @@ class RPCCaller:
 
             # Figure out the path to the config file
             if conf_file is None:
+                assert allow_default_conf, ("if conf_file is not specified, "
+                                            "allow_default_conf must be True")
                 conf_file = params.get_config_path()
 
-            conf = _try_read_conf_file(conf_file)
+            conf = _try_read_conf_file(conf_file, allow_default_conf)
 
             if service_port is None:
                 service_port = params.RPC_PORT
 
             extraname = params.get_datadir_extra_name()
 
-            conf['rpcport'] = int(conf.get('{}.rpcport'.format(extraname),
-                                           conf.get('rpcport', service_port)))
-            conf['rpchost'] = conf.get('{}.rpcconnect'.format(extraname),
-                                       conf.get('rpcconnect', 'localhost'))
+            (host, port) = split_hostport(
+                conf.get('{}.rpcconnect'.format(extraname),
+                         conf.get('rpcconnect', 'localhost')))
 
-            service_url = ('%s://%s:%d' %
-                           ('http', conf['rpchost'], conf['rpcport']))
+            port = int(conf.get('{}.rpcport'.format(extraname),
+                                conf.get('rpcport', port or service_port)))
+            service_url = ('%s://%s:%d' % ('http', host, port))
 
             cookie_dir = conf.get('datadir', os.path.dirname(conf_file))
             cookie_dir = os.path.join(cookie_dir,
