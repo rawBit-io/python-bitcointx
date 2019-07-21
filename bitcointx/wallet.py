@@ -87,6 +87,7 @@ class CCoinAddress(WalletCoinClass):
             raise CCoinAddressError(
                 'Correct encoding for any of {}, but not correct format'
                 .format(recognized_encoding))
+
         raise CCoinAddressError(
             'Unrecognized encoding for any of {}'.format(enc_class_set))
 
