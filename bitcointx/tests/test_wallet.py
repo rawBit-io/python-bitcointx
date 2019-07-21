@@ -42,35 +42,41 @@ from bitcointx.wallet import (
 class Test_CCoinAddress(unittest.TestCase):
 
     def test_address_implementations(self, paramclasses=None,
-                                     extra_addr_testfunc=None):
+                                     extra_addr_testfunc=lambda *args: False,
+                                     extra_classes=None):
         pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
         if paramclasses is None:
             paramclasses = bitcointx.ChainParamsMeta.get_registered_chain_params()
         for paramclass in paramclasses:
             with ChainParams(paramclass):
-                for cclass in (P2SHCoinAddress, P2PKHCoinAddress,
-                               P2WSHCoinAddress, P2WPKHCoinAddress):
-                    for aclass in dispatcher_mapped_list(cclass):
-                        self.assertTrue(issubclass(aclass, CCoinAddress))
+                def recursive_check(aclass):
+                    self.assertTrue(issubclass(aclass, CCoinAddress))
 
-                        if extra_addr_testfunc is not None \
-                                and extra_addr_testfunc(aclass, pub):
-                            continue
+                    if extra_addr_testfunc(aclass, pub):
+                        pass
+                    else:
+                        a = None
 
                         if getattr(aclass, 'from_pubkey', None):
                             a = aclass.from_pubkey(pub)
-                        else:
+                        elif getattr(aclass, 'from_redeemScript', None):
                             a = aclass.from_redeemScript(
                                 CScript(b'\xa9' + Hash160(pub) + b'\x87'))
 
-                        spk = a.to_scriptPubKey()
-                        self.assertEqual(a, aclass.from_scriptPubKey(spk))
-                        a2 = aclass.from_bytes(a)
-                        self.assertEqual(bytes(a), bytes(a2))
-                        self.assertEqual(str(a), str(a2))
-                        a3 = aclass(str(a))
-                        self.assertEqual(bytes(a), bytes(a3))
-                        self.assertEqual(str(a), str(a3))
+                        if a is not None:
+                            spk = a.to_scriptPubKey()
+                            self.assertEqual(a, aclass.from_scriptPubKey(spk))
+                            a2 = aclass.from_bytes(a)
+                            self.assertEqual(bytes(a), bytes(a2))
+                            self.assertEqual(str(a), str(a2))
+                            a3 = aclass(str(a))
+                            self.assertEqual(bytes(a), bytes(a3))
+                            self.assertEqual(str(a), str(a3))
+
+                    for next_aclass in dispatcher_mapped_list(aclass):
+                        recursive_check(next_aclass)
+
+                recursive_check(CCoinAddress)
 
 
 class Test_CBitcoinAddress(unittest.TestCase):
