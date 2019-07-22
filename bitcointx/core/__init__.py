@@ -422,11 +422,6 @@ class CBitcoinMutableOutPoint(CBitcoinOutPoint, CMutableOutPoint,
     __slots__ = []
 
 
-class CBitcoinMutableOutPointX(CBitcoinOutPoint, CMutableOutPoint,
-                               variant_of=CBitcoinMutableOutPoint):
-    """A mutable Bitcoin COutPoint"""
-
-
 class CTxIn(ImmutableSerializable, CoreCoinClass, next_dispatch_final=True):
     """A base class for an input of a transaction
 
