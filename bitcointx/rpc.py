@@ -119,8 +119,9 @@ def _try_read_conf_file(conf_file, allow_default_conf):
 
     # Treat a missing bitcoin.conf as though it were empty
     except FileNotFoundError:
-        assert allow_default_conf, ("missing config file is only allowed when "
-                                    "allow_default_conf is True")
+        if not allow_default_conf:
+            # missing conf file is only allowed when allow_default_conf is True
+            raise
 
     return conf
 
@@ -168,8 +169,8 @@ class RPCCaller:
 
             # Figure out the path to the config file
             if conf_file is None:
-                assert allow_default_conf, ("if conf_file is not specified, "
-                                            "allow_default_conf must be True")
+                raise ValueError("if conf_file is not specified, "
+                                 "allow_default_conf must be True")
                 conf_file = params.get_config_path()
 
             conf = _try_read_conf_file(conf_file, allow_default_conf)
