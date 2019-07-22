@@ -10,6 +10,7 @@
 # LICENSE file.
 
 import threading
+from types import FunctionType
 from collections import defaultdict
 from abc import ABCMeta
 
@@ -117,6 +118,27 @@ else:
     ABCMetaWithBackportedInitSubclass = ABCMeta
 
 
+class DispatcherMethodWrapper():
+    def __init__(self, method, wrapper):
+        self.method = method
+        self.wrapper = wrapper
+
+    def __get__(self, instance, owner):
+        bound_method = self.method.__get__(instance, owner)
+        return self.wrapper(bound_method, type(owner))
+
+
+def dispatcher_wrap_methods(cls, wrap_fn, *, dct=None):
+    if dct is None:
+        dct = cls.__dict__
+
+    for attr_name, attr_value in dct.items():
+        if isinstance(attr_value, (FunctionType, classmethod, staticmethod,
+                                   DispatcherMethodWrapper)):
+            setattr(cls, attr_name,
+                    DispatcherMethodWrapper(attr_value, wrap_fn))
+
+
 class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
 
     def __init_subclass__(mcs, identity=None, no_direct_use=False):
@@ -150,6 +172,27 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
         super(ClassMappingDispatcher, cls).__init__(name, bases, dct)
 
         mcs = type(cls)
+
+        # Wrap all methods of a class to enable the relevant dispatcher
+        # within the methods.
+        # For example, inside CBitcoinTransaction.deserialize(), CTxOut()
+        # should product CBitcoinTxOut, regardless of the current globally
+        # chosen chain parameters.
+        def wrap(fn, mcs):
+            def wrapper(*args, **kwargs):
+                if mcs._class_dispatcher__no_direct_use:
+                    # base dispatcher class, cannot be activated
+                    return fn(*args, **kwargs)
+
+                prev_dispatcher = activate_class_dispatcher(mcs)
+                try:
+                    return fn(*args, **kwargs)
+                finally:
+                    activate_class_dispatcher(prev_dispatcher)
+
+            return wrapper
+
+        dispatcher_wrap_methods(cls, wrap)
 
         if next_dispatch_final:
             # for correctness, the classes that are not meant to be

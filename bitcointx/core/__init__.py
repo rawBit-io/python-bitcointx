@@ -15,7 +15,6 @@
 import threading
 import binascii
 import struct
-from types import FunctionType
 from abc import abstractmethod
 from io import BytesIO
 
@@ -30,6 +29,7 @@ from .serialize import (
 
 from ..util import (
     no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher,
+    dispatcher_wrap_methods
 )
 
 # Core definitions
@@ -78,33 +78,22 @@ class CoreClassDispatcher(ClassMappingDispatcher, identity='core',
             # will substitute immutable class for its mutable twin.
             combined_dict = mutable_of.__dict__.copy()
             combined_dict.update(cls.__dict__)
-            for attr_name, attr_value in combined_dict.items():
-                def wrap(fn):
-                    def wrapper(*args, **kwargs):
-                        if not _thread_local.mutable_context_enabled:
-                            # We are about to call a method of a mutable class.
-                            # enable the mutable context, to indicate to
-                            # __call__ and __getattribute__ that they should
-                            # switch any immutable class to their mutable twin.
-                            _thread_local.mutable_context_enabled = True
-                            try:
-                                return fn(*args, **kwargs)
-                            finally:
-                                # After the method call, restore the context
-                                _thread_local.mutable_context_enabled = False
-                        else:
-                            # Once mutable context is enabled, it persists,
-                            # and can only be switched off directly
-                            # by setting mutable_context_enabled to False
-                            return fn(*args, **kwargs)
 
-                    return wrapper
+            def wrap(fn, mcs):
+                def wrapper(*args, **kwargs):
+                    # We are about to call a method of a mutable class.
+                    # enable the mutable context, but save previous state.
+                    prev_state = _thread_local.mutable_context_enabled
+                    _thread_local.mutable_context_enabled = True
+                    try:
+                        return fn(*args, **kwargs)
+                    finally:
+                        # After the method call, restore the context
+                        _thread_local.mutable_context_enabled = prev_state
 
-                if isinstance(attr_value, FunctionType):
-                    setattr(cls, attr_name, wrap(attr_value))
-                elif isinstance(attr_value, classmethod):
-                    bound_method = attr_value.__get__(None, cls)
-                    setattr(cls, attr_name, wrap(bound_method))
+                return wrapper
+
+            dispatcher_wrap_methods(cls, wrap, dct=combined_dict)
 
     def __call__(cls, *args, **kwargs):
         if _thread_local.mutable_context_enabled:
