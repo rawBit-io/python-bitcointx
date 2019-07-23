@@ -68,9 +68,14 @@ python-bitcointx is now much easier. See for example
     This prevents bugs by accidentally treating method as property.
     Note that method-call convention vs property convention for `is_*`
     was selected for historical reasons - in the existing code, there was
-    much more method-like `is_*` usage then property-like. That needed to
-    be made consistent, but with less breakage. Therefore, the convention
-    that was more used thorugh code was chosen.
+    much more method-like `is_something()` usage then property-like.
+    That needed to be made consistent, but with less breakage.
+    Therefore, the convention that was more used thorugh code was chosen.
+    Chosing property-like convention might also cause subtle bugs when
+    code written for python-bitcointx would be used with python-bitcoinlib
+    or its other descendants. bool(script.is_valid) would give appropriate
+    result in one case, and will be always true in other case. Thus,
+    method-like is safer than property-like access to these boolean attributes.
   - `CScriptBase` now have `sighash()` and `raw_sighash()` methods,
     that return appropriate signature hash for the script instance.
     Useful when sighash implementation is not the same as Bitcoin's.
