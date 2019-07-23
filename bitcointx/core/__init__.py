@@ -52,13 +52,6 @@ class CoreClassDispatcher(ClassMappingDispatcher, identity='core',
                      mcs).__new__(mcs, name, bases, dct, **kwargs)
 
     def __init__(cls, name, bases, dct, mutable_of=None, **kwargs):
-        if 'variant_of' in kwargs:
-            if mutable_of is not None:
-                raise AssertionError(
-                    'conflicting kwargs: mutable_of and variant_of both specified')
-        else:
-            kwargs['variant_of'] = mutable_of
-
         super(CoreClassDispatcher, cls).__init__(name, bases, dct, **kwargs)
         if mutable_of is not None:
             assert issubclass(mutable_of, CoreCoinClass)
