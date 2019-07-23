@@ -764,8 +764,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         Note that this test is consensus-critical.
 
         Note also that python-bitcointx does not aim to be
-        fully is does not aim to be fully consensus-compatible with current
-        Bitcoin Core codebase
+        fully consensus-compatible with current Bitcoin Core codebase
         """
         return (len(self) == 23 and
                 self[0] == OP_HASH160 and
