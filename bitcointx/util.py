@@ -63,8 +63,9 @@ class no_bool_use_as_property():
 def activate_class_dispatcher(dclass):
     assert ClassMappingDispatcher in dclass.__mro__
 
-    assert not dclass._class_dispatcher__no_direct_use,\
-        "{} must not be used directly".format(dclass.__name__)
+    if dclass._class_dispatcher__no_direct_use:
+        raise ValueError("{} must not be used directly"
+                         .format(dclass.__name__))
 
     prev = getattr(class_mapping_dispatch_data,
                    dclass._class_dispatcher__identity)
@@ -140,16 +141,35 @@ def dispatcher_wrap_methods(cls, wrap_fn, *, dct=None):
 
 
 class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
+    """A custom class dispatcher that translates invocations and attribute
+    access of a superclass to a certain subclass according to internal map.
+    This map is built from the actual superclass-subclass relations between
+    the classes, with the help of a few additional flags that control the
+    final mapping"""
 
     def __init_subclass__(mcs, identity=None, no_direct_use=False):
+        """Initialize the dispatcher metaclass.
+           Arguments:
+                identity:
+                    a string that sets the identity of the mapping:
+                        the module that this mapping belongs to
+                        (core, wallet, script, ...)
+                no_direct_use:
+                    if True, means that this is a 'base dispatcher'
+                    - it cannot be used directly, and must be subclassed.
+            """
 
         # metaclass attributes pollute the namespace of all the classes
         # that use the metaclass.
         # Use '_class_dispatcher__' prefix to minimize pollution.
 
         if identity is not None:
-            assert getattr(mcs, '_class_dispatcher__identity', None) is None,\
-                "can't replace identity that was already set by the base class"
+            if not hasattr(class_mapping_dispatch_data, identity):
+                raise ValueError('identity {} is not recognized'
+                                 .format(identity))
+            if hasattr(mcs, '_class_dispatcher__identity'):
+                raise AssertionError("can't replace identity that was already "
+                                     "set by the base class")
             mcs._class_dispatcher__identity = identity
 
         if no_direct_use:
@@ -168,9 +188,24 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
 
     def __init__(cls, name, bases, dct, next_dispatch_final=False,
                  variant_of=None):
+        """Build the dispatching map out of the superclass-subclass
+        relationships, and wrap the methods of the classes so that appropriate
+        dispatcher is active inside the methods.
+            Arguments:
+                next_dispatch_final:
+                    if True, means that this class should be mapped to
+                    a single subclass, the mapping cannot be ambiguous.
+                    If there's more than one subclasses, only one, 'default'
+                    subclass may be in the mapping, an all other should
+                    specify variant_of=<default_subclass>
+                variant_of:
+                    specifies another class that cls is a variant of,
+                    when cls is not the default mapping for the superclass
+                    that was marked with next_dispatch_final=True"""
 
         super(ClassMappingDispatcher, cls).__init__(name, bases, dct)
 
+        # get the dispatcher class
         mcs = type(cls)
 
         # Wrap all methods of a class to enable the relevant dispatcher
@@ -181,7 +216,13 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
         def wrap(fn, mcs):
             def wrapper(*args, **kwargs):
                 if mcs._class_dispatcher__no_direct_use:
-                    # base dispatcher class, cannot be activated
+                    # The method of the class assigned to base dispatcher is
+                    # called. Base dispatcher cannot be activated, so we
+                    # just call the method.
+                    # This happens when the base class is mapped to several
+                    # subclasses, and the methods in the base class are
+                    # supposed to do their own dispatching, using
+                    # dispatcher_mapped_list function.
                     return fn(*args, **kwargs)
 
                 prev_dispatcher = activate_class_dispatcher(mcs)
@@ -200,7 +241,7 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
             # have a mapping to one particular class, need to be marked
             # with next_dispatch_final=True parameter.
             # Here we store these classes to the set, to enable checking
-            # the final classmap against this set.
+            # the subsequent mappings against this set.
             mcs._class_dispatcher__pre_final_dispatch.add(cls)
 
         if mcs._class_dispatcher__no_direct_use:
@@ -224,19 +265,22 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
             target_list = mcs._class_dispatcher__clsmap[bcs]
 
             if any(issubclass(cls, target_cls) for target_cls in target_list):
-                # if the mapped set contains a superclass of the current class,
-                # do not add the class to the set, so that only
+                # if the mapped list contains a superclass of the
+                # current class, do not add the class to the set, so that only
                 # the direct subclasses will be in the mapping
                 continue
 
             if variant_of is not None and variant_of in target_list:
                 # If the class is a variant of the class that is already
-                # in the map, skip it
+                # is the target of the maping of some class, skip it
                 continue
 
-            # check for correctness in regard to next_dispatch_final param
             if bcs in mcs._class_dispatcher__pre_final_dispatch:
+                # if the class is a subclass of pre_final_dispatch class,
+                # it is itself a final target of the dispatch.
                 mcs._class_dispatcher__final_dispatch.add(cls)
+
+                # check for correctness in regard to next_dispatch_final param
                 if next_dispatch_final:
                     raise AssertionError(
                         '{} is marked with next_dispatch_final=True, '
@@ -255,42 +299,31 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
             target_list.append(cls)
 
     def __call__(cls, *args, **kwargs):
+        """Perform class mapping in accordance to the currently active
+        dispatcher class"""
         mcs = type(cls)
-
         cur_dispatcher = getattr(class_mapping_dispatch_data,
                                  mcs._class_dispatcher__identity)
-
         if cur_dispatcher is None:
             return type.__call__(cls, *args, **kwargs)
 
-        assert not cur_dispatcher._class_dispatcher__no_direct_use,\
-            "{} must not be used directly".format(cur_dispatcher.__name__)
-
         class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
-
         if len(class_list) != 1:
             return type.__call__(cls, *args, **kwargs)
-
         return type.__call__(class_list[0], *args, **kwargs)
 
     def __getattribute__(cls, name):
+        """Perform class attribute mapping in accordance to the currently
+        active dispatcher class (except python-specific attributes)"""
         if name.startswith('__') and name.endswith('__'):
             return type.__getattribute__(cls, name)
-
         mcs = type(cls)
-
         cur_dispatcher = getattr(class_mapping_dispatch_data,
                                  mcs._class_dispatcher__identity)
-
         if cur_dispatcher is None:
             return type.__getattribute__(cls, name)
 
-        assert not cur_dispatcher._class_dispatcher__no_direct_use,\
-            "{} must not be used directly".format(cur_dispatcher.__name__)
-
         class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
-
         if len(class_list) != 1:
             return type.__getattribute__(cls, name)
-
         return getattr(class_list[0], name)
