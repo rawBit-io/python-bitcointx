@@ -49,16 +49,15 @@ OPCODE_NAMES = {}
 _opcode_instances = []
 
 
-class ScriptClassDispatcher(ClassMappingDispatcher, identity='script',
-                            no_direct_use=True):
+class ScriptCoinClassDispatcher(ClassMappingDispatcher, identity='script'):
     ...
 
 
-class ScriptCoinClass(metaclass=ScriptClassDispatcher):
+class ScriptCoinClass(metaclass=ScriptCoinClassDispatcher):
     ...
 
 
-class ScriptBitcoinClassDispatcher(ScriptClassDispatcher):
+class ScriptBitcoinClassDispatcher(ScriptCoinClassDispatcher):
     ...
 
 
@@ -1343,10 +1342,7 @@ def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
     return CScript([required] + pubkeys + [total, OP_CHECKMULTISIG])
 
 
-def _SetChainParams(params):
-    activate_class_dispatcher(params.SCRIPT_DISPATCHER)
-
-
+# default dispatcher for the module
 activate_class_dispatcher(ScriptBitcoinClassDispatcher)
 
 
@@ -1497,6 +1493,6 @@ __all__ = (
     'SIGVERSION_BASE',
     'SIGVERSION_WITNESS_V0',
 
-    'ScriptClassDispatcher',
+    'ScriptCoinClassDispatcher',
     'ScriptCoinClass',
 )

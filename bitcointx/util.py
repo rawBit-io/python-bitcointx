@@ -10,6 +10,7 @@
 # LICENSE file.
 
 import threading
+import functools
 from types import FunctionType
 from collections import defaultdict
 from abc import ABCMeta
@@ -60,7 +61,24 @@ class no_bool_use_as_property():
         return _NoBoolCallable(name, wrapper)
 
 
+def get_class_dispatcher_depends(dclass):
+    """Return a set of dispatcher the supplied dispatcher class depends on"""
+    dset = set()
+
+    for dep_dclass in dclass._class_dispatcher__depends:
+        dset.add(dep_dclass)
+        dset |= get_class_dispatcher_depends(dep_dclass)
+
+    assert len(dset) == len(set([elt._class_dispatcher__identity
+                                 for elt in dset])), \
+        "all the dispatcher in the set must have distinct identities"
+
+    return dset
+
+
 def activate_class_dispatcher(dclass):
+    """Activate particular class dispatcher - so that the mapping it contains
+    will be active. Activates its dependent dispatchers, recursively, too."""
     assert ClassMappingDispatcher in dclass.__mro__
 
     if dclass._class_dispatcher__no_direct_use:
@@ -71,6 +89,9 @@ def activate_class_dispatcher(dclass):
                    dclass._class_dispatcher__identity)
 
     if dclass is not prev:
+        for ddep in get_class_dispatcher_depends(dclass):
+            activate_class_dispatcher(ddep)
+
         setattr(class_mapping_dispatch_data,
                 dclass._class_dispatcher__identity,
                 dclass)
@@ -79,6 +100,8 @@ def activate_class_dispatcher(dclass):
 
 
 def dispatcher_mapped_list(cls):
+    """Get a list of the classes that particular class is to be
+    dispatched to"""
     mcs = type(cls)
     if ClassMappingDispatcher not in mcs.__mro__:
         raise ValueError('{} is not a dispatcher class'.format(cls.__name__))
@@ -120,6 +143,8 @@ else:
 
 
 class DispatcherMethodWrapper():
+    """A helper class that allows to wrap both classmethods and staticmethods,
+    in addition to normal instance methods"""
     def __init__(self, method, wrapper):
         self.method = method
         self.wrapper = wrapper
@@ -130,6 +155,8 @@ class DispatcherMethodWrapper():
 
 
 def dispatcher_wrap_methods(cls, wrap_fn, *, dct=None):
+    """Wrap all methods of a class with a function, that would
+    establish the dispatching context for that method"""
     if dct is None:
         dct = cls.__dict__
 
@@ -147,16 +174,26 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
     the classes, with the help of a few additional flags that control the
     final mapping"""
 
-    def __init_subclass__(mcs, identity=None, no_direct_use=False):
+    def __init_subclass__(mcs, identity=None, depends=()):
         """Initialize the dispatcher metaclass.
            Arguments:
                 identity:
                     a string that sets the identity of the mapping:
-                        the module that this mapping belongs to
-                        (core, wallet, script, ...)
-                no_direct_use:
-                    if True, means that this is a 'base dispatcher'
-                    - it cannot be used directly, and must be subclassed.
+                    the module that this mapping belongs to
+                    (core, wallet, script, ...)
+                    if identity is specified, that means that this is a
+                    'base dispatcher' - it cannot be used directly,
+                    and must be subclassed. Subclasses of the base
+                    dispatcher cannot set their own identity, they all
+                    will use the same identity set for the base dispatcher.
+                depends:
+                    a list of dispatcher that this dispatcher depends on.
+                    the current dispatcher may directly use classes dispatched
+                    by the dependent dispatchers, or the dependency may be
+                    'structural' - as WalletBitcoinDispatcher, when activated,
+                    implies that CoreBitcoinDispatcher should also be
+                    activated, along with ScriptBitcoinDispatcher, for the
+                    class dispatching situation to be consistent.
             """
 
         # metaclass attributes pollute the namespace of all the classes
@@ -171,15 +208,36 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
                 raise AssertionError("can't replace identity that was already "
                                      "set by the base class")
             mcs._class_dispatcher__identity = identity
-
-        if no_direct_use:
             mcs._class_dispatcher__no_direct_use = True
-            mcs._class_dispatcher__final_dispatch = set()
             mcs._class_dispatcher__pre_final_dispatch = set()
+            mcs._class_dispatcher__depends = depends
+            for ddisp in depends:
+                if not issubclass(ddisp, ClassMappingDispatcher):
+                    raise TypeError('{} is not a dispatcher class'
+                                    .format(ddisp.__name__))
             return
 
+        if not getattr(mcs, '_class_dispatcher__identity', None):
+            raise TypeError(
+                "identity attribute is not set for the base dispatcher class")
+
+        mcs._class_dispatcher__final_dispatch = set()
         mcs._class_dispatcher__no_direct_use = False
         mcs._class_dispatcher__clsmap = defaultdict(list)
+
+        parent_depends = mcs._class_dispatcher__depends
+        for ddisp in depends:
+            matches = sum(int(issubclass(ddisp, pdep))
+                          for pdep in parent_depends)
+            if matches != 1:
+                raise TypeError(
+                    'depends= arguments should specify a dependencies that is '
+                    'compatible with dependencies of parent class {}, but '
+                    '{} is a subclass of {} of those dependencies'
+                    .format([pd.__name__ for pd in parent_depends],
+                            ddisp.__name__, matches))
+
+        mcs._class_dispatcher__depends = depends
 
     def __new__(mcs, name, bases, dct, next_dispatch_final=False,
                 variant_of=None):
@@ -214,6 +272,7 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
         # should product CBitcoinTxOut, regardless of the current globally
         # chosen chain parameters.
         def wrap(fn, mcs):
+            @functools.wraps(fn)
             def wrapper(*args, **kwargs):
                 if mcs._class_dispatcher__no_direct_use:
                     # The method of the class assigned to base dispatcher is
@@ -327,3 +386,14 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
         if len(class_list) != 1:
             return type.__getattribute__(cls, name)
         return getattr(class_list[0], name)
+
+
+class classgetter:
+    """simple decorator to create a read-only class property
+    from class method"""
+
+    def __init__(self, f):
+        self.f = f
+
+    def __get__(self, obj, owner):
+        return self.f(owner)

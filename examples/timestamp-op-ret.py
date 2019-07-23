@@ -18,9 +18,9 @@ import sys
 
 import bitcointx.rpc
 
-from bitcointx import select_chain_params, get_current_chain_params
+from bitcointx import select_chain_params
 from bitcointx.core import (
-    Hash, x, lx, b2x, COIN, coins_to_satoshi,
+    Hash, x, lx, b2x, coins_to_satoshi, CoreCoinParams,
     CTransaction, CTxIn, CMutableTxOut, COutPoint
 )
 from bitcointx.core.script import CScript, OP_RETURN, OP_CHECKSIG
@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
         change_addr = rpc.getnewaddress()
         change_pubkey_hex = rpc.getaddressinfo(change_addr)['pubkey']
-        change_out = CMutableTxOut(get_current_chain_params().MAX_MONEY,
+        change_out = CMutableTxOut(CoreCoinParams.MAX_MONEY,
                                    CScript([x(change_pubkey_hex),
                                             OP_CHECKSIG]))
 
@@ -90,11 +90,11 @@ if __name__ == '__main__':
 
         tx = CTransaction(txins, txouts).to_mutable()
 
-        FEE_PER_VBYTE = 0.00025*COIN/1000
+        FEE_PER_VBYTE = 0.00025*CoreCoinParams.COIN/1000
         while True:
             required_fee = tx.get_virtual_size() * FEE_PER_VBYTE
             tx.vout[0].nValue = int(
-                value_in - max(required_fee, 0.00011*COIN))
+                value_in - max(required_fee, 0.00011*CoreCoinParams.COIN))
 
             r = rpc.signrawtransactionwithwallet(b2x(tx.serialize()))
             assert r['complete']

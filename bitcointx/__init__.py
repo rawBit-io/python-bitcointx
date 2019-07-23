@@ -12,6 +12,7 @@
 
 import os
 import platform
+import threading
 
 from abc import ABCMeta
 from contextlib import contextmanager
@@ -20,29 +21,32 @@ from collections import OrderedDict
 import bitcointx.core
 import bitcointx.core.script
 import bitcointx.wallet
+import bitcointx.util
 
 # Note that setup.py can break if __init__.py imports any external
 # dependencies, as these might not be installed when setup.py runs. In this
 # case __version__ could be moved to a separate version.py and imported here.
 __version__ = '1.0.0'
 
+_thread_local = threading.local()
+
 
 class ChainParamsMeta(ABCMeta):
     _required_attributes = (
-        ('MAX_MONEY', isinstance, int),
         ('NAME', isinstance, str),
         ('RPC_PORT', isinstance, int),
-        ('CONFIG_LOCATION', isinstance, tuple),
-        ('CORE_DISPATCHER', issubclass, bitcointx.core.CoreClassDispatcher),
         ('WALLET_DISPATCHER', issubclass,
-         bitcointx.wallet.WalletClassDispatcher),
-        ('SCRIPT_DISPATCHER', issubclass,
-         bitcointx.core.script.ScriptClassDispatcher),
+         bitcointx.wallet.WalletCoinClassDispatcher),
     )
     _registered_classes = OrderedDict()
     _common_base_cls = None
 
-    def __new__(cls, cls_name, bases, dct):
+    def __new__(cls, cls_name, bases, dct, name=None):
+        """check that the chainparams class uses unique base class
+        (no two chain param classes can share a base class).
+        if `name=` parameter is specified in the class declaration,
+        set NAME attribute on a class, and register that class in
+        a table for lookup by name."""
         cls_instance = super(ChainParamsMeta, cls).__new__(cls, cls_name,
                                                            bases, dct)
 
@@ -61,7 +65,9 @@ class ChainParamsMeta(ABCMeta):
                         .format(cls_name, attr_name, checkfn.__name__,
                                 checkarg.__name__))
 
-            cls._registered_classes[cls_instance.NAME] = cls_instance
+            if name is not None:
+                cls_instance.NAME = name
+                cls._registered_classes[name] = cls_instance
         else:
             if cls._common_base_cls:
                 raise TypeError(
@@ -72,13 +78,13 @@ class ChainParamsMeta(ABCMeta):
 
         return cls_instance
 
-    @classmethod
-    def find_chain_params(cls, *, name=None):
-        return cls._registered_classes.get(name)
 
-    @classmethod
-    def get_registered_chain_params(cls):
-        return cls._registered_classes.values()
+def find_chain_params(*, name=None):
+    return ChainParamsMeta._registered_classes.get(name)
+
+
+def get_registered_chain_params():
+    return ChainParamsMeta._registered_classes.values()
 
 
 class ChainParamsBase(metaclass=ChainParamsMeta):
@@ -122,29 +128,23 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
         return ' '.join(name_parts)
 
 
-class BitcoinMainnetParams(ChainParamsBase):
+class BitcoinMainnetParams(ChainParamsBase, name='bitcoin'):
     RPC_PORT = 8332
-    MAX_MONEY = 21000000 * bitcointx.core.COIN
-    NAME = 'bitcoin'
-    CORE_DISPATCHER = bitcointx.core.CoreBitcoinClassDispatcher
     WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinClassDispatcher
-    SCRIPT_DISPATCHER = bitcointx.core.script.ScriptBitcoinClassDispatcher
 
 
-class BitcoinTestnetParams(BitcoinMainnetParams):
+class BitcoinTestnetParams(BitcoinMainnetParams, name='bitcoin/testnet'):
     RPC_PORT = 18332
-    NAME = 'bitcoin/testnet'
     WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinTestnetClassDispatcher
 
 
-class BitcoinRegtestParams(BitcoinMainnetParams):
+class BitcoinRegtestParams(BitcoinMainnetParams, name='bitcoin/regtest'):
     RPC_PORT = 18443
-    NAME = 'bitcoin/regtest'
     WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinRegtestClassDispatcher
 
 
 def get_current_chain_params():
-    return bitcointx.core._get_current_chain_params()
+    return _thread_local.params
 
 
 @contextmanager
@@ -171,7 +171,7 @@ def select_chain_params(params, **kwargs):
     """
 
     if isinstance(params, str):
-        params_cls = ChainParamsMeta.find_chain_params(name=params)
+        params_cls = find_chain_params(name=params)
         if params_cls is None:
             raise ValueError('Unknown chain %r' % params)
         params = params_cls(**kwargs)
@@ -182,9 +182,20 @@ def select_chain_params(params, **kwargs):
         raise ValueError('Supplied chain params is not a subclass of '
                          'ChainParamsBase')
 
-    bitcointx.core._SetChainParams(params)
-    bitcointx.core.script._SetChainParams(params)
-    bitcointx.wallet._SetChainParams(params)
+    _thread_local.params = params
+    bitcointx.util.activate_class_dispatcher(params.WALLET_DISPATCHER)
 
 
 select_chain_params(BitcoinMainnetParams)
+
+__all__ = (
+    'ChainParamsBase',
+    'BitcoinMainnetParams',
+    'BitcoinTestnetParams',
+    'BitcoinRegtestParams',
+    'select_chain_params',
+    'ChainParams',
+    'get_current_chain_params',
+    'get_registered_chain_params',
+    'find_chain_params',
+)

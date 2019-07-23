@@ -11,22 +11,26 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-"""Low-level example of how to spend a standard pay-to-pubkey-hash (P2PKH) txout"""
-
-import sys
-if sys.version_info.major < 3:
-    sys.stderr.write('Sorry, Python 3.x required by this example.\n')
-    sys.exit(1)
+"""Low-level example of how to spend a standard
+pay-to-pubkey-hash (P2PKH) txout"""
 
 import hashlib
 
 from bitcointx import select_chain_params
-from bitcointx.core import b2x, lx, COIN, COutPoint, CMutableTxOut, CMutableTxIn, CMutableTransaction, Hash160
-from bitcointx.core.script import CScript, OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG, SignatureHash, SIGHASH_ALL
-from bitcointx.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
+from bitcointx.core import (
+    b2x, lx, COutPoint, CMutableTxOut, CMutableTxIn, CMutableTransaction,
+    Hash160, CoreCoinParams
+)
+from bitcointx.core.script import (
+    CScript, OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG, SignatureHash,
+    SIGHASH_ALL
+)
+from bitcointx.core.scripteval import VerifyScript
 from bitcointx.wallet import CBitcoinAddress, CBitcoinKey
 
 select_chain_params('bitcoin')
+
+COIN = CoreCoinParams.COIN
 
 # Create the (in)famous correct brainwallet secret key.
 h = hashlib.sha256(b'correct horse battery staple').digest()
@@ -50,11 +54,15 @@ txin = CMutableTxIn(COutPoint(txid, vout))
 #
 # Here we'll create that scriptPubKey from scratch using the pubkey that
 # corresponds to the secret key we generated above.
-txin_scriptPubKey = CScript([OP_DUP, OP_HASH160, Hash160(seckey.pub), OP_EQUALVERIFY, OP_CHECKSIG])
+txin_scriptPubKey = CScript([OP_DUP, OP_HASH160, Hash160(seckey.pub),
+                             OP_EQUALVERIFY, OP_CHECKSIG])
 
 # Create the txout. This time we create the scriptPubKey from a Bitcoin
 # address.
-txout = CMutableTxOut(0.001*COIN, CBitcoinAddress('1C7zdTfnkzmr13HfA2vNm5SJYRK6nEKyq8').to_scriptPubKey())
+txout = CMutableTxOut(0.001*COIN,
+                      CBitcoinAddress(
+                          '1C7zdTfnkzmr13HfA2vNm5SJYRK6nEKyq8'
+                      ).to_scriptPubKey())
 
 # Create the unsigned transaction.
 tx = CMutableTransaction([txin], [txout])

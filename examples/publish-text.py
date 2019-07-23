@@ -38,7 +38,7 @@ import os
 import bitcointx.rpc
 from bitcointx.core import (
     x, lx, b2x, Hash160, COutPoint, CTxOut, CTxIn, CTransaction,
-    str_money_value, COIN
+    str_money_value, CoreCoinParams
 )
 from bitcointx.core.script import (
     CScript, MAX_SCRIPT_ELEMENT_SIZE,
@@ -175,14 +175,14 @@ while padded_lines:
 # the 41 accounts for the size of the CTxIn itself
 payments = {
     str(P2SHCoinAddress.from_redeemScript(redeemScript)): int(round(
-        ((len(scriptSig)+41)/1000 * args.fee_per_kb)*COIN))
+        ((len(scriptSig)+41)/1000 * args.fee_per_kb)*CoreCoinParams.COIN))
     for scriptSig, redeemScript in scripts
 }
 
 prevouts_by_scriptPubKey = None
 if not args.dryrun:
     txid = rpc.sendmany(
-        '', {adr: float(float(amount)/COIN)
+        '', {adr: float(float(amount)/CoreCoinParams.COIN)
              for adr, amount in payments.items()}, 0)
 
     logging.info('Sent pre-pub tx: %s' % txid)

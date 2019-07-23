@@ -20,15 +20,23 @@ python-bitcointx is now much easier. See for example
   release of the v1.0.x version should be viewed as less mature
   than the v0.10.x, because of the amount of new code that was introduced.
 
-* The 'frontend class' abstraction is introduced for address
-  classes, keys classes, and transaction classes (`CTransaction`, `CTxIn`, etc.)
+* Custom class dispatching is introduced for address classes,
+  keys classes, and transaction classes (`CTransaction`, `CTxIn`, etc.)
   
   For example, when you create `CTransaction`, with default chain
   params in effect, you will get an instance of `CBitcoinTransaction`.
+
   If you are using python-elementstx, and Elements chain params are
   in effect, you will get `CElementsSidechainTransaction`.
   Same with `CTxIn`, `CTxWitness`, and other transaction component classes,
   and also `CScript`.
+
+  Within CBitcoinTransaction's methods, the 'bitcoin' class dispatcher will
+  always be active, even if the global dispatcher is set to 'elements', for
+  example. For example, if you need to deserialize specifically a bitcoin
+  transaction, while you are working with Elements blockchain via
+  python-elementstx, you can do `CBitcoinTransaction.deserialize(btc_tx_data)`,
+  and you will get the correct result.
   
   To support the same abstraction for addresses, `CCoinAddress` (and
   related classes) was introduced. You can still use `CBitcoinAddress`,
@@ -54,6 +62,11 @@ python-bitcointx is now much easier. See for example
   complicates things a lot. Having frontend classes and separate address
   class for each address representation makes the library and the code that
   uses it more composable, and interoperable.
+
+  Chain parameters like `COIN` and `MAX_MONEY` moved to their own CoreCoinParams
+  class, that is also being dispatched to CoreBitcoinParams, or CoreElementsParams
+  in case of python-elementstx. This allows to build libraries that would support
+  arbitrary changes to the core parameters, cleanly.
 
 * Notable new classes, functions and methods
   - `AddressDataEncodingError` exception - more general than `Base58Error`
@@ -86,17 +99,19 @@ python-bitcointx is now much easier. See for example
     `CCoinKey`, `CCoinExtKey`, `CCoinExtPubKey` are frontend classes
     that will give appropriate instances according to current chain params.
     (`CBitcoinKey`, `CBitcoinTestnetExtKey`, etc.)
-  - `CTransaction` convenience methods `to_mutable()`/`to_immutable()`:
-    To easily convert between mutable and immutable versions
-    `serialize()` method now have `for_sighash` flag - for cases when the
-    serialization is different for sighash calculations (Elements)
+  - `CTransaction` and other serializable classes in `bitcointx.core`
+    now have convenience methods `to_mutable()`/`to_immutable()`,
+    to easily convert between mutable and immutable versions.
+    `serialize()` method now have `for_sighash` keywork arg - for cases
+    when the serialization is different for sighash calculations (Elements)
   - ECDH, key addition and substraction
     If support in secp256k1 library is available, `CKey` has `ECDH()` method to
     compute an EC Diffie-Hellman secret.
     If support in secp256k1 library is available, `CKey` and `CPubKey` has
     classmethods `add()`, `combine()`, `sub()`, `negated()` that allow to
-    perform these operations on the keys. `add()` implemented
-    thorugh `combine()`, `sub()` implemented using `negated()`.
+    perform these operations on the keys.
+    `add()` is implemented thorugh `combine()`, `sub()` implemented
+    using `negated()`.
   - `BIP32Path` class, `CExtKeyBase.derive_path()`, to deal with hierarchial
     deterministic derivation. For usage see `bitcointx/tests/test_hd_keys.py`
   - Guard functions for script: `DATA()`, `NUMBER()`, `OPCODE()` -
@@ -166,6 +181,14 @@ python-bitcointx is now much easier. See for example
       previous cleaning of network-related code)
     - `verify` and `verify_nonstrict` methods of `CPubKey` now assert
       that supplied hash and sig are bytes or bytesarray instances
+    - `COIN`, `MAX_MONEY`, etc. moved to `CoreCoinParams` class, that can be
+      subclassed and will be dispatched similar to `CTransaction` and friends.
+      It is recommended to use `MoneyRange()` and `coins_to_satoshi()`,
+      `satoshi_to_coins()` functions. The two former functions will also
+      raise ValueError if supplied/returned value is outside of MoneyRange.
+      (unless `check_range=False` is passed)
+    - `MoneyRange()` function does not accept `params=` argument anymore.
+      To get money range for different params, you can use `with ChainParams():`.
 
 ## v0.10.3.post0
 

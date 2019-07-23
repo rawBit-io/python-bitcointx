@@ -29,34 +29,28 @@ from .serialize import (
 
 from ..util import (
     no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher,
-    dispatcher_wrap_methods
+    dispatcher_wrap_methods, classgetter
 )
 
-# Core definitions
-COIN = 100000000
-MAX_BLOCK_WEIGHT = 4000000
-WITNESS_SCALE_FACTOR = 4
 
 _thread_local = threading.local()
 _thread_local.mutable_context_enabled = False
 
 
-class CoreClassDispatcher(ClassMappingDispatcher, identity='core',
-                          no_direct_use=True):
+class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
+                              depends=[script.ScriptCoinClassDispatcher]):
 
     def __init_subclass__(mcs, **kwargs):
-        return super(CoreClassDispatcher, mcs).__init_subclass__(**kwargs)
+        return super(CoreCoinClassDispatcher, mcs).__init_subclass__(**kwargs)
 
     def __new__(mcs, name, bases, dct, mutable_of=None, **kwargs):
-        return super(CoreClassDispatcher,
+        return super(CoreCoinClassDispatcher,
                      mcs).__new__(mcs, name, bases, dct, **kwargs)
 
     def __init__(cls, name, bases, dct, mutable_of=None, **kwargs):
-        super(CoreClassDispatcher, cls).__init__(name, bases, dct, **kwargs)
+        super(CoreCoinClassDispatcher, cls).__init__(name, bases, dct, **kwargs)
         if mutable_of is not None:
             assert issubclass(mutable_of, CoreCoinClass)
-            assert issubclass(mutable_of, ImmutableSerializable)
-            assert issubclass(cls, ImmutableSerializable)
 
             make_mutable(cls)
 
@@ -66,7 +60,7 @@ class CoreClassDispatcher(ClassMappingDispatcher, identity='core',
             mutable_of._mutable_cls = cls
 
             # Wrap methods of a mutable class so that
-            # inside the methods, mutable context are enabled.
+            # inside the methods, mutable context is enabled.
             # When it is enabled, __call__ and __getattribute__
             # will substitute immutable class for its mutable twin.
             combined_dict = mutable_of.__dict__.copy()
@@ -91,15 +85,15 @@ class CoreClassDispatcher(ClassMappingDispatcher, identity='core',
     def __call__(cls, *args, **kwargs):
         if _thread_local.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls')
-        return super(CoreClassDispatcher, cls).__call__(*args, **kwargs)
+        return super(CoreCoinClassDispatcher, cls).__call__(*args, **kwargs)
 
     def __getattribute__(cls, name):
         if _thread_local.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls')
-        return super(CoreClassDispatcher, cls).__getattribute__(name)
+        return super(CoreCoinClassDispatcher, cls).__getattribute__(name)
 
 
-class CoreCoinClass(metaclass=CoreClassDispatcher):
+class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
 
     def to_mutable(self):
         return self._mutable_cls.from_instance(self)
@@ -135,7 +129,9 @@ class CoreCoinClass(metaclass=CoreClassDispatcher):
         return cls.clone_from_instance(other_inst)
 
 
-class CoreBitcoinClassDispatcher(CoreClassDispatcher):
+class CoreBitcoinClassDispatcher(
+    CoreCoinClassDispatcher, depends=[script.ScriptBitcoinClassDispatcher]
+):
     ...
 
 
@@ -143,10 +139,22 @@ class CoreBitcoinClass(CoreCoinClass, metaclass=CoreBitcoinClassDispatcher):
     ...
 
 
-def MoneyRange(nValue, params=None):
-    if not params:
-        params = _get_current_chain_params()
-    return 0 <= nValue <= params.MAX_MONEY
+class CoreCoinParams(CoreCoinClass):
+    COIN = 100000000
+    MAX_BLOCK_WEIGHT = 4000000
+    WITNESS_SCALE_FACTOR = 4
+
+    @classgetter
+    def MAX_MONEY(cls):
+        return 21000000 * cls.COIN
+
+
+class CoreBitcoinParams(CoreCoinParams, CoreBitcoinClass):
+    ...
+
+
+def MoneyRange(nValue):
+    return 0 <= nValue <= CoreCoinParams.MAX_MONEY
 
 
 def x(h):
@@ -179,6 +187,7 @@ def b2lx(b):
 
 def str_money_value(value):
     """Convert an integer money value to a fixed point string"""
+    COIN = CoreCoinParams.COIN
     r = '%i.%08i' % (value // COIN, value % COIN)
     r = r.rstrip('0')
     if r[-1] == '.':
@@ -193,16 +202,27 @@ def str_money_value_for_repr(nValue):
         "%d" % (nValue,)
 
 
-def coins_to_satoshi(value):
+def coins_to_satoshi(value, check_range=True):
     """Simple utility function to convert from
     floating-point coins amount to integer satoshi amonut"""
-    return int(round(float(value) * COIN))
+    result = int(round(float(value) * CoreCoinParams.COIN))
+
+    if check_range:
+        if not MoneyRange(result):
+            raise ValueError('resulting value ({}) is outside MoneyRange'
+                             .format(result))
+
+    return result
 
 
-def satoshi_to_coins(value):
+def satoshi_to_coins(value, check_range=True):
     """Simple utility function to convert from
     integer satoshi amonut to floating-point coins amount"""
-    return float(float(value) / COIN)
+    if check_range:
+        if not MoneyRange(value):
+            raise ValueError('supplied value ({}) is outside MoneyRange'
+                             .format(value))
+    return float(float(value) / CoreCoinParams.COIN)
 
 
 def get_size_of_compact_size(size):
@@ -244,6 +264,8 @@ def calculate_transaction_virtual_size(num_inputs=None,
         + outputs_serialized_size
         + 4  # sequence
     )
+
+    WITNESS_SCALE_FACTOR = CoreCoinParams.WITNESS_SCALE_FACTOR
 
     unscaled_size = (base_size * WITNESS_SCALE_FACTOR
                      + witness_size + WITNESS_SCALE_FACTOR-1)
@@ -346,8 +368,7 @@ class Uint256(_UintBitVector):
         return uint256_from_str(self.data)
 
 
-class COutPoint(ImmutableSerializable, CoreCoinClass,
-                next_dispatch_final=True):
+class COutPoint(CoreCoinClass, next_dispatch_final=True):
     """The combination of a transaction hash and an index n into its vout"""
     __slots__ = ['hash', 'n']
 
@@ -415,7 +436,7 @@ class CBitcoinMutableOutPoint(CBitcoinOutPoint, CMutableOutPoint,
     __slots__ = []
 
 
-class CTxIn(ImmutableSerializable, CoreCoinClass, next_dispatch_final=True):
+class CTxIn(CoreCoinClass, next_dispatch_final=True):
     """A base class for an input of a transaction
 
     Contains the location of the previous transaction's output that it claims,
@@ -490,7 +511,7 @@ class CBitcoinMutableTxIn(CBitcoinTxIn, CMutableTxIn, mutable_of=CBitcoinTxIn):
     __slots__ = []
 
 
-class CTxOut(ImmutableSerializable, CoreCoinClass, next_dispatch_final=True):
+class CTxOut(CoreCoinClass, next_dispatch_final=True):
     """A base class for an output of a transaction
 
     Contains the public key that the next input must be able to sign with to
@@ -552,8 +573,7 @@ class CBitcoinMutableTxOut(CBitcoinTxOut, CMutableTxOut,
     __slots__ = []
 
 
-class CTxInWitness(ImmutableSerializable, CoreCoinClass,
-                   next_dispatch_final=True):
+class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
     """A base class for witness data for a single transaction input"""
     __slots__ = ['scriptWitness']
 
@@ -600,8 +620,7 @@ class CBitcoinMutableTxInWitness(CBitcoinTxInWitness, CMutableTxInWitness,
     __slots__ = []
 
 
-class CTxOutWitness(ImmutableSerializable, CoreCoinClass,
-                    next_dispatch_final=True):
+class CTxOutWitness(CoreCoinClass, next_dispatch_final=True):
     pass
 
 
@@ -621,8 +640,7 @@ class _CBitcoinDummyMutableTxOutWitness(
     pass
 
 
-class CTxWitness(ImmutableSerializable, CoreCoinClass,
-                 next_dispatch_final=True):
+class CTxWitness(CoreCoinClass, next_dispatch_final=True):
     """Witness data for all inputs to a transaction"""
     __slots__ = ['vtxinwit']
 
@@ -687,8 +705,7 @@ class CBitcoinMutableTxWitness(CBitcoinTxWitness, CMutableTxWitness,
     __slots__ = []
 
 
-class CTransaction(ImmutableSerializable, ReprOrStrMixin, CoreCoinClass,
-                   next_dispatch_final=True):
+class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
     __slots__ = ['nVersion', 'vin', 'vout', 'nLockTime', 'wit']
 
     CURRENT_VERSION = 2
@@ -866,7 +883,9 @@ def CheckTransaction(tx):  # noqa
 
     # Size limits
     base_tx = tx.to_immutable()
-    if len(base_tx.serialize(include_witness=False)) * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT:
+    weight = (len(base_tx.serialize(include_witness=False))
+              * CoreCoinParams.WITNESS_SCALE_FACTOR)
+    if weight > CoreCoinParams.MAX_BLOCK_WEIGHT:
         raise CheckTransactionError("CheckTransaction() : size limits failed")
 
     # Check for negative or overflow output values
@@ -874,7 +893,7 @@ def CheckTransaction(tx):  # noqa
     for txout in tx.vout:
         if txout.nValue < 0:
             raise CheckTransactionError("CheckTransaction() : txout.nValue negative")
-        if txout.nValue > _get_current_chain_params().MAX_MONEY:
+        if txout.nValue > CoreCoinParams.MAX_MONEY:
             raise CheckTransactionError("CheckTransaction() : txout.nValue too high")
         nValueOut += txout.nValue
         if not MoneyRange(nValueOut):
@@ -908,21 +927,18 @@ def GetLegacySigOpCount(tx):
 
 def _SetChainParams(params):
     _thread_local.chain_params = params
-    activate_class_dispatcher(params.CORE_DISPATCHER)
 
 
 def _get_current_chain_params():
     return _thread_local.chain_params
 
 
-# Activate mutable frontend first so if there's any errors in initialization
-# they will happen here and not at the time first mutable class is used
+# default dispatcher for the module
 activate_class_dispatcher(CoreBitcoinClassDispatcher)
 
 __all__ = (
     'Hash',
     'Hash160',
-    'COIN',
     'MoneyRange',
     'x',
     'b2x',
@@ -967,6 +983,10 @@ __all__ = (
     'coins_to_satoshi',
     'get_size_of_compact_size',
     'calculate_transaction_virtual_size',
-    'CoreClassDispatcher',
+    'CoreCoinClassDispatcher',
     'CoreCoinClass',
+    'CoreBitcoinClassDispatcher',
+    'CoreBitcoinClass',
+    'CoreCoinParams',
+    'CoreBitcoinParams',
 )

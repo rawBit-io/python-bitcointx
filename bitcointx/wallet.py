@@ -34,12 +34,15 @@ from bitcointx.core.script import (
 )
 
 
-class WalletClassDispatcher(ClassMappingDispatcher, identity='wallet',
-                            no_direct_use=True):
+class WalletCoinClassDispatcher(ClassMappingDispatcher, identity='wallet',
+                                depends=[bitcointx.core.CoreCoinClassDispatcher]):
     ...
 
 
-class WalletBitcoinClassDispatcher(WalletClassDispatcher):
+class WalletBitcoinClassDispatcher(
+    WalletCoinClassDispatcher,
+    depends=[bitcointx.core.CoreBitcoinClassDispatcher]
+):
     ...
 
 
@@ -51,7 +54,7 @@ class WalletBitcoinRegtestClassDispatcher(WalletBitcoinClassDispatcher):
     ...
 
 
-class WalletCoinClass(metaclass=WalletClassDispatcher):
+class WalletCoinClass(metaclass=WalletCoinClassDispatcher):
     ...
 
 
@@ -580,10 +583,7 @@ class CBitcoinRegtestExtKey(CCoinExtKey, WalletBitcoinRegtestClass):
     base58_prefix = b'\x04\x35\x83\x94'
 
 
-def _SetChainParams(params):
-    activate_class_dispatcher(params.WALLET_DISPATCHER)
-
-
+# default dispatcher for the module
 activate_class_dispatcher(WalletBitcoinClassDispatcher)
 
 __all__ = (
@@ -617,6 +617,8 @@ __all__ = (
     'CBitcoinRegtestKey',
     'CBitcoinRegtestExtKey',
     'CBitcoinRegtestExtPubKey',
-    'WalletClassDispatcher',
+    'WalletCoinClassDispatcher',
     'WalletCoinClass',
+    'WalletBitcoinClassDispatcher',
+    'WalletBitcoinClass',
 )

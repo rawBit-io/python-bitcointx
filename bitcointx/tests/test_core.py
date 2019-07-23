@@ -14,10 +14,13 @@
 
 import unittest
 
-from bitcointx import BitcoinMainnetParams
+from bitcointx import BitcoinMainnetParams, ChainParams
 from bitcointx.core import (
-    str_money_value, MoneyRange, COIN
+    str_money_value, MoneyRange, coins_to_satoshi, satoshi_to_coins,
+    CoreBitcoinParams, CoreBitcoinClassDispatcher, CoreBitcoinClass,
 )
+from bitcointx.wallet import WalletBitcoinClassDispatcher
+from bitcointx.util import classgetter
 
 
 class Test_str_value(unittest.TestCase):
@@ -41,16 +44,49 @@ class Test_str_value(unittest.TestCase):
 class Test_Money(unittest.TestCase):
     def test_MoneyRange(self):
         self.assertFalse(MoneyRange(-1))
+        with self.assertRaises(ValueError):
+            coins_to_satoshi(-1)
+        with self.assertRaises(ValueError):
+            satoshi_to_coins(-1)
         self.assertTrue(MoneyRange(0))
         self.assertTrue(MoneyRange(100000))
-        self.assertTrue(MoneyRange(21000000 * COIN))  # Maximum money on Bitcoin network
-        self.assertFalse(MoneyRange(21000001 * COIN))
+        max_satoshi = coins_to_satoshi(21000000)
+        self.assertTrue(MoneyRange(max_satoshi))  # Maximum money on Bitcoin network
+        self.assertFalse(MoneyRange(max_satoshi+1))
+        with self.assertRaises(ValueError):
+            coins_to_satoshi(max_satoshi+1)
+        with self.assertRaises(ValueError):
+            satoshi_to_coins(max_satoshi+1)
 
     def test_MoneyRangeCustomParams(self):
-        highMaxParamsType = type(str('CoreHighMainParams'),
-                                 (BitcoinMainnetParams, object),
-                                 {'MAX_MONEY': 22000000 * COIN})
-        highMaxParams = highMaxParamsType()
-        self.assertTrue(MoneyRange(21000001 * COIN, highMaxParams))
-        self.assertTrue(MoneyRange(22000000 * COIN, highMaxParams))
-        self.assertFalse(MoneyRange(22000001 * COIN, highMaxParams))
+
+        class CoreHighMaxClassDispatcher(CoreBitcoinClassDispatcher):
+            ...
+
+        class CoreHighMaxParams(CoreBitcoinParams, CoreBitcoinClass):
+            @classgetter
+            def MAX_MONEY(self):
+                return 22000000 * self.COIN
+
+        class WalletHighMaxClassDispatcher(WalletBitcoinClassDispatcher):
+            ...
+
+        class HighMaxParams(BitcoinMainnetParams):
+            NAME = 'high_maxmoney'
+            WALLET_DISPATCHER = WalletHighMaxClassDispatcher
+
+        with ChainParams(HighMaxParams):
+            self.assertFalse(MoneyRange(-1))
+            with self.assertRaises(ValueError):
+                coins_to_satoshi(-1)
+            with self.assertRaises(ValueError):
+                satoshi_to_coins(-1)
+            self.assertTrue(MoneyRange(0))
+            self.assertTrue(MoneyRange(100000))
+            max_satoshi = coins_to_satoshi(22000000)
+            self.assertTrue(MoneyRange(max_satoshi))  # Maximum money on Bitcoin network
+            self.assertFalse(MoneyRange(max_satoshi+1))
+            with self.assertRaises(ValueError):
+                coins_to_satoshi(max_satoshi+1)
+            with self.assertRaises(ValueError):
+                satoshi_to_coins(max_satoshi+1)

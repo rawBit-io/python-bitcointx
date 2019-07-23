@@ -107,6 +107,9 @@ Note: only public API changes is listed here
 * `CTxWitness` is now immutable, `CMutableTxWitness` is added.
 * If mutable components supplied to CTransaction, they will be internally converted to immutable, and vise versa with CMutableTransaction
 * string representations (returned by `repr` and `str`) of various objects will often differ from that of python-bitcoinlib's.
+* `COIN`, `MAX_MONEY`, etc. moved to `CoreCoinParams` class, that can be
+subclassed and will be dispatched similar to `CTransaction` and friends. It is recommended to use `MoneyRange()` and `coins_to_satoshi()`, `satoshi_to_coins()` functions. The two former functions will also raise ValueError if supplied/returned value is outside of MoneyRange. (unless `check_range=False` is passed)
+* `MoneyRange()` function does not accept `params=` argument anymore. To get money range for different params, you can use `with ChainParams():`.
 
 ## Note on VerifyScript() usage
 
