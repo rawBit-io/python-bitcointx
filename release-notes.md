@@ -101,7 +101,8 @@ python-bitcointx is now much easier. See for example
     (`CBitcoinKey`, `CBitcoinTestnetExtKey`, etc.)
   - `CTransaction` and other serializable classes in `bitcointx.core`
     now have convenience methods `to_mutable()`/`to_immutable()`,
-    to easily convert between mutable and immutable versions.
+    to easily convert between mutable and immutable versions, and
+    `is_mutable()`/`is_immutable()` to check for mutability.
     `serialize()` method now have `for_sighash` keywork arg - for cases
     when the serialization is different for sighash calculations (Elements)
   - ECDH, key addition and substraction
