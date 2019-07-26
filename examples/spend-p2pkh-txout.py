@@ -19,14 +19,11 @@ import hashlib
 from bitcointx import select_chain_params
 from bitcointx.core import (
     b2x, lx, COutPoint, CMutableTxOut, CMutableTxIn, CMutableTransaction,
-    Hash160, CoreCoinParams
+    CoreCoinParams
 )
-from bitcointx.core.script import (
-    CScript, OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG, SignatureHash,
-    SIGHASH_ALL
-)
+from bitcointx.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcointx.core.scripteval import VerifyScript
-from bitcointx.wallet import CBitcoinAddress, CBitcoinKey
+from bitcointx.wallet import CBitcoinAddress, P2PKHBitcoinAddress, CBitcoinKey
 
 select_chain_params('bitcoin')
 
@@ -54,8 +51,8 @@ txin = CMutableTxIn(COutPoint(txid, vout))
 #
 # Here we'll create that scriptPubKey from scratch using the pubkey that
 # corresponds to the secret key we generated above.
-txin_scriptPubKey = CScript([OP_DUP, OP_HASH160, Hash160(seckey.pub),
-                             OP_EQUALVERIFY, OP_CHECKSIG])
+txin_scriptPubKey = \
+    P2PKHBitcoinAddress.from_pubkey(seckey.pub).to_scriptPubKey()
 
 # Create the txout. This time we create the scriptPubKey from a Bitcoin
 # address.
