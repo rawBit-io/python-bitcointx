@@ -49,14 +49,18 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
 
     def __init__(cls, name, bases, dct, mutable_of=None, **kwargs):
         super(CoreCoinClassDispatcher, cls).__init__(name, bases, dct, **kwargs)
-        if mutable_of is not None:
+        if mutable_of is None:
+            cls._immutable_cls = cls
+            cls._mutable_cls = None
+        else:
             assert issubclass(mutable_of, CoreCoinClass)
 
             make_mutable(cls)
 
             cls._immutable_cls = mutable_of
             cls._mutable_cls = cls
-            mutable_of._immutable_cls = mutable_of
+            assert mutable_of._immutable_cls == mutable_of
+            assert mutable_of._mutable_cls is None
             mutable_of._mutable_cls = cls
 
             # Wrap methods of a mutable class so that
@@ -84,12 +88,12 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
 
     def __call__(cls, *args, **kwargs):
         if _thread_local.mutable_context_enabled:
-            cls = type.__getattribute__(cls, '_mutable_cls')
+            cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super(CoreCoinClassDispatcher, cls).__call__(*args, **kwargs)
 
     def __getattribute__(cls, name):
         if _thread_local.mutable_context_enabled:
-            cls = type.__getattribute__(cls, '_mutable_cls')
+            cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super(CoreCoinClassDispatcher, cls).__getattribute__(name)
 
 
