@@ -139,7 +139,7 @@ class EvalScriptError(bitcointx.core.ValidationError):
                  sop=None, sop_data=None, sop_pc=None,
                  stack=None, scriptIn=None, txTo=None, inIdx=None, flags=None,
                  altstack=None, vfExec=None, pbegincodehash=None, nOpCount=None):
-        super(EvalScriptError, self).__init__('EvalScript: %s' % msg)
+        super().__init__('EvalScript: %s' % msg)
 
         self.sop = sop
         self.sop_data = sop_data
@@ -157,13 +157,13 @@ class EvalScriptError(bitcointx.core.ValidationError):
 
 class MaxOpCountError(EvalScriptError):
     def __init__(self, **kwargs):
-        super(MaxOpCountError, self).__init__('max opcode count exceeded', **kwargs)
+        super().__init__('max opcode count exceeded', **kwargs)
 
 
 class MissingOpArgumentsError(EvalScriptError):
     """Missing arguments"""
     def __init__(self, opcode, s, n, **kwargs):
-        super(MissingOpArgumentsError, self).__init__(
+        super().__init__(
             'missing arguments for %s; need %d items, but only %d on stack' %
             (OPCODE_NAMES[opcode], n, len(s)), **kwargs)
 
@@ -171,7 +171,7 @@ class MissingOpArgumentsError(EvalScriptError):
 class ArgumentsInvalidError(EvalScriptError):
     """Arguments are invalid"""
     def __init__(self, opcode, msg, **kwargs):
-        super(ArgumentsInvalidError, self).__init__(
+        super().__init__(
             '%s args invalid: %s' % (OPCODE_NAMES[opcode], msg),
             **kwargs)
 
@@ -179,7 +179,7 @@ class ArgumentsInvalidError(EvalScriptError):
 class VerifyOpFailedError(EvalScriptError):
     """A VERIFY opcode failed"""
     def __init__(self, opcode, **kwargs):
-        super(VerifyOpFailedError, self).__init__('%s failed' % OPCODE_NAMES[opcode],
+        super().__init__('%s failed' % OPCODE_NAMES[opcode],
                                                   **kwargs)
 
 

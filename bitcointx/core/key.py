@@ -251,7 +251,7 @@ class CKey(bytes, CKeyMixin):
     def __new__(cls, secret, compressed=True):
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
-        return super(CKey, cls).__new__(cls, secret)
+        return super().__new__(cls, secret)
 
     @classmethod
     def from_secret_bytes(cls, secret, compressed=True):
@@ -273,7 +273,7 @@ class CPubKey(bytes):
     """
 
     def __new__(cls, buf=b''):
-        self = super(CPubKey, cls).__new__(cls, buf)
+        self = super().__new__(cls, buf)
 
         self._fullyvalid = False
         if self.is_valid():
@@ -357,7 +357,7 @@ class CPubKey(bytes):
         return repr(self)
 
     def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, super(CPubKey, self).__repr__())
+        return '%s(%s)' % (self.__class__.__name__, super().__repr__())
 
     def verify(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a DER signature"""
@@ -679,7 +679,7 @@ class CExtPubKeyMixin(CExtKeyBase):
         return repr(self)
 
     def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, super(CExtPubKey, self).__repr__())
+        return '%s(%s)' % (self.__class__.__name__, super().__repr__())
 
 
 class CExtPubKey(bytes, CExtPubKeyMixin):

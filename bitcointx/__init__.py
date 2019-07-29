@@ -47,8 +47,7 @@ class ChainParamsMeta(ABCMeta):
         if `name=` parameter is specified in the class declaration,
         set NAME attribute on a class, and register that class in
         a table for lookup by name."""
-        cls_instance = super(ChainParamsMeta, cls).__new__(cls, cls_name,
-                                                           bases, dct)
+        cls_instance = super().__new__(cls, cls_name, bases, dct)
 
         if len(bases):
             if not any(issubclass(b, cls._common_base_cls) for b in bases):

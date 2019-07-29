@@ -128,14 +128,12 @@ if not hasattr(object, '__init_subclass__'):
             if isc in dct:
                 dct[isc] = classmethod(dct[isc])
 
-            return super(ABCMetaWithBackportedInitSubclass,
-                         mcs).__new__(mcs, name, bases, dct)
+            return super().__new__(mcs, name, bases, dct)
 
         def __init__(cls, name, bases, dct, **kwargs):
-            super(ABCMetaWithBackportedInitSubclass,
-                  cls).__init__(name, bases, dct)
+            super().__init__(name, bases, dct)
 
-            scls = super(cls, cls)
+            scls = super()
             if hasattr(scls, '__init_subclass__'):
                 scls.__init_subclass__.__func__(cls, **kwargs)
 else:
@@ -241,8 +239,7 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
 
     def __new__(mcs, name, bases, dct, next_dispatch_final=False,
                 variant_of=None):
-        return super(ClassMappingDispatcher,
-                     mcs).__new__(mcs, name, bases, dct)
+        return super().__new__(mcs, name, bases, dct)
 
     def __init__(cls, name, bases, dct, next_dispatch_final=False,
                  variant_of=None):
@@ -261,7 +258,7 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
                     when cls is not the default mapping for the superclass
                     that was marked with next_dispatch_final=True"""
 
-        super(ClassMappingDispatcher, cls).__init__(name, bases, dct)
+        super().__init__(name, bases, dct)
 
         # get the dispatcher class
         mcs = type(cls)

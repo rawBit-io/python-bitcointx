@@ -126,7 +126,7 @@ class CScriptOp(int):
             return _opcode_instances[n]
         except IndexError:
             assert len(_opcode_instances) == n
-            _opcode_instances.append(super(CScriptOp, cls).__new__(cls, n))
+            _opcode_instances.append(super().__new__(cls, n))
             return _opcode_instances[n]
 
 
@@ -539,7 +539,7 @@ class DATA(bytes):
             raise TypeError(
                 'DATA can only accept bytes or bytearray instance')
 
-        return super(DATA, cls).__new__(cls, data)
+        return super().__new__(cls, data)
 
 
 class NUMBER(int):
@@ -561,7 +561,7 @@ class NUMBER(int):
         if isinstance(num, CScriptOp):
             raise TypeError('NUMBER can not accept CScriptOp instance')
 
-        return super(NUMBER, cls).__new__(cls, num)
+        return super().__new__(cls, num)
 
 
 def OPCODE(op):
@@ -590,7 +590,7 @@ class CScriptTruncatedPushDataError(CScriptInvalidError):
     """Invalid pushdata due to truncation"""
     def __init__(self, msg, data):
         self.data = data
-        super(CScriptTruncatedPushDataError, self).__init__(msg)
+        super().__init__(msg)
 
 
 class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
@@ -630,7 +630,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
         try:
             # bytes.__add__ always returns bytes instances unfortunately
-            return self.__class__(super(CScript, self).__add__(other))
+            return self.__class__(super().__add__(other))
         except TypeError:
             raise TypeError('Can not add a %r instance to a CScript' % other.__class__)
 
@@ -640,14 +640,14 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
     def __new__(cls, value=b''):
         if isinstance(value, (bytes, bytearray)):
-            return super(CScript, cls).__new__(cls, value)
+            return super().__new__(cls, value)
         else:
             def coerce_iterable(iterable):
                 for instance in iterable:
                     yield cls.__coerce_instance(instance)
             # Annoyingly on both python2 and python3 bytes.join() always
             # returns a bytes instance even when subclassed.
-            return super(CScript, cls).__new__(cls, b''.join(coerce_iterable(value)))
+            return super().__new__(cls, b''.join(coerce_iterable(value)))
 
     def raw_iter(self):
         """Raw iteration

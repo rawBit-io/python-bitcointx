@@ -56,7 +56,7 @@ class DeserializationExtraDataError(SerializationError):
     saved.
     """
     def __init__(self, msg, obj, padding):
-        super(DeserializationExtraDataError, self).__init__(msg)
+        super().__init__(msg)
         self.obj = obj
         self.padding = padding
 
@@ -147,7 +147,7 @@ class ImmutableSerializable(Serializable):
         try:
             return self._cached_GetHash
         except AttributeError:
-            _cached_GetHash = super(ImmutableSerializable, self).GetHash()
+            _cached_GetHash = super().GetHash()
             object.__setattr__(self, '_cached_GetHash', _cached_GetHash)
             return _cached_GetHash
 

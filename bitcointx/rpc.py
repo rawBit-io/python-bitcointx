@@ -61,6 +61,7 @@ class JSONRPCError(Exception):
         super(JSONRPCError, self).__init__(
             'msg: %r  code: %r' %
             (rpc_error['message'], rpc_error['code']))
+
         self.error = rpc_error
 
         return self

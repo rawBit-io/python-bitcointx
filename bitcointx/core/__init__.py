@@ -41,14 +41,13 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
                               depends=[script.ScriptCoinClassDispatcher]):
 
     def __init_subclass__(mcs, **kwargs):
-        return super(CoreCoinClassDispatcher, mcs).__init_subclass__(**kwargs)
+        return super().__init_subclass__(**kwargs)
 
     def __new__(mcs, name, bases, dct, mutable_of=None, **kwargs):
-        return super(CoreCoinClassDispatcher,
-                     mcs).__new__(mcs, name, bases, dct, **kwargs)
+        return super().__new__(mcs, name, bases, dct, **kwargs)
 
     def __init__(cls, name, bases, dct, mutable_of=None, **kwargs):
-        super(CoreCoinClassDispatcher, cls).__init__(name, bases, dct, **kwargs)
+        super().__init__(name, bases, dct, **kwargs)
         if mutable_of is None:
             cls._immutable_cls = cls
             cls._mutable_cls = None
@@ -89,12 +88,12 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
     def __call__(cls, *args, **kwargs):
         if _thread_local.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
-        return super(CoreCoinClassDispatcher, cls).__call__(*args, **kwargs)
+        return super().__call__(*args, **kwargs)
 
     def __getattribute__(cls, name):
         if _thread_local.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
-        return super(CoreCoinClassDispatcher, cls).__getattribute__(name)
+        return super().__getattribute__(name)
 
 
 class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
