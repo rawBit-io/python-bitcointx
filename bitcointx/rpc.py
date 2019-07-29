@@ -170,8 +170,9 @@ class RPCCaller:
 
             # Figure out the path to the config file
             if conf_file is None:
-                raise ValueError("if conf_file is not specified, "
-                                 "allow_default_conf must be True")
+                if not allow_default_conf:
+                    raise ValueError("if conf_file is not specified, "
+                                     "allow_default_conf must be True")
                 conf_file = params.get_config_path()
 
             conf = _try_read_conf_file(conf_file, allow_default_conf)
