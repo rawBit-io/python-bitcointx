@@ -223,19 +223,21 @@ class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
         mcs._class_dispatcher__no_direct_use = False
         mcs._class_dispatcher__clsmap = defaultdict(list)
 
-        parent_depends = mcs._class_dispatcher__depends
-        for ddisp in depends:
-            matches = sum(int(issubclass(ddisp, pdep))
-                          for pdep in parent_depends)
-            if matches != 1:
-                raise TypeError(
-                    'depends= arguments should specify a dependencies that is '
-                    'compatible with dependencies of parent class {}, but '
-                    '{} is a subclass of {} of those dependencies'
-                    .format([pd.__name__ for pd in parent_depends],
-                            ddisp.__name__, matches))
+        if depends:
+            parent_depends = mcs._class_dispatcher__depends
+            combined_depends = list(mcs._class_dispatcher__depends)
+            for ddisp in depends:
+                for i, pdep in enumerate(parent_depends):
+                    if issubclass(ddisp, pdep):
+                        if combined_depends[i] != pdep:
+                            raise TypeError(
+                                '{} is specified in depends argument, but '
+                                'it is in conflict with {}, that also tries '
+                                'to replace {} from parent depenrs'
+                                .format(ddisp, combined_depends[i], pdep))
+                        combined_depends[i] = ddisp
 
-        mcs._class_dispatcher__depends = depends
+            mcs._class_dispatcher__depends = tuple(combined_depends)
 
     def __new__(mcs, name, bases, dct, next_dispatch_final=False,
                 variant_of=None):
