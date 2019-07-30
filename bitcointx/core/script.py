@@ -1323,7 +1323,7 @@ def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
     if total != len(pubkeys):
         raise ValueError("'total' argument must match length of pubkeys array")
     if required <= 0:
-        raise ValueError("'required' argument must be > 1")
+        raise ValueError("'required' argument must be >= 1")
     if required > total:
         raise ValueError(
             "'required' argument must be less than or equal to 'total'")
