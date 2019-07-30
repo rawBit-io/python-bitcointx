@@ -76,6 +76,19 @@ class Test_CKey(unittest.TestCase):
             self.assertEqual(k2.pub.negated(), CPubKey.sub(pub_diff, k1.pub))
             self.assertEqual(CPubKey.add(k2.pub, k2.pub),
                              CPubKey.sub(pub_sum, pub_diff))
+            self.assertEqual(k1,
+                             CKey.combine(k1, k2, k_sum,
+                                          k2.negated(), k_sum.negated()))
+            self.assertEqual(k1.pub,
+                             CPubKey.combine(k1.pub, k2.pub, k_sum.pub,
+                                             k2.pub.negated(),
+                                             k_sum.pub.negated()))
+            self.assertEqual(CKey.combine(k_sum, k2, k1, k_diff),
+                             CKey.combine(k1, k2, k_sum, k_diff))
+            self.assertEqual(CPubKey.combine(k_sum.pub, k2.pub, k1.pub,
+                                             k_diff.pub),
+                             CPubKey.combine(k1.pub, k2.pub, k_sum.pub,
+                                             k_diff.pub))
             with self.assertRaises(ValueError):
                 CKey.sub(k1, k1)
             with self.assertRaises(ValueError):
