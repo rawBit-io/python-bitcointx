@@ -27,6 +27,10 @@ from bitcointx.wallet import (
     CBitcoinAddress,
     CBase58BitcoinAddress,
     CBech32BitcoinAddress,
+    P2PKHCoinAddress,
+    P2SHCoinAddress,
+    P2WPKHCoinAddress,
+    P2WSHCoinAddress,
     P2PKHBitcoinAddress,
     P2SHBitcoinAddress,
     P2WPKHBitcoinAddress,
@@ -80,6 +84,19 @@ class Test_CCoinAddress(unittest.TestCase):
 
     def test_address_implementations(self):
         test_address_implementations(self)
+
+    def test_get_output_size(self):
+        pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
+        a = P2PKHCoinAddress.from_pubkey(pub)
+        self.assertEqual(a.get_output_size(), 34)
+        a = P2WPKHCoinAddress.from_pubkey(pub)
+        self.assertEqual(a.get_output_size(), 31)
+        a = P2SHCoinAddress.from_redeemScript(
+            CScript(b'\xa9' + Hash160(pub) + b'\x87'))
+        self.assertEqual(a.get_output_size(), 32)
+        a = P2WSHCoinAddress.from_redeemScript(
+            CScript(b'\xa9' + Hash160(pub) + b'\x87'))
+        self.assertEqual(a.get_output_size(), 43)
 
 
 class Test_CBitcoinAddress(unittest.TestCase):

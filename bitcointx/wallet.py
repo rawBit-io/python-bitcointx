@@ -18,6 +18,8 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 
 # pylama:ignore=E501,E221
 
+from io import BytesIO
+
 import bitcointx
 import bitcointx.base58
 import bitcointx.bech32
@@ -105,6 +107,12 @@ class CCoinAddress(WalletCoinClass):
 
         raise CCoinAddressError(
             'scriptPubKey is not in a recognized address format')
+
+    def get_output_size(self):
+        txo = bitcointx.core.CTxOut(scriptPubKey=self.to_scriptPubKey())
+        f = BytesIO()
+        txo.stream_serialize(f)
+        return len(f.getbuffer())
 
 
 class CCoinAddressError(Exception):
