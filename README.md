@@ -19,6 +19,7 @@ bitcoin transactions, and related data structures.
 * Bech32-encoded address support
 * HD keys support
 * Easier to build code that supports and interacts with other bitcoin-based blockchains
+  (see https://github.com/Simplexum/python-litecointx and https://github.com/Simplexum/python-elementstx)
 
 ## Note on v1.0.0 release
 
