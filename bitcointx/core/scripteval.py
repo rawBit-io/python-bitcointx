@@ -80,10 +80,9 @@ UNHANDLED_SCRIPT_VERIFY_FLAGS = set((
     SCRIPT_VERIFY_CONST_SCRIPTCODE,
 ))
 
-MANDATORY_SCRIPT_VERIFY_FLAGS = SCRIPT_VERIFY_P2SH
+MANDATORY_SCRIPT_VERIFY_FLAGS = {SCRIPT_VERIFY_P2SH}
 
-STANDARD_SCRIPT_VERIFY_FLAGS = set((
-    MANDATORY_SCRIPT_VERIFY_FLAGS,
+STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY_FLAGS | {
     SCRIPT_VERIFY_DERSIG,
     SCRIPT_VERIFY_STRICTENC,
     SCRIPT_VERIFY_MINIMALDATA,
@@ -98,7 +97,12 @@ STANDARD_SCRIPT_VERIFY_FLAGS = set((
     SCRIPT_VERIFY_WITNESS,
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM,
     SCRIPT_VERIFY_WITNESS_PUBKEYTYPE,
-    SCRIPT_VERIFY_CONST_SCRIPTCODE))
+    SCRIPT_VERIFY_CONST_SCRIPTCODE
+}
+
+ALL_SCRIPT_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS | {
+    SCRIPT_VERIFY_SIGPUSHONLY
+}
 
 
 SCRIPT_VERIFY_FLAGS_BY_NAME = {
@@ -124,7 +128,7 @@ SCRIPT_VERIFY_FLAGS_BY_NAME = {
 SCRIPT_VERIFY_FLAGS_NAMES = {v: k for k, v in SCRIPT_VERIFY_FLAGS_BY_NAME.items()}
 
 
-def _flags_set_str(flags):
+def script_verify_flags_to_string(flags):
     return ",".join(SCRIPT_VERIFY_FLAGS_NAMES[f] for f in flags)
 
 
@@ -1076,7 +1080,8 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
 
     if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
         raise VerifyScriptError(
-            "some of the flags cannot be handled by current code: {}".format(_flags_set_str(flags)))
+            "some of the flags cannot be handled by current code: {}"
+            .format(script_verify_flags_to_string(flags)))
 
     stack = []
     EvalScript(stack, scriptSig, txTo, inIdx, flags=flags)
@@ -1223,4 +1228,5 @@ __all__ = (
     'VerifyScript',
     'VerifySignatureError',
     'VerifySignature',
+    'script_verify_flags_to_string',
 )

@@ -35,6 +35,10 @@ from bitcointx.core.scripteval import (
     VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH,
     SCRIPT_VERIFY_WITNESS
 )
+from bitcointx.core.bitcoinconsensus import (
+    ConsensusVerifyScript, BITCOINCONSENSUS_ACCEPTED_FLAGS,
+    load_bitcoinconsensus_library
+)
 
 
 def parse_script(s):
@@ -66,7 +70,7 @@ def parse_script(s):
     return CScript(b''.join(r))
 
 
-def load_test_vectors(name):
+def load_test_vectors(name, skip_fixme=True):
     logging.basicConfig()
     log = logging.getLogger("Test_EvalScript")
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
@@ -77,6 +81,10 @@ def load_test_vectors(name):
                 continue  # comment
 
             if len(test_case) == 2:
+                if not skip_fixme:
+                    assert test_case[0].startswith('FIXME'),\
+                        "we do not expect anything other than FIXME* here"
+                    continue
                 if test_case[0] == 'FIXME':
                     fixme_comment = test_case[1]
                     continue
@@ -158,6 +166,38 @@ class Test_EvalScript(unittest.TestCase):
 
             if expected_result != 'OK':
                 self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
+
+    def test_script_bitcoinconsensus(self):
+        try:
+            handle = load_bitcoinconsensus_library()
+        except ImportError:
+            return
+
+        def do_test_bicoinconsensus(handle):
+            for t in load_test_vectors('script_tests.json', skip_fixme=False):
+                (scriptSig, scriptPubKey, witness, nValue,
+                 flags, expected_result, comment, test_case) = t
+                (txCredit, txSpend) = self.create_test_txs(scriptSig, scriptPubKey, witness, nValue)
+
+                libconsensus_flags = (flags & BITCOINCONSENSUS_ACCEPTED_FLAGS)
+                if flags != libconsensus_flags:
+                    continue
+
+                try:
+                    ConsensusVerifyScript(scriptSig, scriptPubKey, txSpend, 0,
+                                          libconsensus_flags, amount=nValue,
+                                          witness=witness,
+                                          consensus_library_hanlde=handle)
+                except ValidationError as err:
+                    if expected_result == 'OK':
+                        self.fail('Script FAILED: %r %r %r with exception %r\n\nTest data: %r' % (scriptSig, scriptPubKey, comment, err, test_case))
+                    continue
+
+                if expected_result != 'OK':
+                    self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
+
+        do_test_bicoinconsensus(handle)  # test with supplied handle
+        do_test_bicoinconsensus(None)  # test with default-loaded handle
 
     def test_p2sh_redeemscript(self):
         def T(required, total, alt_total=None):
