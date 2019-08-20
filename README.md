@@ -20,6 +20,7 @@ bitcoin transactions, and related data structures.
 * HD keys support
 * Easier to build code that supports and interacts with other bitcoin-based blockchains
   (see https://github.com/Simplexum/python-litecointx and https://github.com/Simplexum/python-elementstx)
+* a wrapper for `libbitcoinconsensus`'s script verification function
 
 ## Note on v1.0.0 release
 
@@ -114,11 +115,15 @@ subclassed and will be dispatched similar to `CTransaction` and friends. It is r
 
 ## Note on VerifyScript() usage
 
-It is good to use VerifyScript to pre-screen the transaction inputs that
-you create, before passing the transaction to bitcoind, or for debugging purposes.
+`VerifyScript()` in `bitcointx.core.scripteval` is (incomplete) python implementation
+of Bitcoin script interpreter. It may be useful for debugging purposes.
 
 But! Bitcoin Core should _always_ remain the authoritative source on bitcoin
 transaction inputs validity.
+
+If you want script verification with consensus rules, you should use libbitcoinconsensus
+(https://github.com/bitcoin/bitcoin/blob/master/doc/shared-libraries.md), available
+via `ConsensusVerifyScript()` in `bitcointx.core.bitcoinconensus`.
 
 Script evaluation code of VerifyScript() is NOT in sync with Bitcoin Core code,
 and lacks some features. While some effort was made to make it behave closer
@@ -129,7 +134,8 @@ will not be ever achieved.
 transaction input is valid.  In some corner cases (non-standard signature encoding,
 unhandled script evaluation flags, etc) it may deem something invalid that bitcoind
 would accept as valid.  More importanty, it could accept something as valid
-that bitcoind would deem invalid.
+that bitcoind would deem invalid. `ConsensusVerifyScript()` should be suitable for
+that purpose, as it is just a thin wrapper over the C library `libbitcoinconsensus`.
 
 ## Module import style
 
