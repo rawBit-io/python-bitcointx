@@ -139,8 +139,11 @@ def load_bitcoinconsensus_library(library_name='bitcoinconsensus'):
 
     """
 
-    handle = ctypes.cdll.LoadLibrary(ctypes.util.find_library(library_name))
-    _add_function_definitions(handle)
+    try:
+        handle = ctypes.cdll.LoadLibrary(ctypes.util.find_library(library_name))
+        _add_function_definitions(handle)
+    except Exception as e:
+        raise ImportError('Cannot import consensus library: {}'.format(e))
 
     lib_version = handle.bitcoinconsensus_version()
     if lib_version != BITCOINCONSENSUS_API_VER:

@@ -206,8 +206,11 @@ def load_secp256k1_library():
     mild API breakage and should be communicated via release notes.
     """
 
-    handle = ctypes.cdll.LoadLibrary(ctypes.util.find_library('secp256k1'))
-    _add_function_definitions(handle)
+    try:
+        handle = ctypes.cdll.LoadLibrary(ctypes.util.find_library('secp256k1'))
+        _add_function_definitions(handle)
+    except Exception as e:
+        raise ImportError('Cannot import secp256k1: {}'.format(e))
     return handle
 
 

@@ -171,6 +171,9 @@ class Test_EvalScript(unittest.TestCase):
         try:
             handle = load_bitcoinconsensus_library()
         except ImportError:
+            logging.basicConfig()
+            log = logging.getLogger("Test_EvalScript")
+            log.warning("libbitcoinconsensus library is not avaliable, not testing bitcoinconsensus module")
             return
 
         def do_test_bicoinconsensus(handle):
