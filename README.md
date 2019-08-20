@@ -20,7 +20,7 @@ bitcoin transactions, and related data structures.
 * HD keys support
 * Easier to build code that supports and interacts with other bitcoin-based blockchains
   (see https://github.com/Simplexum/python-litecointx and https://github.com/Simplexum/python-elementstx)
-* a wrapper for `libbitcoinconsensus`'s script verification function
+* A wrapper for `libbitcoinconsensus`'s script verification function is included
 
 ## Note on v1.0.0 release
 
