@@ -36,6 +36,7 @@ mature than the v0.10.x, because of the amount of new code that was introduced.
 ## Requirements
 
 - [libsecp256k1](https://github.com/bitcoin-core/secp256k1)
+- [libbitcoinconsensus](https://github.com/bitcoin/bitcoin/blob/master/doc/shared-libraries.md) (optional, for consensus-compatible script verification)
 - [openssl](https://github.com/openssl/openssl) (optional, only for historical signatures verification)
 
 The RPC interface, `bitcointx.rpc`, is designed to work with Bitcoin Core v0.16.0.
