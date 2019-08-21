@@ -183,8 +183,7 @@ class ArgumentsInvalidError(EvalScriptError):
 class VerifyOpFailedError(EvalScriptError):
     """A VERIFY opcode failed"""
     def __init__(self, opcode, **kwargs):
-        super().__init__('%s failed' % OPCODE_NAMES[opcode],
-                                                  **kwargs)
+        super().__init__('%s failed' % OPCODE_NAMES[opcode], **kwargs)
 
 
 # A canonical signature exists of: <30> <total len> <02> <len R> <R> <02> <len S> <S> <hashtype>
