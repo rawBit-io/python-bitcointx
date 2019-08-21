@@ -161,12 +161,17 @@ def ConsensusVerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
     """Verify a scriptSig satisfies a scriptPubKey, via libbitcoinconsensus
     `bitcoinconsensus_verify_script_with_amount()` function.
 
+    The arguments are compatible with `VerifyScript()` from
+    `bitcointx.core.scripteval`
+
     scriptSig    - Signature
     scriptPubKey - PubKey
     txTo         - Spending transaction
     inIdx        - Index of the transaction input containing scriptSig
-    flags        - Script execution flags. Only a subset of flags are allowed.
-                   see BITCOINCONSENSUS_ACCEPTED_FLAGS.
+    flags        - Script execution flags (flags defined in
+                   `bitcointx.core.scripteval`). Only a subset of flags
+                   are allowed (see BITCOINCONSENSUS_ACCEPTED_FLAGS in
+                   `bitcointx.core.bitcoinconsensus`)
     amount       - amount of the input
     witness      - CScriptWitness() for the corresponding input.
                    If None, the witness will be taken from the transaction.
