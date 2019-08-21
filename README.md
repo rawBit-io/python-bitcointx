@@ -197,8 +197,6 @@ system, you can run unit tests for multiple Python versions:
 Currently, the following implementations are tried (any not installed are
 skipped):
 
-    * CPython 3.4
-    * CPython 3.5
     * CPython 3.6
     * CPython 3.7
     * CPython 3.8-dev
