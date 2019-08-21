@@ -61,9 +61,9 @@ consensus critical and non-consensus-critical.
     bitcointx.core.sha256     - (Slow) python implementation of SHA256,
                                 but with ability to get SHA256 mid-state
     bitcointx.core.bitcoinconsensus
-                              - ctypes wrapping code for `libbitcoinconsensus`
-                                script verification function, with interface compatible
-                                with `core.scripteval`'s VerifyScript
+                              - ctypes wrapping code for libbitcoinconsensus script
+                                verification function, with interface compatible
+                                with VerifyScript from bitcointx.core.scripteval
 
 Note that this code is does not aim to be fully consensus-compatible with current
 bitcoin core codebase. Corner cases that is not relevant to creating valid bitcoin
