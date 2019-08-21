@@ -9,13 +9,17 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-import unittest, random
+import unittest
+import random
 
 from binascii import unhexlify
 
-from bitcointx.core.serialize import *
+from bitcointx.core.serialize import (
+    Serializable, VarIntSerializer, BytesSerializer, SerializationError,
+    SerializationTruncationError, DeserializationExtraDataError,
+    uint256_from_str, uint256_to_str
+)
+
 
 class Test_Serializable(unittest.TestCase):
     def test_extra_data(self):
@@ -39,6 +43,7 @@ class Test_Serializable(unittest.TestCase):
             self.fail("DeserializationExtraDataError not raised")
 
         FooSerializable.deserialize(b'\x00', allow_padding=True)
+
 
 class Test_VarIntSerializer(unittest.TestCase):
     def test(self):
@@ -84,6 +89,7 @@ class Test_VarIntSerializer(unittest.TestCase):
         T(b'ff')
         T(b'ff00000000000000')
 
+
 class Test_BytesSerializer(unittest.TestCase):
     def test(self):
         def T(value, expected):
@@ -105,42 +111,16 @@ class Test_BytesSerializer(unittest.TestCase):
         T(b'')
         T(b'01')
         T(b'0200')
-        T(b'ff00000000000000ff11223344', SerializationError) # > max_size
+        T(b'ff00000000000000ff11223344', SerializationError)  # > max_size
 
-class Test_Compact(unittest.TestCase):
-    def test_from_compact_zero(self):
-        self.assertEqual(uint256_from_compact(0x00123456), 0)
-        self.assertEqual(uint256_from_compact(0x01003456), 0)
-        self.assertEqual(uint256_from_compact(0x02000056), 0)
-        self.assertEqual(uint256_from_compact(0x03000000), 0)
-        self.assertEqual(uint256_from_compact(0x04000000), 0)
-        self.assertEqual(uint256_from_compact(0x00923456), 0)
-    def test_from_compact_negative_zero(self):
-        # Negative bit isn't supported yet
-        # self.assertEqual(uint256_from_compact(0x01803456), 0)
-        # self.assertEqual(uint256_from_compact(0x02800056), 0)
-        # self.assertEqual(uint256_from_compact(0x03800000), 0)
-        # self.assertEqual(uint256_from_compact(0x04800000), 0)
-        return
-
-    def test_twelve(self):
-        self.assertEqual(uint256_from_compact(0x01123456), 0x0012)
-        self.assertEqual(compact_from_uint256(0x0012), 0x01120000)
-
-    def test_from_uint256(self):
-        self.assertEqual(compact_from_uint256(0x1234), 0x02123400)
-        self.assertEqual(compact_from_uint256(0x123456), 0x03123456)
-        self.assertEqual(compact_from_uint256(0x12345600), 0x04123456)
-        self.assertEqual(compact_from_uint256(0x92340000), 0x05009234)
-        self.assertEqual(compact_from_uint256(0x1234560000000000000000000000000000000000000000000000000000000000), 0x20123456)
 
 class Test_Uint256_Serialize(unittest.TestCase):
     def test_fixed(self):
         values = []
         values.append(0)
-        values.append(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
+        values.append(
+            0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         for x in range(100):
             values.append(random.getrandbits(256))
         for n in values:
             assert(uint256_from_str(uint256_to_str(n)) == n)
-
