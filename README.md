@@ -188,7 +188,7 @@ Bitcoin testnet params (bitcoin/testnet) are in effect
 
 Under bitcointx/tests using test data from Bitcoin Core. To run them:
 
-    python -m unittest discover && python3 -m unittest discover
+    python3 -m unittest discover
 
 Alternately, if Tox (see https://tox.readthedocs.org/) is available on your
 system, you can run unit tests for multiple Python versions:
