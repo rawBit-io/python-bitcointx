@@ -176,12 +176,12 @@ behavior everywhere. If you need to change the parameters temporary, you can use
 from bitcointx import ChainParams, get_current_chain_params
 with ChainParams('bitcoin/testnet'):
     params = get_current_chain_params()
-    print("{} params ({}) is in effect".format(params.readable_name, params.name))
+    print("{} params ({}) are in effect".format(params.readable_name, params.name))
 ```
 will print
 
 ```
-Bitcoin testnet params (bitcoin/testnet) is in effect
+Bitcoin testnet params (bitcoin/testnet) are in effect
 ```
 
 ## Unit tests
