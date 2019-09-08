@@ -275,3 +275,24 @@ class Test_CTransaction(unittest.TestCase):
 
         wit = CTxWitness((CMutableTxInWitness(),))
         self.assertTrue(wit.vtxinwit[0].is_immutable())
+
+    def test_tx_vsize(self):
+        """simple test to check that tx virtual size calculation works.
+        transaction sizes taken from Bitcoin Core's decoderawtransaction output"""
+        tx_no_witness = CTransaction.deserialize(x('0200000001eab856b5c4de81511cedab916630cf0afa38ea4ed8e0e88c8990eda88773cd47010000006b4830450221008f9ea83b8f4a2d23b07a02f25109aa508a78b85643b0a1f1c8a08c48d32f53e6022053e7028a585c55ba53895e9a8ef8def86b1d109ec057400f4d5f152f5bf302d60121020bcf101930dd54e22344d4ef060561fe68f42426fe01f92c694bd119f308d44effffffff027ef91e82100000001976a914f1ef6b3f14c69cafd75b3a5cd2101114bb411d5088ac12533c72040000002200201f828f01c988a992ef9efb4c77a8e3607df0f97edbc3029fe95d62f6b1c436bb00000000'))
+        tx_no_witness_vsize = 235
+        self.assertEqual(tx_no_witness.get_virtual_size(), tx_no_witness_vsize)
+        tx_with_witness = CTransaction.deserialize(x('020000000001025fdeae88276b595be42d440d638a52d3ea0e1e1c820ab305ce438452468d7a2201000000171600149f2ca9bcbfb16f8a5c4f664aa22a2c833545a2b5fefffffffc25d526160911147b11fefeb6598ae97e093590d642265f27a67e7242a2ac31000000001716001482ad37a540c47bbb740596667f472f9d96f6dfb3feffffff02848a1b000000000017a914dc5d78da1cd6b02e08f0aa7bf608b091094415968700e1f5050000000017a9144b8acc9fc4210a5ce3ff417b00b419fd4fb03f8c8702473044022042c7ca216ace58920d6114ad30798a7a0b2b64faf17803034316dd83c90048a002205e37943bc694622128494fa2d9d3d402a58d91c1661c9a3a28124ff0e457d561012103bb79122851602141d7ec63a7342bc23bc51f050808695c141958cf2c222e38ed02483045022100c6841686570b60540b1c5ef620f3159f1f359a12cf30112650e72c44864b3e7202205c565a6cf05578557232e03d1655b73dcbf4e082c6ff0602707f0c0394c86b7601210292f52933e2105dc7410445be9a9d01589e0b9bc09d7a4e1509dc8e094b9ee9e437040000'))
+        tx_with_witness_vsize = 257
+        self.assertEqual(tx_with_witness.get_virtual_size(), tx_with_witness_vsize)
+
+        tx = tx_no_witness.to_mutable()
+        for i in range(260):
+            tx.vout.append(tx.vout[0])
+        self.assertEqual(tx.get_virtual_size(), 9077)
+
+        tx = tx_with_witness.to_mutable()
+        for i in range(260):
+            tx.vout.append(tx.vout[0])
+
+        self.assertEqual(tx.get_virtual_size(), 8579)

@@ -247,17 +247,63 @@ def get_size_of_compact_size(size):
         return 9
 
 
-def calculate_transaction_virtual_size(num_inputs=None,
-                                       inputs_serialized_size=None,
-                                       num_outputs=None,
-                                       outputs_serialized_size=None,
-                                       witness_size=None):
+def calculate_transaction_virtual_size(*,
+                                       num_inputs,
+                                       inputs_serialized_size,
+                                       num_outputs,
+                                       outputs_serialized_size,
+                                       witness_size):
 
     """Calculate vsize of transaction given the number of inputs and
        outputs, the serialized size of inputs and outputs, and witness size.
        Useful for fee calculation at the time of coin selection, where you
        might not have CTransaction ready, but know all the parameters on
-       that vsize depends on"""
+       that vsize depends on.
+
+       Number of witnesses is always equal to number of inputs,
+       and empty witnesses are encoded as a single zero byte.
+       If there will be witnesses present in a transaction, `witness_size`
+       must be larger than or equal to `num_inputs`.
+       If the transaction will not include any witnesses, `witness_size`
+       can be 0, or it can be equal to `num_inputs` (that is interpreted as
+       'all witnesses are empty', and `witness_size` of 0 is used instead).
+       Non-zero `witness_size` that is less than `num_inputs` is an error.
+
+       Note that virtual size can also depend on number of sigops for the
+       transaction, and this function does not account for this.
+
+       In Bitcoin Core, virtual size is calculated as a maximum value
+       between data-based calculated size and sigops-based calculated size.
+
+       But for sigops-based size to be larger than data-based size, number
+       of sigops have to be huge, and is unlikely to happen for normal scripts.
+       Counting sigops also requires access to the inputs of the transaction,
+       and the sigops-based size depends on adjustable parameter
+       "-bytespersigop" in Bitcoin Core (default=20 for v0.18.1).
+
+       If you care about sigops-based vsize and calculated your number of
+       sigops, you can compare data-based size with your sigops-based size
+       yourself, and use the maximum value. Do not forget that sigops-based
+       size is also WITNESS_SCALE_FACTOR adjusted:
+          (nSigOpCost * bytes_per_sigop
+                      + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR
+
+       """
+
+    if witness_size != 0:
+        if witness_size < num_inputs:
+            raise ValueError(
+                "witness_size should be >= num_inputs, "
+                "because empty witness are encoded as a single zero byte.")
+        if witness_size == num_inputs:
+            # this can happen only if each witness is empty (single zero byte)
+            # and therefore the transaction witness will be deemed empty,
+            # and won't be serialized
+            witness_size = 0
+        else:
+            # (marker byte, flag byte) that signal that the transaction
+            # has witness present are included in witness size.
+            witness_size += 2
 
     base_size = (
         4    # version
@@ -833,6 +879,15 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         f.write(struct.pack(b"<I", self.nLockTime))
 
     def get_virtual_size(self):
+        """Calculate virtual size for the transaction.
+
+        Note that calculation does not take sigops into account.
+        Sigops-based vsize is only relevant for highly non-standard
+        scripts with very high sigop count, and cannot be directly deduced
+        giving only the data of one transaction.
+
+        see docstring for `calculate_transaction_virtual_size()`
+        for more detailed explanation."""
         f = BytesIO()
         for vin in self.vin:
             vin.stream_serialize(f)
@@ -842,8 +897,11 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
             vout.stream_serialize(f)
         outputs_size = len(f.getbuffer())
         f = BytesIO()
-        self.wit.stream_serialize(f)
-        witness_size = len(f.getbuffer())
+        if self.wit.is_null():
+            witness_size = 0
+        else:
+            self.wit.stream_serialize(f)
+            witness_size = len(f.getbuffer())
 
         return calculate_transaction_virtual_size(
             num_inputs=len(self.vin),
