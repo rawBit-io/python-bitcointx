@@ -108,8 +108,19 @@ class CCoinAddress(WalletCoinClass):
         raise CCoinAddressError(
             'scriptPubKey is not in a recognized address format')
 
-    def get_output_size(self):
-        txo = bitcointx.core.CTxOut(scriptPubKey=self.to_scriptPubKey())
+    @classmethod
+    def get_output_size(cls_or_inst):
+        if isinstance(cls_or_inst, type):
+            cls = cls_or_inst
+            data_length = getattr(cls, '_data_length', None)
+            if not data_length:
+                raise TypeError('output size is only available '
+                                'for concrete address classes')
+            inst = cls.from_bytes(b'\x00'*data_length)
+        else:
+            inst = cls_or_inst
+
+        txo = bitcointx.core.CTxOut(scriptPubKey=inst.to_scriptPubKey())
         f = BytesIO()
         txo.stream_serialize(f)
         return len(f.getbuffer())

@@ -88,14 +88,18 @@ class Test_CCoinAddress(unittest.TestCase):
     def test_get_output_size(self):
         pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
         a = P2PKHCoinAddress.from_pubkey(pub)
+        self.assertEqual(P2PKHCoinAddress.get_output_size(), 34)
         self.assertEqual(a.get_output_size(), 34)
         a = P2WPKHCoinAddress.from_pubkey(pub)
+        self.assertEqual(P2WPKHCoinAddress.get_output_size(), 31)
         self.assertEqual(a.get_output_size(), 31)
         a = P2SHCoinAddress.from_redeemScript(
             CScript(b'\xa9' + Hash160(pub) + b'\x87'))
+        self.assertEqual(P2SHCoinAddress.get_output_size(), 32)
         self.assertEqual(a.get_output_size(), 32)
         a = P2WSHCoinAddress.from_redeemScript(
             CScript(b'\xa9' + Hash160(pub) + b'\x87'))
+        self.assertEqual(P2WSHCoinAddress.get_output_size(), 43)
         self.assertEqual(a.get_output_size(), 43)
 
 
