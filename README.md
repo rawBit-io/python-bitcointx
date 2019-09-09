@@ -16,7 +16,6 @@ bitcoin transactions, and related data structures.
 * Some API have changed and may be not compatible with old code (see below)
 * libsecp256k1 is used for signing and verifying.
   Signing by libsecp256k1 is deterministic, per RFC6979.
-* Bech32-encoded address support
 * HD keys support
 * Easier to build code that supports and interacts with other bitcoin-based blockchains
   (see https://github.com/Simplexum/python-litecointx and https://github.com/Simplexum/python-elementstx)
