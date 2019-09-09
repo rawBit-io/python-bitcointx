@@ -65,6 +65,11 @@ class ChainParamsMeta(ABCMeta):
                                 checkarg.__name__))
 
             if name is not None:
+                if name in cls._registered_classes:
+                    raise AssertionError(
+                        'name {} is not allowed to be registered twice, '
+                        'it was already registered by {} before'
+                        .format(name, cls._registered_classes[name].__name__))
                 cls_instance.NAME = name
                 cls._registered_classes[name] = cls_instance
         else:
