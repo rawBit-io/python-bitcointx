@@ -79,12 +79,12 @@ class CCoinAddress(WalletCoinClass):
 
     def __new__(cls, s):
         recognized_encoding = set()
-        enc_class_set = dispatcher_mapped_list(cls)
-        for enc_class in enc_class_set:
+        target_cls_set = dispatcher_mapped_list(cls)
+        for target_cls in target_cls_set:
             try:
-                return enc_class(s)
+                return target_cls(s)
             except CCoinAddressError:
-                recognized_encoding.add(enc_class)
+                recognized_encoding.add(target_cls)
             except bitcointx.core.AddressDataEncodingError:
                 pass
 
@@ -94,7 +94,7 @@ class CCoinAddress(WalletCoinClass):
                 .format(recognized_encoding))
 
         raise CCoinAddressError(
-            'Unrecognized encoding for any of {}'.format(enc_class_set))
+            'Unrecognized encoding for any of {}'.format(target_cls_set))
 
     @classmethod
     def from_scriptPubKey(cls, scriptPubKey):
@@ -114,8 +114,8 @@ class CCoinAddress(WalletCoinClass):
             cls = cls_or_inst
             data_length = getattr(cls, '_data_length', None)
             if not data_length:
-                raise TypeError('output size is only available '
-                                'for concrete address classes')
+                raise TypeError('output size is not available for {}'
+                                .format(cls.__name__))
             inst = cls.from_bytes(b'\x00'*data_length)
         else:
             inst = cls_or_inst
@@ -124,6 +124,39 @@ class CCoinAddress(WalletCoinClass):
         f = BytesIO()
         txo.stream_serialize(f)
         return len(f.getbuffer())
+
+    # 'scriptPubKey' is used thoughout API (as this is how pubkey script is
+    # referred to in C++ code in Bitcoin Core). Using snake-case
+    # would be more pythonic, but sticking to the established convention
+    # is better, because users of API will just need to know that scriptPubKey
+    # is always camel-cased.
+    @classmethod
+    def get_scriptPubKey_type(cls):
+        """return scriptPubKey type for a given concrete class.
+        For example, when called on P2SHCoinAddress, will return 'scripthash'.
+
+        calling this method on generic address class is an error."""
+        spk_type = getattr(cls, '_scriptpubkey_type', None)
+        if not spk_type:
+            raise TypeError('scriptPubKey type is not available for {}'
+                            .format(cls.__name__))
+        return cls._scriptpubkey_type
+
+    @classmethod
+    def match_scriptPubKey_type(cls, spk_type_string: str):
+        """match the concrete address class by scriptPubKey type.
+        For example, given the string 'scripthash', it will return
+        P2SHCoinAddress. If no matching scriptPubKey type is found,
+        will return None."""
+        for target_cls in dispatcher_mapped_list(cls):
+            spk_type = getattr(target_cls, '_scriptpubkey_type', None)
+            if not spk_type:
+                matched = target_cls.match_scriptPubKey_type(spk_type_string)
+                if matched is not None:
+                    return matched
+            elif spk_type_string == spk_type:
+                return target_cls
+        return None
 
 
 class CCoinAddressError(Exception):
@@ -214,6 +247,7 @@ class CBase58CoinAddress(bitcointx.base58.CBase58PrefixedData, CCoinAddress):
 
 class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
     _data_length = 20
+    _scriptpubkey_type = 'scripthash'
 
     @classmethod
     def from_redeemScript(cls, redeemScript):
@@ -246,6 +280,7 @@ class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
 
 class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
     _data_length = 20
+    _scriptpubkey_type = 'pubkeyhash'
 
     @classmethod
     def from_pubkey(cls, pubkey, accept_invalid=False):
@@ -295,6 +330,7 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
 class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     _data_length = 32
     _witness_version = 0
+    _scriptpubkey_type = 'witness_v0_scripthash'
 
     @classmethod
     def from_scriptPubKey(cls, scriptPubKey):
@@ -329,6 +365,7 @@ class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
 class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     _data_length = 20
     _witness_version = 0
+    _scriptpubkey_type = 'witness_v0_keyhash'
 
     @classmethod
     def from_pubkey(cls, pubkey, accept_invalid=False):

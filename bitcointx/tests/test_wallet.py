@@ -102,6 +102,14 @@ class Test_CCoinAddress(unittest.TestCase):
         self.assertEqual(P2WSHCoinAddress.get_output_size(), 43)
         self.assertEqual(a.get_output_size(), 43)
 
+    def test_scriptpubkey_type(self):
+        for l1_cls in dispatcher_mapped_list(CCoinAddress):
+            for l2_cls in dispatcher_mapped_list(l1_cls):
+                for l3_cls in dispatcher_mapped_list(l2_cls):
+                    spk_type = l3_cls.get_scriptPubKey_type()
+                    matched_cls = CCoinAddress.match_scriptPubKey_type(spk_type)
+                    self.assertTrue(l3_cls is matched_cls)
+
 
 class Test_CBitcoinAddress(unittest.TestCase):
     def test_create_from_string(self):
