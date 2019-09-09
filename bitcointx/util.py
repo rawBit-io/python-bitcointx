@@ -163,7 +163,7 @@ class ClassMappingDispatcher(ABCMeta):
                     dispatcher cannot set their own identity, they all
                     will use the same identity set for the base dispatcher.
                 depends:
-                    a list of dispatcher that this dispatcher depends on.
+                    a list of dispatchers that this dispatcher depends on.
                     the current dispatcher may directly use classes dispatched
                     by the dependent dispatchers, or the dependency may be
                     'structural' - as WalletBitcoinDispatcher, when activated,
@@ -205,6 +205,7 @@ class ClassMappingDispatcher(ABCMeta):
             parent_depends = mcs._class_dispatcher__depends
             combined_depends = list(mcs._class_dispatcher__depends)
             for ddisp in depends:
+                replaced_index = None
                 for i, pdep in enumerate(parent_depends):
                     if issubclass(ddisp, pdep):
                         if combined_depends[i] != pdep:
@@ -213,7 +214,20 @@ class ClassMappingDispatcher(ABCMeta):
                                 'it is in conflict with {}, that also tries '
                                 'to replace {} from parent depenrs'
                                 .format(ddisp, combined_depends[i], pdep))
+                        if replaced_index is not None:
+                            raise TypeError(
+                                '{} is specified in depends argument, but '
+                                'it is a subclass of both {} and {}'
+                                .format(ddisp, parent_depends[replaced_index],
+                                        pdep))
                         combined_depends[i] = ddisp
+                        replaced_index = i
+
+                if replaced_index is None:
+                    raise TypeError(
+                        '{} is specified in depends argument, but it is not '
+                        'a subclass of any dependencies of the parent of {}'
+                        .format(ddisp, mcs))
 
             mcs._class_dispatcher__depends = tuple(combined_depends)
 
@@ -246,7 +260,7 @@ class ClassMappingDispatcher(ABCMeta):
         # Wrap all methods of a class to enable the relevant dispatcher
         # within the methods.
         # For example, inside CBitcoinTransaction.deserialize(), CTxOut()
-        # should product CBitcoinTxOut, regardless of the current globally
+        # should produce CBitcoinTxOut, regardless of the current globally
         # chosen chain parameters.
         def wrap(fn, mcs):
             @functools.wraps(fn)
@@ -345,7 +359,11 @@ class ClassMappingDispatcher(ABCMeta):
 
         class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
         if len(class_list) != 1:
+            # There is more than one target, so this is not
+            # a final mapping. Instantiate the original class, and allow
+            # it to do its own dispatching.
             return type.__call__(cls, *args, **kwargs)
+        # Unambigous target - do the substitution.
         return type.__call__(class_list[0], *args, **kwargs)
 
     def __getattribute__(cls, name):
@@ -361,7 +379,12 @@ class ClassMappingDispatcher(ABCMeta):
 
         class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
         if len(class_list) != 1:
+            # There is more than one target, so this is not
+            # a final mapping. The original class is doing
+            # its own dispatching, and we do not need to do any
+            # attribute substition here.
             return type.__getattribute__(cls, name)
+        # Unambigous target - do the substitution.
         return getattr(class_list[0], name)
 
 
