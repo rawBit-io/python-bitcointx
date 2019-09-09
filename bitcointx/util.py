@@ -118,28 +118,6 @@ def dispatcher_mapped_list(cls):
     return clsmap[cls]
 
 
-if not hasattr(object, '__init_subclass__'):
-    class ABCMetaWithBackportedInitSubclass(ABCMeta):
-        """ABCMeta class, but with backport of support of __init_subclass__
-        for python versions that do not have support for pep-0487"""
-        def __new__(mcs, name, bases, dct, **kwargs):
-
-            isc = '__init_subclass__'
-            if isc in dct:
-                dct[isc] = classmethod(dct[isc])
-
-            return super().__new__(mcs, name, bases, dct)
-
-        def __init__(cls, name, bases, dct, **kwargs):
-            super().__init__(name, bases, dct)
-
-            scls = super()
-            if hasattr(scls, '__init_subclass__'):
-                scls.__init_subclass__.__func__(cls, **kwargs)
-else:
-    ABCMetaWithBackportedInitSubclass = ABCMeta
-
-
 class DispatcherMethodWrapper():
     """A helper class that allows to wrap both classmethods and staticmethods,
     in addition to normal instance methods"""
@@ -165,7 +143,7 @@ def dispatcher_wrap_methods(cls, wrap_fn, *, dct=None):
                     DispatcherMethodWrapper(attr_value, wrap_fn))
 
 
-class ClassMappingDispatcher(ABCMetaWithBackportedInitSubclass):
+class ClassMappingDispatcher(ABCMeta):
     """A custom class dispatcher that translates invocations and attribute
     access of a superclass to a certain subclass according to internal map.
     This map is built from the actual superclass-subclass relations between
