@@ -14,7 +14,7 @@ bitcoin transactions, and related data structures.
 
 * Network-related code that deals with network messages and blocks is removed.
 * Some API have changed and may be not compatible with old code (see below)
-* libsecp256k1 are used for signing and verifying.
+* libsecp256k1 is used for signing and verifying.
   Signing by libsecp256k1 is deterministic, per RFC6979.
 * Bech32-encoded address support
 * HD keys support
