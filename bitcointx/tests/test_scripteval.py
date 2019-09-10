@@ -231,7 +231,8 @@ class Test_EvalScript(unittest.TestCase):
             sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
                     for k in keys[:required]]
 
-            tx.vin[0].scriptSig = standard_multisig_witness(sigs, redeem_script)
+            tx.vin[0].scriptSig = CScript(
+                standard_multisig_witness(sigs, redeem_script))
 
             VerifyScript(tx.vin[0].scriptSig, scriptPubKey, tx, 0,
                          (SCRIPT_VERIFY_P2SH,))

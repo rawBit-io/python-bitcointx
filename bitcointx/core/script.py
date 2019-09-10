@@ -1299,7 +1299,7 @@ def standard_multisig_witness(sigs, redeem_script):
     script = [0]
     script.extend(sigs)
     script.append(redeem_script)
-    return CScript(script)
+    return script
 
 
 def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
