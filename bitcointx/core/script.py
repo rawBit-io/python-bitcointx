@@ -995,7 +995,7 @@ class CScriptWitness(ImmutableSerializable):
     __slots__ = ['stack']
 
     def __init__(self, stack=()):
-        object.__setattr__(self, 'stack', stack)
+        object.__setattr__(self, 'stack', tuple(bytes(elt) for elt in stack))
 
     def __len__(self):
         return len(self.stack)
