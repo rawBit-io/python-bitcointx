@@ -776,7 +776,7 @@ class BIP32Path:
                              'and not equal "m"')
 
         if path.endswith('/'):
-            raise ValueError('derivation must not end with "/" ')
+            raise ValueError('derivation path must not end with "/" ')
 
         indexlist = []
 
