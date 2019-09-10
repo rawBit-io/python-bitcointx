@@ -773,10 +773,10 @@ class BIP32Path:
             return [], hardened_marker
         elif not path.startswith('m/'):
             raise ValueError('derivation path does not start with "m/" '
-                             'and not equal "m"')
+                             'and not equal to "m"')
 
         if path.endswith('/'):
-            raise ValueError('derivation path must not end with "/" ')
+            raise ValueError('derivation path must not end with "/"')
 
         indexlist = []
 
