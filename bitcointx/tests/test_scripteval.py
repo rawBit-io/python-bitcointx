@@ -29,7 +29,7 @@ from bitcointx.core.key import CKey
 from bitcointx.core.script import (
     OPCODES_BY_NAME, CScript, CScriptWitness,
     OP_0, SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
-    standard_multisig_redeem_script, standard_multisig_witness,
+    standard_multisig_redeem_script, standard_multisig_witness_stack,
 )
 from bitcointx.core.scripteval import (
     VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH,
@@ -232,7 +232,7 @@ class Test_EvalScript(unittest.TestCase):
                     for k in keys[:required]]
 
             tx.vin[0].scriptSig = CScript(
-                standard_multisig_witness(sigs, redeem_script))
+                standard_multisig_witness_stack(sigs, redeem_script))
 
             VerifyScript(tx.vin[0].scriptSig, scriptPubKey, tx, 0,
                          (SCRIPT_VERIFY_P2SH,))
@@ -253,9 +253,9 @@ class Test_EvalScript(unittest.TestCase):
             sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
                     for k in keys[:required]]
 
-            witness = standard_multisig_witness(sigs, redeem_script)
+            witness_stack = standard_multisig_witness_stack(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([])
-            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness))
+            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness_stack))
 
             VerifyScript(tx.vin[0].scriptSig, scriptPubKey, tx, 0,
                          flags=(SCRIPT_VERIFY_WITNESS, SCRIPT_VERIFY_P2SH),
@@ -278,9 +278,9 @@ class Test_EvalScript(unittest.TestCase):
             sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
                     for k in keys[:required]]
 
-            witness = standard_multisig_witness(sigs, redeem_script)
+            witness_stack = standard_multisig_witness_stack(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([scriptPubKey])
-            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness))
+            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness_stack))
 
             VerifyScript(tx.vin[0].scriptSig,
                          scriptPubKey.to_p2sh_scriptPubKey(), tx, 0,

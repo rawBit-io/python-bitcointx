@@ -1289,17 +1289,32 @@ def parse_standard_multisig_redeem_script(script):
     return {'total': total, 'required': required, 'pubkeys': pubkeys}
 
 
-def standard_multisig_witness(sigs, redeem_script):
+def standard_multisig_witness_stack(sigs, redeem_script):
 
-    parse_standard_multisig_redeem_script(redeem_script) # check valid p2sh script
+    # check valid p2sh script
+    info = parse_standard_multisig_redeem_script(redeem_script)
 
     if not all(isinstance(s, (bytes, bytearray)) for s in sigs):
         raise ValueError('sigs must be an array of bytes (or bytearrays)')
 
-    script = [0]
-    script.extend(sigs)
-    script.append(redeem_script)
-    return script
+    if len(sigs) > info['total']:
+        raise ValueError('number of signatures ({}) is greater than '
+                         'total pubkeys ({}) in the redeem script'
+                         .format(len(sigs), info['total']))
+
+    if len(sigs) != info['required']:
+        raise ValueError('number of signatures ({}) does not match '
+                         'the number of required pubkeys ({}) '
+                         'in the redeem script'
+                         .format(len(sigs), info['required']))
+
+    # b'' encodes dummy 0 required for CHECKMULTISIG
+    # in a way suitable for both CScript(stack) to put into scriptSig,
+    # and for CScriptWitness(stack) to put into CTxInWitness
+    stack = [b'']
+    stack.extend(sigs)
+    stack.append(redeem_script)
+    return stack
 
 
 def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
@@ -1495,4 +1510,7 @@ __all__ = (
 
     'ScriptCoinClassDispatcher',
     'ScriptCoinClass',
+    'parse_standard_multisig_redeem_script',
+    'standard_multisig_redeem_script',
+    'standard_multisig_witness_stack',
 )
