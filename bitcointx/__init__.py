@@ -65,13 +65,23 @@ class ChainParamsMeta(ABCMeta):
                                 checkarg.__name__))
 
             if name is not None:
-                if name in cls._registered_classes:
-                    raise AssertionError(
-                        'name {} is not allowed to be registered twice, '
-                        'it was already registered by {} before'
-                        .format(name, cls._registered_classes[name].__name__))
-                cls_instance.NAME = name
-                cls._registered_classes[name] = cls_instance
+                if isinstance(name, str):
+                    cls_instance.NAME = name
+                    names = [name]
+                elif isinstance(name, (list, tuple)):
+                    names = name
+                    cls_instance.NAME = names[0]
+                else:
+                    raise TypeError(
+                        'name argument must be string, list, or tuple')
+                for name in names:
+                    if name in cls._registered_classes:
+                        raise AssertionError(
+                            'name {} is not allowed to be registered twice, '
+                            'it was already registered by {} before'
+                            .format(
+                                name, cls._registered_classes[name].__name__))
+                    cls._registered_classes[name] = cls_instance
         else:
             if cls._common_base_cls:
                 raise TypeError(
@@ -88,7 +98,7 @@ def find_chain_params(*, name=None):
 
 
 def get_registered_chain_params():
-    return ChainParamsMeta._registered_classes.values()
+    return list(set(ChainParamsMeta._registered_classes.values()))
 
 
 class ChainParamsBase(metaclass=ChainParamsMeta):
@@ -132,7 +142,8 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
         return ' '.join(name_parts)
 
 
-class BitcoinMainnetParams(ChainParamsBase, name='bitcoin'):
+class BitcoinMainnetParams(ChainParamsBase,
+                           name=('bitcoin', 'bitcoin/mainnet')):
     RPC_PORT = 8332
     WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinClassDispatcher
 
