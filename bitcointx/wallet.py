@@ -94,7 +94,8 @@ class CCoinAddress(WalletCoinClass):
                 .format(recognized_encoding))
 
         raise CCoinAddressError(
-            'Unrecognized encoding for any of {}'.format(target_cls_set))
+            'Unrecognized encoding for any of {}'
+            .format([tcls.__name__ for tcls in target_cls_set]))
 
     @classmethod
     def from_scriptPubKey(cls, scriptPubKey):
