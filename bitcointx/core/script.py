@@ -995,7 +995,13 @@ class CScriptWitness(ImmutableSerializable):
     __slots__ = ['stack']
 
     def __init__(self, stack=()):
-        object.__setattr__(self, 'stack', tuple(bytes(elt) for elt in stack))
+        coerced_stack = []
+        for (opcode, data, sop_idx) in CScript(stack).raw_iter():
+            if data is not None:
+                coerced_stack.append(data)
+            else:
+                coerced_stack.append(bytes([opcode]))
+        object.__setattr__(self, 'stack', tuple(coerced_stack))
 
     def __len__(self):
         return len(self.stack)
@@ -1308,10 +1314,7 @@ def standard_multisig_witness_stack(sigs, redeem_script):
                          'in the redeem script'
                          .format(len(sigs), info['required']))
 
-    # b'' encodes dummy 0 required for CHECKMULTISIG
-    # in a way suitable for both CScript(stack) to put into scriptSig,
-    # and for CScriptWitness(stack) to put into CTxInWitness
-    stack = [b'']
+    stack = [0]  # dummy 0 required for CHECKMULTISIG
     stack.extend(sigs)
     stack.append(redeem_script)
     return stack
