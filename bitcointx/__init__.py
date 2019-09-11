@@ -166,12 +166,12 @@ def ChainParams(params, **kwargs):
 def select_chain_params(params, **kwargs):
     """Select the chain parameters to use
 
-    name is one of 'mainnet', 'testnet', or 'regtest'
+    name is one of 'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'
 
-    Default chain is 'mainnet'
+    Default chain is 'bitcoin'.
 
-    Switching chain parameters involves setting global variables
-    and parameters of certain classes. NOT thread-safe.
+    The references to new parameter classes are saved in global variables
+    that are thread-local, so changing chain parameters is thread-safe.
     """
 
     if isinstance(params, str):
