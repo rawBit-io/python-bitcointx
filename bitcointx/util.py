@@ -12,7 +12,6 @@
 import threading
 import functools
 from types import FunctionType
-from collections import defaultdict
 from abc import ABCMeta
 
 class_mapping_dispatch_data = threading.local()
@@ -101,7 +100,7 @@ def activate_class_dispatcher(dclass):
 
 def dispatcher_mapped_list(cls):
     """Get a list of the classes that particular class is to be
-    dispatched to"""
+    dispatched to. Returns empty list when class is not in a dispatch map"""
     mcs = type(cls)
     if ClassMappingDispatcher not in mcs.__mro__:
         raise ValueError('{} is not a dispatcher class'.format(cls.__name__))
@@ -109,13 +108,7 @@ def dispatcher_mapped_list(cls):
     dispatcher = getattr(class_mapping_dispatch_data,
                          mcs._class_dispatcher__identity)
 
-    clsmap = dispatcher._class_dispatcher__clsmap
-
-    if cls not in clsmap:
-        raise ValueError('{} does not have a mapping in {}'
-                         .format(cls.__name__, dispatcher.__name__))
-
-    return clsmap[cls]
+    return dispatcher._class_dispatcher__clsmap.get(cls, [])
 
 
 class DispatcherMethodWrapper():
@@ -199,7 +192,7 @@ class ClassMappingDispatcher(ABCMeta):
 
         mcs._class_dispatcher__final_dispatch = set()
         mcs._class_dispatcher__no_direct_use = False
-        mcs._class_dispatcher__clsmap = defaultdict(list)
+        mcs._class_dispatcher__clsmap = {}
 
         if depends:
             parent_depends = mcs._class_dispatcher__depends
@@ -312,7 +305,7 @@ class ClassMappingDispatcher(ABCMeta):
                 # do not map subclasses after final dispatch reached
                 continue
 
-            target_list = mcs._class_dispatcher__clsmap[bcs]
+            target_list = mcs._class_dispatcher__clsmap.get(bcs, [])
 
             if any(issubclass(cls, target_cls) for target_cls in target_list):
                 # if the mapped list contains a superclass of the
@@ -347,6 +340,8 @@ class ClassMappingDispatcher(ABCMeta):
 
             # add the class to the mapping
             target_list.append(cls)
+            # assign to the map in case this is first time
+            mcs._class_dispatcher__clsmap[bcs] = target_list
 
     def __call__(cls, *args, **kwargs):
         """Perform class mapping in accordance to the currently active
@@ -357,7 +352,7 @@ class ClassMappingDispatcher(ABCMeta):
         if cur_dispatcher is None:
             return type.__call__(cls, *args, **kwargs)
 
-        class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
+        class_list = cur_dispatcher._class_dispatcher__clsmap.get(cls, [])
         if len(class_list) != 1:
             # There is more than one target, so this is not
             # a final mapping. Instantiate the original class, and allow
@@ -377,7 +372,7 @@ class ClassMappingDispatcher(ABCMeta):
         if cur_dispatcher is None:
             return type.__getattribute__(cls, name)
 
-        class_list = cur_dispatcher._class_dispatcher__clsmap[cls]
+        class_list = cur_dispatcher._class_dispatcher__clsmap.get(cls, [])
         if len(class_list) != 1:
             # There is more than one target, so this is not
             # a final mapping. The original class is doing
