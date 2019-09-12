@@ -137,7 +137,7 @@ python-bitcointx is now much easier. See for example
   - core.script: `CHECKSEQUENCEVERIFY` added (no support in VerifyScript yet)
   - the bite before private data of extended private key must be zero.
     Bitcoin core ignores this, but the standard says that is should be zero.
-    `CKeyMixin.__init__()` will raise ValueError if it is not.
+    `CKeyBase.__init__()` will raise ValueError if it is not.
   - secp256k1 C library definitions moved to separate file
   - `bitcointx.core.sha256` module added - slow, python-only implementation
     of SHA256, but with useful property that it allows to get the SHA256
@@ -155,6 +155,8 @@ python-bitcointx is now much easier. See for example
     instead of additional params being passet as dict
   - VectorSerializer `stream_(de)serialize` method signatures changed
     to match base class
+  - CKeyMixin, CExtKeyMixin, CExtPubKeyMixin renamed to CKeyBase, CExtKeyBase,
+    CExtPubKeyBase
  
 * Breaking public API changes:
     - `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.

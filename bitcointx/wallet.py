@@ -29,7 +29,7 @@ from bitcointx.util import (
     ClassMappingDispatcher, activate_class_dispatcher, dispatcher_mapped_list
 )
 from bitcointx.core.key import (
-    CPubKey, CKeyMixin, CExtKeyMixin, CExtPubKeyMixin
+    CPubKey, CKeyBase, CExtKeyBase, CExtPubKeyBase
 )
 from bitcointx.core.script import (
     CScript, OP_HASH160, OP_DUP, OP_EQUALVERIFY, OP_CHECKSIG, OP_EQUAL
@@ -514,11 +514,11 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddress,
     ...
 
 
-class CCoinKey(bitcointx.base58.CBase58PrefixedData, CKeyMixin,
+class CCoinKey(bitcointx.base58.CBase58PrefixedData, CKeyBase,
                WalletCoinClass, next_dispatch_final=True):
     """A base58-encoded secret key
 
-    Attributes: (inherited from CKeyMixin):
+    Attributes: (inherited from CKeyBase):
 
     pub           - The corresponding CPubKey for this private key
     secret_bytes  - Secret data, 32 bytes
@@ -537,7 +537,7 @@ class CCoinKey(bitcointx.base58.CBase58PrefixedData, CKeyMixin,
             raise ValueError('data size must not exceed 33 bytes')
         compressed = (len(data) > 32 and data[32] == 1)
         self = super(CCoinKey, cls).from_bytes(data)
-        CKeyMixin.__init__(self, None, compressed=compressed)
+        CKeyBase.__init__(self, None, compressed=compressed)
         return self
 
     @classmethod
@@ -546,7 +546,7 @@ class CCoinKey(bitcointx.base58.CBase58PrefixedData, CKeyMixin,
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
         self = super(CCoinKey, cls).from_bytes(secret + (b'\x01' if compressed else b''))
-        CKeyMixin.__init__(self, None, compressed=compressed)
+        CKeyBase.__init__(self, None, compressed=compressed)
         return self
 
     def to_compressed(self):
@@ -577,20 +577,20 @@ class CBitcoinRegtestKey(CCoinKey, WalletBitcoinRegtestClass):
     base58_prefix = bytes([239])
 
 
-class CCoinExtPubKey(bitcointx.base58.CBase58PrefixedData, CExtPubKeyMixin,
+class CCoinExtPubKey(bitcointx.base58.CBase58PrefixedData, CExtPubKeyBase,
                      WalletCoinClass, next_dispatch_final=True):
 
     def __init__(self, _s):
-        assert isinstance(self, CExtPubKeyMixin)
-        CExtPubKeyMixin.__init__(self, None)
+        assert isinstance(self, CExtPubKeyBase)
+        CExtPubKeyBase.__init__(self, None)
 
 
-class CCoinExtKey(bitcointx.base58.CBase58PrefixedData, CExtKeyMixin,
+class CCoinExtKey(bitcointx.base58.CBase58PrefixedData, CExtKeyBase,
                   WalletCoinClass, next_dispatch_final=True):
 
     def __init__(self, _s):
-        assert isinstance(self, CExtKeyMixin)
-        CExtKeyMixin.__init__(self, None)
+        assert isinstance(self, CExtKeyBase)
+        CExtKeyBase.__init__(self, None)
 
     @property
     def _xpub_class(self):
@@ -604,7 +604,7 @@ class CCoinExtKey(bitcointx.base58.CBase58PrefixedData, CExtKeyMixin,
 class CBitcoinExtPubKey(CCoinExtPubKey, WalletBitcoinClass):
     """A base58-encoded extended public key
 
-    Attributes (inherited from CExtPubKeyMixin):
+    Attributes (inherited from CExtPubKeyBase):
 
     pub           - The corresponding CPubKey for extended pubkey
     """

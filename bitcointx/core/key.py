@@ -93,7 +93,7 @@ if _ssl:
     _ssl.EC_KEY_new_by_curve_name(_NIDsecp256k1)
 
 
-class CKeyMixin():
+class CKeyBase():
     """An encapsulated private key
 
     Attributes:
@@ -207,9 +207,9 @@ class CKeyMixin():
     @classmethod
     def combine(cls, *privkeys, compressed=True):
         assert(len(privkeys) > 1)
-        if not all(isinstance(k, CKeyMixin) for k in privkeys):
+        if not all(isinstance(k, CKeyBase) for k in privkeys):
             return ValueError(
-                'each supplied privkey must be an instance of CKeyMixin')
+                'each supplied privkey must be an instance of CKeyBase')
 
         result_data = ctypes.create_string_buffer(privkeys[0].secret_bytes)
         for p in privkeys[1:]:
@@ -245,7 +245,7 @@ class CKeyMixin():
         return self.__class__.from_secret_bytes(key_buf[:32], compressed=self.is_compressed())
 
 
-class CKey(bytes, CKeyMixin):
+class CKey(bytes, CKeyBase):
     "Standalone privkey class"
 
     def __new__(cls, secret, compressed=True):
@@ -481,7 +481,7 @@ class CPubKey(bytes):
         return cls.add(a, b.negated())
 
 
-class CExtKeyBase():
+class CExtKeyCommonBase():
 
     def _check_length(self):
         if len(self) != 74:
@@ -534,7 +534,7 @@ class CExtKeyBase():
         return xkey
 
 
-class CExtKeyMixin(CExtKeyBase):
+class CExtKeyBase(CExtKeyCommonBase):
     """An encapsulated extended private key
 
     Attributes:
@@ -613,7 +613,7 @@ class CExtKeyMixin(CExtKeyBase):
             bytes([self.depth]) + self.parent_fp + self.child_number_bytes + self.chaincode + self.pub)
 
 
-class CExtPubKeyMixin(CExtKeyBase):
+class CExtPubKeyBase(CExtKeyCommonBase):
     """An encapsulated extended public key
 
     Attributes:
@@ -682,11 +682,11 @@ class CExtPubKeyMixin(CExtKeyBase):
         return '%s(%s)' % (self.__class__.__name__, super().__repr__())
 
 
-class CExtPubKey(bytes, CExtPubKeyMixin):
+class CExtPubKey(bytes, CExtPubKeyBase):
     "Standalone extended pubkey class"
 
 
-class CExtKey(bytes, CExtKeyMixin):
+class CExtKey(bytes, CExtKeyBase):
     "Standalone extended key class"
     _key_class = CKey
     _xpub_class = CExtPubKey
@@ -819,8 +819,8 @@ __all__ = (
     'CPubKey',
     'CExtKey',
     'CExtPubKey',
-    'CKeyMixin',
-    'CExtKeyMixin',
-    'CExtPubKeyMixin',
+    'CKeyBase',
+    'CExtKeyBase',
+    'CExtPubKeyBase',
     'BIP32Path'
 )
