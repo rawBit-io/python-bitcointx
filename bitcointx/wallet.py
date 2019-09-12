@@ -181,11 +181,11 @@ class P2PKHCoinAddressError(CBase58AddressError):
 
 
 class P2WSHCoinAddressError(CBech32AddressError):
-    """Raised when an invalid P2SH address is encountered"""
+    """Raised when an invalid PW2SH address is encountered"""
 
 
 class P2WPKHCoinAddressError(CBech32AddressError):
-    """Raised when an invalid P2PKH address is encountered"""
+    """Raised when an invalid PW2PKH address is encountered"""
 
 
 class CBech32CoinAddress(bitcointx.bech32.CBech32Data, CCoinAddress):
