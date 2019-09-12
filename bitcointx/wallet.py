@@ -215,7 +215,7 @@ class CBech32CoinAddress(bitcointx.bech32.CBech32Data, CCoinAddress):
                 (witver is not None and witver != candidate._witness_version):
             raise CBech32AddressError(
                 'witness program does not match {}'
-                'expected length or version'.format(cls.__name__))
+                ' expected length or version'.format(cls.__name__))
 
         self = super(CBech32CoinAddress, cls).from_bytes(
             bytes(witprog), witver=candidate._witness_version
