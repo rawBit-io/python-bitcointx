@@ -78,13 +78,13 @@ class WalletBitcoinRegtestClass(WalletBitcoinClass,
 class CCoinAddress(WalletCoinClass):
 
     def __new__(cls, s):
-        recognized_encoding = set()
+        recognized_encoding = []
         target_cls_set = dispatcher_mapped_list(cls)
         for target_cls in target_cls_set:
             try:
                 return target_cls(s)
             except CCoinAddressError:
-                recognized_encoding.add(target_cls)
+                recognized_encoding.append(target_cls.__name__)
             except bitcointx.core.AddressDataEncodingError:
                 pass
 
@@ -225,25 +225,23 @@ class CBech32CoinAddress(bitcointx.bech32.CBech32Data, CCoinAddress):
         return self
 
 
-class CBase58CoinAddress(bitcointx.base58.CBase58PrefixedData, CCoinAddress):
+class CBase58DataDispatched(bitcointx.base58.CBase58Data):
+
+    @classmethod
+    def base58_get_match_candidates(cls):
+        candidates = dispatcher_mapped_list(cls)
+        if not candidates:
+            if not cls.base58_prefix:
+                raise TypeError(
+                    "if class has no dispatched descendants, it must have "
+                    "base58_prefix set")
+            candidates = [cls]
+        return candidates
+
+
+class CBase58CoinAddress(CBase58DataDispatched, CCoinAddress):
     """A Base58-encoded coin address"""
-
-    base58_prefix = b''
-
-    @classmethod
-    def from_bytes_with_prefix(cls, data):
-        if not cls.base58_prefix:
-            candidates = dispatcher_mapped_list(cls)
-            return cls.match_base58_classes(data, candidates)
-        return super(CBase58CoinAddress, cls).from_bytes_with_prefix(data)
-
-    @classmethod
-    def from_bytes(cls, data):
-        if not cls.base58_prefix:
-            raise TypeError('from_bytes() method cannot be called on {}, '
-                            'because base58_prefix is not defined for it'
-                            .format(cls.__name__))
-        return super(CBase58CoinAddress, cls).from_bytes(data)
+    ...
 
 
 class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
@@ -514,7 +512,7 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddress,
     ...
 
 
-class CCoinKey(bitcointx.base58.CBase58PrefixedData, CKeyBase,
+class CCoinKey(CBase58DataDispatched, CKeyBase,
                WalletCoinClass, next_dispatch_final=True):
     """A base58-encoded secret key
 
@@ -577,7 +575,7 @@ class CBitcoinRegtestKey(CCoinKey, WalletBitcoinRegtestClass):
     base58_prefix = bytes([239])
 
 
-class CCoinExtPubKey(bitcointx.base58.CBase58PrefixedData, CExtPubKeyBase,
+class CCoinExtPubKey(CBase58DataDispatched, CExtPubKeyBase,
                      WalletCoinClass, next_dispatch_final=True):
 
     def __init__(self, _s):
@@ -585,7 +583,7 @@ class CCoinExtPubKey(bitcointx.base58.CBase58PrefixedData, CExtPubKeyBase,
         CExtPubKeyBase.__init__(self, None)
 
 
-class CCoinExtKey(bitcointx.base58.CBase58PrefixedData, CExtKeyBase,
+class CCoinExtKey(CBase58DataDispatched, CExtKeyBase,
                   WalletCoinClass, next_dispatch_final=True):
 
     def __init__(self, _s):

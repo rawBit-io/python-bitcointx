@@ -100,11 +100,15 @@ class Base58ChecksumError(Base58Error):
     pass
 
 
-class CBase58RawData(bytes):
+class CBase58Data(bytes):
     """Base58-encoded data
 
     Includes prefix and checksum.
+
+    prefix is empty by default.
     """
+
+    base58_prefix = b''
 
     def __new__(cls, s):
         k = decode(s)
@@ -114,7 +118,7 @@ class CBase58RawData(bytes):
         check1 = bitcointx.core.Hash(data)[:4]
         if check0 != check1:
             raise Base58ChecksumError('Checksum mismatch: expected %r, calculated %r' % (check0, check1))
-        return cls.from_bytes_with_prefix(data)
+        return cls.base58_match_prefix(data)
 
     def __init__(self, s):
         """Initialize from base58-encoded string
@@ -124,11 +128,44 @@ class CBase58RawData(bytes):
         __init__() with None in place of the string.
         """
 
+    def __str__(self):
+        """Convert to string"""
+        check = bitcointx.core.Hash(self.base58_prefix + self)[0:4]
+        return encode(self.base58_prefix + self + check)
+
     @classmethod
-    def from_bytes_with_prefix(cls, data):
+    def base58_get_match_candidates(cls):
+        if cls.base58_prefix:
+            return [cls]
+        return []
+
+    @classmethod
+    def base58_match_prefix(cls, data):
         """Instantiate from data with prefix.
-        prefix is empty, so it is the same as from_bytes()"""
-        return cls.from_bytes(cls, data)
+        if prefix is empty, this is equivalent of from_bytes()"""
+        candidates = cls.base58_get_match_candidates()
+        if not candidates:
+            return cls.from_bytes(data)
+
+        for candidate in candidates:
+            pfx = candidate.base58_prefix
+            if not pfx:
+                try:
+                    return candidate.base58_match_prefix(data)
+                except UnexpectedBase58PrefixError:
+                    pass
+            elif data[:len(pfx)] == pfx:
+                return candidate.from_bytes(data[len(pfx):])
+
+        if len(candidates) == 1:
+            raise UnexpectedBase58PrefixError(
+                'Incorrect prefix bytes for {}: {}, expected {}'
+                .format(cls.__name__,
+                        bitcointx.core.b2x(pfx),
+                        bitcointx.core.b2x(cls.base58_prefix)))
+
+        raise bitcointx.base58.UnexpectedBase58PrefixError(
+            'base58 prefix does not match any known base58 address class')
 
     @classmethod
     def from_bytes(cls, data):
@@ -145,42 +182,8 @@ class CBase58RawData(bytes):
         """
         return b'' + self
 
-    def __str__(self):
-        """Convert to string"""
-        check = bitcointx.core.Hash(self)[0:4]
-        return encode(self + check)
-
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, str(self))
-
-
-class CBase58PrefixedData(CBase58RawData):
-
-    def __str__(self):
-        """Convert to string"""
-        check = bitcointx.core.Hash(self.base58_prefix + self)[0:4]
-        return encode(self.base58_prefix + self + check)
-
-    @classmethod
-    def from_bytes_with_prefix(cls, data):
-        """Instantiate from data with prefix."""
-        pfx_len = len(cls.base58_prefix)
-        prefix, data = data[:pfx_len], data[pfx_len:]
-        if prefix != cls.base58_prefix:
-            raise UnexpectedBase58PrefixError(
-                'Incorrect prefix bytes for {}: {}, expected {}'
-                .format(cls.__name__,
-                        bitcointx.core.b2x(prefix),
-                        bitcointx.core.b2x(cls.base58_prefix)))
-        return cls.from_bytes(data)
-
-    @classmethod
-    def match_base58_classes(cls, data, candidates):
-        for candidate in candidates:
-            pfx = candidate.base58_prefix
-            if data[:len(pfx)] == pfx:
-                return candidate.from_bytes(data[len(pfx):])
-        raise UnexpectedBase58PrefixError("Base58 prefix for {} not recognized")
 
 
 __all__ = (
@@ -190,6 +193,5 @@ __all__ = (
         'encode',
         'decode',
         'Base58ChecksumError',
-        'CBase58RawData',
-        'CBase58PrefixedData',
+        'CBase58Data',
 )

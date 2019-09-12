@@ -157,6 +157,7 @@ python-bitcointx is now much easier. See for example
     to match base class
   - CKeyMixin, CExtKeyMixin, CExtPubKeyMixin renamed to CKeyBase, CExtKeyBase,
     CExtPubKeyBase
+  - CBase58PrefixedData, CBase58RawData merged back into CBase58Data
  
 * Breaking public API changes:
     - `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtest` address directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.

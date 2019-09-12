@@ -9,7 +9,7 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+# pylama:ignore=E501
 
 import json
 import os
@@ -17,7 +17,7 @@ import unittest
 
 from binascii import unhexlify
 
-from bitcointx.base58 import *
+from bitcointx.base58 import CBase58Data, encode, decode, Base58Error
 
 
 def load_test_vectors(name):
@@ -44,12 +44,12 @@ class Test_CBase58Data(unittest.TestCase):
         def T(nVersion, data, address):
             prefix = bytes([nVersion])
 
-            class MockBase58Address(CBase58PrefixedData):
+            class MockBase58Address(CBase58Data):
                 @classmethod
                 def from_bytes(cls, data):
                     return super(MockBase58Address, cls).from_bytes(data)
 
-            b = CBase58RawData.from_bytes(prefix + data)
+            b = CBase58Data.from_bytes(prefix + data)
             self.assertEqual(str(b), address)
 
             MockBase58Address.base58_prefix = bytes(prefix)
@@ -65,12 +65,12 @@ class Test_CBase58Data(unittest.TestCase):
         T(196, b'Bf\xfco,(a\xd7\xfe"\x9b\'\x9ay\x80:\xfc\xa7\xba4', '2MyJKxYR2zNZZsZ39SgkCXWCfQtXKhnWSWq')
 
     def test_invalid_base58_exception(self):
-        invalids = ('', # missing everything
-                    '#', # invalid character
-                    '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb', # invalid checksum
+        invalids = ('',  # missing everything
+                    '#',  # invalid character
+                    '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb',  # invalid checksum
                     )
 
         for invalid in invalids:
             msg = '%r should have raised InvalidBase58Error but did not' % invalid
             with self.assertRaises(Base58Error, msg=msg):
-                CBase58RawData(invalid)
+                CBase58Data(invalid)
