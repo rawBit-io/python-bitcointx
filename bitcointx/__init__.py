@@ -98,7 +98,12 @@ def find_chain_params(*, name=None):
 
 
 def get_registered_chain_params():
-    return list(set(ChainParamsMeta._registered_classes.values()))
+    result = []
+    for param_cls in ChainParamsMeta._registered_classes.values():
+        if param_cls not in result:
+            result.append(param_cls)
+
+    return result
 
 
 class ChainParamsBase(metaclass=ChainParamsMeta):
