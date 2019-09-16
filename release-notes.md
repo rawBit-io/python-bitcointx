@@ -135,7 +135,7 @@ python-bitcointx is now much easier. See for example
   - `CTransaction` default version changed to 2
   - if `bytes` is accepted by some method, `bytesarray` will be, too
   - core.script: `CHECKSEQUENCEVERIFY` added (no support in VerifyScript yet)
-  - the bite before private data of extended private key must be zero.
+  - the byte before private data of extended private key must be zero.
     Bitcoin core ignores this, but the standard says that is should be zero.
     `CKeyBase.__init__()` will raise ValueError if it is not.
   - secp256k1 C library definitions moved to separate file
@@ -145,7 +145,7 @@ python-bitcointx is now much easier. See for example
   - CPubKey() can be instantiated without parameters
     (will return invalid pubkey instance)
   - utility functions and methods: to handle multisig scripts:
-    `standard_multisig_redeem_script`, `standard_multisig_witness`,
+    `standard_multisig_redeem_script`, `standard_multisig_witness_stack`,
     `parse_standard_multisig_redeem_script`; to handle amounts:
     `coins_to_satoshi`, `satoshi_to_coins`; to calculate transaction
     virtual size: `tx.get_virtual_size()`
