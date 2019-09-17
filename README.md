@@ -10,7 +10,7 @@ structures. This is based on https://github.com/petertodd/python-bitcoinlib,
 but is focused only on providing the tools to build, manipulate and sign
 bitcoin transactions, and related data structures.
 
-## Notable differences from python-bitcoinlib:
+## Notable differences from python-bitcoinlib
 
 * Network-related code that deals with network messages and blocks is removed.
 * Some API have changed and may be not compatible with old code (see below)
@@ -38,6 +38,20 @@ mature than the v0.10.x, because of the amount of new code that was introduced.
 - [libsecp256k1](https://github.com/bitcoin-core/secp256k1)
 - [libbitcoinconsensus](https://github.com/bitcoin/bitcoin/blob/master/doc/shared-libraries.md) (optional, for consensus-compatible script verification)
 - [openssl](https://github.com/openssl/openssl) (optional, only for historical signatures verification)
+
+## Installation
+
+```
+$ pip install python-bitcointx
+```
+
+```
+$ pipenv install python-bitcointx
+```
+
+```
+$ poetry add python-bitcointx
+```
 
 ## Structure
 
