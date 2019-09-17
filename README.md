@@ -185,7 +185,7 @@ behavior everywhere. If you need to change the parameters temporary, you can use
 from bitcointx import ChainParams, get_current_chain_params
 with ChainParams('bitcoin/testnet'):
     params = get_current_chain_params()
-    print("{} params ({}) are in effect".format(params.readable_name, params.name))
+    print(f"{params.readable_name} params ({params.name}) are in effect")
 ```
 will print
 
