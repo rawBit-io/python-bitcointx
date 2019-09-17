@@ -1080,7 +1080,7 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
     if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
         raise VerifyScriptError(
             "some of the flags cannot be handled by current code: {}"
-            .format(script_verify_flags_to_string(flags)))
+            .format(script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)))
 
     stack = []
     EvalScript(stack, scriptSig, txTo, inIdx, flags=flags)

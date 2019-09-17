@@ -85,6 +85,12 @@ BITCOINCONSENSUS_ACCEPTED_FLAGS = set(BITCOINCONSENSUS_FLAG_MAPPING.keys())
 
 
 def _flags_to_libconsensus(flags):
+    if flags is None:
+        raise ValueError('flags must be specified')
+    if isinstance(flags, tuple):
+        flags = set(flags)
+    elif not isinstance(flags, set):
+        raise TypeError('flags must be supplied as a tuple or a set')
     if (flags - ALL_SCRIPT_VERIFY_FLAGS):
         raise ValueError('unknown flags supplied')
     if (flags - BITCOINCONSENSUS_ACCEPTED_FLAGS):
