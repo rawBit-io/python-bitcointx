@@ -1,5 +1,11 @@
 # python-bitcointx release notes
 
+## v1.0.1
+
+* fixed handling of flags in `VerifyScript()` and `ConsensusVerifyScript()`
+  `ConsensusVerifyScript()` only accepted flags as a set, which was
+  incompatible with `VerifyScript()`, which also accepted flags as a tuple.
+
 ## v1.0.0
 
 Significant changes, refactoring, API breakage.

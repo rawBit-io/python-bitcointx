@@ -26,7 +26,7 @@ import bitcointx.util
 # Note that setup.py can break if __init__.py imports any external
 # dependencies, as these might not be installed when setup.py runs. In this
 # case __version__ could be moved to a separate version.py and imported here.
-__version__ = '1.0.1.dev0'
+__version__ = '1.0.1'
 
 _thread_local = threading.local()
 
