@@ -16,7 +16,14 @@ import hashlib
 import unittest
 
 import bitcointx
-from bitcointx import ChainParams
+from bitcointx import (
+    ChainParams,
+    BitcoinSignetParams,
+    BitcoinRegtestParams,
+    BitcoinMainnetParams,
+    get_current_chain_params,
+    select_chain_params
+)
 from bitcointx.util import dispatcher_mapped_list
 from bitcointx.core import b2x, x, Hash160
 from bitcointx.core.script import CScript, IsLowDERSignature
@@ -461,3 +468,27 @@ class Test_RFC6979(unittest.TestCase):
             sval = encoded_sig[spos:spos+slen]
             sig = b2x(rval + sval)
             assert(str(sig) == vector[3])
+
+
+class TestChainParams(unittest.TestCase):
+    def test_chain_params_context_manager(self):
+        with ChainParams(BitcoinRegtestParams) as p1:
+            assert isinstance(p1, BitcoinRegtestParams)
+            with ChainParams(BitcoinSignetParams) as p2:
+                assert isinstance(
+                    p2,
+                    BitcoinSignetParams
+                )
+                assert isinstance(
+                    get_current_chain_params(),
+                    BitcoinSignetParams
+                )
+            assert isinstance(
+                get_current_chain_params(),
+                BitcoinRegtestParams
+            )
+
+    def test_select_chain_params(self):
+        prev_params, cur_params = select_chain_params('bitcoin/regtest')
+        assert isinstance(prev_params, BitcoinMainnetParams)
+        assert isinstance(cur_params, BitcoinRegtestParams)

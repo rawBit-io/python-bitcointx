@@ -2,7 +2,9 @@
 
 ## v1.0.2.dev0
 
-* Add signet support
+* Added signet support `bitcoin/signet`.
+* Return current chain params in ChainParams context manager.
+* select_chain_params returns tuple of previous chain params and new chain params. 
 
 ## v1.0.1
 
