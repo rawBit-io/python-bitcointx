@@ -187,9 +187,8 @@ behavior everywhere. If you need to change the parameters temporary, you can use
 `get_current_chain_params()`:
 
 ```python
-from bitcointx import ChainParams, get_current_chain_params
-with ChainParams('bitcoin/testnet'):
-    params = get_current_chain_params()
+from bitcointx import ChainParams
+with ChainParams('bitcoin/testnet') as params:
     print(f"{params.readable_name} params ({params.name}) are in effect")
 ```
 will print
