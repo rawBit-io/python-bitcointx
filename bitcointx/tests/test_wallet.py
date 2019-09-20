@@ -471,6 +471,9 @@ class Test_RFC6979(unittest.TestCase):
 
 
 class TestChainParams(unittest.TestCase):
+    def setUp(self) -> None:
+        self.current_params = get_current_chain_params()
+
     def test_chain_params_context_manager(self):
         with ChainParams(BitcoinRegtestParams) as p1:
             assert isinstance(p1, BitcoinRegtestParams)
@@ -492,3 +495,6 @@ class TestChainParams(unittest.TestCase):
         prev_params, cur_params = select_chain_params('bitcoin/regtest')
         assert isinstance(prev_params, BitcoinMainnetParams)
         assert isinstance(cur_params, BitcoinRegtestParams)
+
+    def tearDown(self) -> None:
+        select_chain_params(self.current_params)
