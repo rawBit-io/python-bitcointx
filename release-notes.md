@@ -2,7 +2,7 @@
 
 ## v1.0.1
 
-* fixed handling of flags in `VerifyScript()` and `ConsensusVerifyScript()`
+* fixed handling of flags in `VerifyScript()` and `ConsensusVerifyScript()`.
   `ConsensusVerifyScript()` only accepted flags as a set, which was
   incompatible with `VerifyScript()`, which also accepted flags as a tuple.
 
@@ -129,7 +129,7 @@ python-bitcointx is now much easier. See for example
     with `CScript([NUMBER(var)])`, it is apparent that the number is expected.
   - Uint256 class
     `bitcointx.core.Uint256` - a convenience class to represent 256-bit
-    integers. have `from_int()` and `to_int()` methods.
+    integers. Has `from_int()` and `to_int()` methods.
 
 * Classes representations for `repr()` and `str()` can significantly
   differ, with `repr()` giving more detailed view, and for example for
