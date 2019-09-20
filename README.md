@@ -20,6 +20,7 @@ bitcoin transactions, and related data structures.
 * Easier to build code that supports and interacts with other bitcoin-based blockchains
   (see https://github.com/Simplexum/python-litecointx and https://github.com/Simplexum/python-elementstx)
 * A wrapper for `libbitcoinconsensus`'s script verification function is included
+* RPC API wrapper is 'raw' - does not convert the results of the cals to the library objects.
 
 ## Note on v1.0.0 release
 
@@ -31,6 +32,10 @@ make it more composeable and maintainable. This required significant API
 breakage, and it made sense to bump the version.
 If anything, the first release of the v1.0.x version should be viewed as less
 mature than the v0.10.x, because of the amount of new code that was introduced.
+
+This [long post](https://gist.github.com/dgpv/6607c7d0eff66c387d8a5eaeb378e787#file-on-release-of-python-bitcointx-v1-0-1-md)
+elaborates on the motivations behind the decisions that shaped
+the library and v1.0.0 release in particular, and also has some code examples.
 
 ## Requirements
 
