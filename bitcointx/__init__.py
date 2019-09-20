@@ -17,6 +17,7 @@ import threading
 from abc import ABCMeta
 from contextlib import contextmanager
 from collections import OrderedDict
+from typing import Tuple, Optional
 
 import bitcointx.core
 import bitcointx.core.script
@@ -146,6 +147,9 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
         name_parts[0] = name_parts[0].capitalize()
         return ' '.join(name_parts)
 
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.name!r}>"
+
 
 class BitcoinMainnetParams(ChainParamsBase,
                            name=('bitcoin', 'bitcoin/mainnet')):
@@ -168,7 +172,7 @@ class BitcoinSignetParams(BitcoinMainnetParams, name='bitcoin/signet'):
     WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinSignetClassDispatcher
 
 
-def get_current_chain_params():
+def get_current_chain_params() -> ChainParamsBase:
     return _thread_local.params
 
 
@@ -176,15 +180,17 @@ def get_current_chain_params():
 def ChainParams(params, **kwargs):
     """Context manager to temporarily switch chain parameters.
     """
-    prev_params = get_current_chain_params()
-    select_chain_params(params, **kwargs)
+    prev, new = select_chain_params(params, **kwargs)
     try:
-        yield
+        yield new
     finally:
-        select_chain_params(prev_params)
+        select_chain_params(prev)
 
 
-def select_chain_params(params, **kwargs):
+PrevAndNewParams = Tuple[Optional[ChainParamsBase], ChainParamsBase]
+
+
+def select_chain_params(params, **kwargs) -> PrevAndNewParams:
     """Select the chain parameters to use
 
     name is one of 'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'
@@ -207,8 +213,14 @@ def select_chain_params(params, **kwargs):
         raise ValueError('Supplied chain params is not a subclass of '
                          'ChainParamsBase')
 
+    prev_params = None
+    if hasattr(_thread_local, 'params'):
+        prev_params = _thread_local.params
+
     _thread_local.params = params
     bitcointx.util.activate_class_dispatcher(params.WALLET_DISPATCHER)
+
+    return prev_params, params
 
 
 select_chain_params(BitcoinMainnetParams)
