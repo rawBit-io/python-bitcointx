@@ -163,6 +163,11 @@ class BitcoinRegtestParams(BitcoinMainnetParams, name='bitcoin/regtest'):
     WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinRegtestClassDispatcher
 
 
+class BitcoinSignetParams(BitcoinMainnetParams, name='bitcoin/signet'):
+    RPC_PORT = 38332
+    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinSignetClassDispatcher
+
+
 def get_current_chain_params():
     return _thread_local.params
 
@@ -213,6 +218,7 @@ __all__ = (
     'BitcoinMainnetParams',
     'BitcoinTestnetParams',
     'BitcoinRegtestParams',
+    'BitcoinSignetParams',
     'select_chain_params',
     'ChainParams',
     'get_current_chain_params',

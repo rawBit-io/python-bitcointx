@@ -1,5 +1,9 @@
 # python-bitcointx release notes
 
+## v1.0.2.dev0
+
+* Add signet support
+
 ## v1.0.1
 
 * fixed handling of flags in `VerifyScript()` and `ConsensusVerifyScript()`.
