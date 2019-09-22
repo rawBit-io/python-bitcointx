@@ -14,7 +14,10 @@
 import os
 import unittest
 
-from bitcointx.core import b2x, x
+from bitcointx.core import (
+    x, b2x,
+    CTxOut, CTxIn, CTransaction, COutPoint
+)
 from bitcointx.core.key import CKey
 from bitcointx.core.script import (
     CScript, CScriptOp, CScriptInvalidError,
@@ -23,8 +26,10 @@ from bitcointx.core.script import (
     OP_CHECKSIG, OP_1NEGATE, OP_BOOLOR, OP_BOOLAND,
     OP_INVALIDOPCODE, OP_CHECKMULTISIG, OP_DROP,
     DATA, NUMBER, OPCODE,
-    IsLowDERSignature, parse_standard_multisig_redeem_script
+    IsLowDERSignature, parse_standard_multisig_redeem_script,
+    SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0
 )
+from bitcointx.wallet import P2PKHCoinAddress, P2WPKHCoinAddress
 
 
 class Test_CScriptOp(unittest.TestCase):
@@ -92,6 +97,45 @@ class Test_CScriptOp(unittest.TestCase):
 
 
 class Test_CScript(unittest.TestCase):
+    def test_sighash(self):
+        spent_amount = 1100
+        pub = CKey.from_secret_bytes(os.urandom(32)).pub
+        spk_legacy = P2PKHCoinAddress.from_pubkey(pub).to_scriptPubKey()
+        spk_segwit = P2WPKHCoinAddress.from_pubkey(pub).to_scriptPubKey()
+
+        tx = CTransaction([CTxIn(COutPoint(b'\x00'*32, 0), CScript([]),
+                                 nSequence=0xFFFFFFFF)],
+                          [CTxOut(1000, spk_legacy)],
+                          nLockTime=0, nVersion=1)
+
+        # no exceptions should be raised with these two calls
+        spk_legacy.sighash(tx, 0, SIGHASH_ALL,
+                           amount=spent_amount,
+                           sigversion=SIGVERSION_WITNESS_V0)
+        spk_segwit.sighash(tx, 0, SIGHASH_ALL,
+                           amount=spent_amount,
+                           sigversion=SIGVERSION_WITNESS_V0)
+
+        with self.assertRaises(ValueError):
+            # unknown sigversion
+            spk_segwit.sighash(tx, 0, SIGHASH_ALL,
+                               amount=spent_amount,
+                               sigversion=SIGVERSION_WITNESS_V0 + 1)
+
+        assert spk_segwit.is_witness_scriptpubkey()
+        with self.assertRaises(ValueError):
+            # incorect sigversion for segwit
+            spk_segwit.sighash(tx, 0, SIGHASH_ALL,
+                               amount=spent_amount,
+                               sigversion=SIGVERSION_BASE)
+
+        with self.assertRaises(ValueError):
+            # inIdx > len(tx.vin) - non-raw sighash function should raise
+            # ValueError (raw_sighash can return HASH_ONE)
+            spk_legacy.sighash(tx, 10, SIGHASH_ALL,
+                               amount=spent_amount,
+                               sigversion=SIGVERSION_BASE)
+
     def test_parse_standard_multisig_redeem_script(self):
         def T(script, result):
             self.assertEqual(parse_standard_multisig_redeem_script(script),
@@ -108,6 +152,12 @@ class Test_CScript(unittest.TestCase):
         T(CScript([15] + pubkeys + [15, OP_CHECKMULTISIG]),
           {'total': 15, 'required': 15, 'pubkeys': pubkeys})
 
+        with self.assertRaises(ValueError):
+            # invalid pubkey - extra data
+            T(CScript([1, pubkeys[0]+b'abc', pubkeys[1], 2, OP_CHECKMULTISIG]), {})
+        with self.assertRaises(ValueError):
+            # invalid pubkey - truncated
+            T(CScript([1, pubkeys[0], pubkeys[1][:-1], 2, OP_CHECKMULTISIG]), {})
         with self.assertRaises(ValueError):
             T(CScript([]), {})
         with self.assertRaises(ValueError):

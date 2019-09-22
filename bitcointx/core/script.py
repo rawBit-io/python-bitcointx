@@ -23,6 +23,7 @@ import hashlib
 from io import BytesIO
 
 import bitcointx.core
+import bitcointx.core.key
 import bitcointx.core._bignum
 
 from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
@@ -1114,7 +1115,8 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
     If you're just writing wallet software you probably want SignatureHash()
     instead.
     """
-    assert sigversion in (SIGVERSION_BASE, SIGVERSION_WITNESS_V0)
+    if sigversion not in (SIGVERSION_BASE, SIGVERSION_WITNESS_V0):
+        raise ValueError('unsupported sigversion')
 
     HASH_ONE = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
 
@@ -1160,7 +1162,11 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
 
         return (hash, None)
 
-    assert not script.is_witness_scriptpubkey()
+    assert sigversion == SIGVERSION_BASE
+
+    if script.is_witness_scriptpubkey():
+        raise ValueError(
+            'segwit scriptpubkey supplied with sigversion=SIGVERION_BASE')
 
     if inIdx >= len(txTo.vin):
         return (HASH_ONE, "inIdx %d out of range (%d)" % (inIdx, len(txTo.vin)))
@@ -1259,11 +1265,15 @@ def parse_standard_multisig_redeem_script(script):
     pubkeys = []
     for i in range(MAX_P2SH_MULTISIG_PUBKEYS+1):  # +1 for `total`
         try:
-            pub = next(si)
-            if isinstance(pub, int):
-                total = pub  # pubkeys ended
+            pub_data = next(si)
+            if isinstance(pub_data, int):
+                total = pub_data  # pubkeys ended
                 break
-            assert isinstance(pub, bytes)
+            assert isinstance(pub_data, bytes)
+            pub = bitcointx.core.key.CPubKey(pub_data)
+            if not pub.is_fullyvalid():
+                raise ValueError(
+                    f'encountered an invalid pubkey at position {i}')
             pubkeys.append(pub)
         except StopIteration:
             raise ValueError(

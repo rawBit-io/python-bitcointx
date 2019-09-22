@@ -25,8 +25,8 @@ import ctypes
 import ctypes.util
 import hashlib
 
+import bitcointx.core
 from bitcointx.util import no_bool_use_as_property
-from bitcointx.core import Hash160
 from bitcointx.core.secp256k1 import (
     _secp256k1, secp256k1_context_sign, secp256k1_context_verify,
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
@@ -294,7 +294,7 @@ class CPubKey(bytes):
                 secp256k1_context_verify, tmp_pub, self, len(self))
             self._fullyvalid = (result == 1)
 
-        self.key_id = Hash160(self)
+        self.key_id = bitcointx.core.Hash160(self)
 
         return self
 
