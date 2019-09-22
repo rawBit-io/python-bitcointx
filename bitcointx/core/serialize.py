@@ -249,8 +249,9 @@ class VectorSerializer(Serializer):
 
     @classmethod
     def stream_deserialize(cls, f, element_class=None, **kwargs):
-        assert element_class is not None,\
-            "The class of the elements in the vector must be supplied"
+        if element_class is None:
+            raise ValueError(
+                "The class of the elements in the vector must be supplied")
         n = VarIntSerializer.stream_deserialize(f)
         r = []
         for i in range(n):
@@ -330,9 +331,9 @@ def uint256_to_shortstr(u):
 
 
 def make_mutable(cls):
-    assert issubclass(cls, ImmutableSerializable), \
-        ("make_mutable can only be applied to subclasses "
-            "of ImmutableSerializable")
+    if not issubclass(cls, ImmutableSerializable):
+        raise TypeError("make_mutable can only be applied to subclasses "
+                        "of ImmutableSerializable")
     # For speed we use a class decorator that removes the immutable
     # restrictions directly. In addition the modified behavior of GetHash() and
     # hash() is undone.

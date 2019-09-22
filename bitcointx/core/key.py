@@ -216,7 +216,9 @@ class CKeyBase():
 
     @classmethod
     def combine(cls, *privkeys, compressed=True):
-        assert(len(privkeys) > 1)
+        if len(privkeys) <= 1:
+            raise ValueError(
+                'number of privkeys to combine must be more than one')
         if not all(isinstance(k, CKeyBase) for k in privkeys):
             return ValueError(
                 'each supplied privkey must be an instance of CKeyBase')
@@ -376,8 +378,14 @@ class CPubKey(bytes):
     def verify(self, hash, sig): # pylint: disable=redefined-builtin
         """Verify a DER signature"""
 
-        assert isinstance(sig, (bytes, bytearray)), type(sig)
-        assert isinstance(hash, (bytes, bytearray)), type(hash)
+        if not isinstance(sig, (bytes, bytearray)):
+            raise TypeError(
+                f'signature expected to be an instance of bytes or bytearray, '
+                'but an instance of {type(sig).__name__} was supplied')
+        if not isinstance(hash, (bytes, bytearray)):
+            raise TypeError(
+                f'hash expected to be an instance of bytes or bytearray, '
+                'but an instance of {type(hash).__name__} was supplied')
 
         if not sig:
             return False
@@ -408,8 +416,14 @@ class CPubKey(bytes):
         if not _ssl:
             raise RuntimeError('openssl library is not available. verify_nonstrict is not functional.')
 
-        assert isinstance(sig, (bytes, bytearray)), type(sig)
-        assert isinstance(hash, (bytes, bytearray)), type(hash)
+        if not isinstance(sig, (bytes, bytearray)):
+            raise TypeError(
+                f'signature expected to be an instance of bytes or bytearray, '
+                'but an instance of {type(sig).__name__} was supplied')
+        if not isinstance(hash, (bytes, bytearray)):
+            raise TypeError(
+                f'hash expected to be an instance of bytes or bytearray, '
+                'but an instance of {type(hash).__name__} was supplied')
 
         if not sig:
             return False
@@ -451,7 +465,9 @@ class CPubKey(bytes):
 
     @classmethod
     def combine(cls, *pubkeys, compressed=True):
-        assert(len(pubkeys) > 1)
+        if len(pubkeys) <= 1:
+            raise ValueError(
+                'number of pubkeys to combine must be more than one')
         if not all(isinstance(p, CPubKey) for p in pubkeys):
             return ValueError(
                 'each supplied pubkey must be an instance of CPubKey')
@@ -658,6 +674,7 @@ class CExtPubKeyBase(CExtKeyCommonBase):
                 raise ValueError('Hardened derivation not possible')
         if self.depth >= 255:
             raise ValueError('Maximum derivation path length is reached')
+
         assert self.pub.is_fullyvalid()
         assert self.pub.is_compressed()
 

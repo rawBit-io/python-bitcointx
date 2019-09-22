@@ -4,7 +4,9 @@
 
 * Added signet support `bitcoin/signet`.
 * Return current chain params in ChainParams context manager.
-* select_chain_params returns tuple of previous chain params and new chain params. 
+* `select_chain_params` returns tuple of previous chain params and new chain params. 
+* some asserts in the library are conveted to the checks that raise
+  `ValueError` or `TypeError` depending on the check.
 
 ## v1.0.1
 

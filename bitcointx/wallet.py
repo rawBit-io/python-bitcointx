@@ -206,9 +206,9 @@ class CBech32CoinAddress(bitcointx.bech32.CBech32Data, CCoinAddress):
     @classmethod
     def from_bytes(cls, witprog, witver=None):
         if cls._witness_version is None:
-            assert witver is not None, \
-                ("witver must be specified for {}.from_bytes()"
-                 .format(cls.__name__))
+            if witver is None:
+                raise ValueError(
+                    f'witver must be specified for {cls.__name__}.from_bytes()')
             for candidate in dispatcher_mapped_list(cls):
                 if len(witprog) == candidate._data_length and \
                         witver == candidate._witness_version:
@@ -469,7 +469,7 @@ class CBech32BitcoinTestnetAddress(CBech32CoinAddress,
 
 
 class CBech32BitcoinSignetAddress(CBech32CoinAddress,
-                                   CBitcoinSignetAddress):
+                                  CBitcoinSignetAddress):
     bech32_hrp = 'sb'
 
 
@@ -499,7 +499,6 @@ class P2SHBitcoinTestnetAddress(P2SHCoinAddress,
 class P2PKHBitcoinRegtestAddress(P2PKHCoinAddress,
                                  CBase58BitcoinRegtestAddress):
     base58_prefix = bytes([111])
-
 
 
 class P2PKHBitcoinSignetAddress(P2PKHCoinAddress,
@@ -553,7 +552,6 @@ class P2WSHBitcoinSignetAddress(P2WSHCoinAddress,
 class P2WPKHBitcoinSignetAddress(P2WPKHCoinAddress,
                                  CBech32BitcoinSignetAddress):
     ...
-
 
 
 class CCoinKey(CBase58DataDispatched, CKeyBase,

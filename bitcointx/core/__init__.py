@@ -52,7 +52,8 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
             cls._immutable_cls = cls
             cls._mutable_cls = None
         else:
-            assert issubclass(mutable_of, CoreCoinClass)
+            if not issubclass(mutable_of, CoreCoinClass):
+                raise TypeError('mutable_if must be subclass of CoreCoinClass')
 
             make_mutable(cls)
 
@@ -121,7 +122,7 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
     @classmethod
     def from_instance(cls, other_inst):
         if not isinstance(other_inst, cls._immutable_cls):
-            raise ValueError(
+            raise TypeError(
                 'incompatible class: expected instance of {}, got {}'
                 .format(cls._immutable_cls.__name__,
                         other_inst.__class__.__name__))
@@ -410,7 +411,8 @@ class Uint256(_UintBitVector):
 
     @classmethod
     def from_int(cls, num):
-        assert num < 2**256
+        if not (num < 2**256):
+            raise ValueError('value is too large')
         return cls(uint256_to_str(num))
 
     def to_int(self):
@@ -499,7 +501,10 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
         if scriptSig is None:
             scriptSig = script.CScript()
         elif not isinstance(scriptSig, script.CScript):
-            assert isinstance(scriptSig, (bytes, bytearray)), scriptSig.__class__
+            if not isinstance(scriptSig, (bytes, bytearray)):
+                raise TypeError(
+                    f'scriptSig is expected to be an instance of bytes or bytearray, '
+                    'but it is an instance of {scriptSig.__class__.__name__}')
             scriptSig = script.CScript(scriptSig)
         if prevout is None:
             prevout = COutPoint()
@@ -570,7 +575,10 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
 
     def __init__(self, nValue=-1, scriptPubKey=script.CScript()):
         if not isinstance(scriptPubKey, script.CScript):
-            assert isinstance(scriptPubKey, (bytes, bytearray))
+            if not isinstance(scriptPubKey, (bytes, bytearray)):
+                raise TypeError(
+                    f'scriptPubKey is expected to be an instance of bytes or bytearray, '
+                    'but it is an instance of {scriptPubKey.__class__.__name__}')
             scriptPubKey = script.CScript(scriptPubKey)
         object.__setattr__(self, 'nValue', int(nValue))
         object.__setattr__(self, 'scriptPubKey', scriptPubKey)

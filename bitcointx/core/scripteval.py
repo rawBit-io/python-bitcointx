@@ -312,7 +312,8 @@ def _IsCompressedPubKey(pubkey):
 def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(),
                          amount=0, script_class=None):
 
-    assert script_class is not None, "script class must be specified"
+    if script_class is None:
+        raise ValueError("script class must be specified")
 
     sigversion = None
 
@@ -1066,9 +1067,11 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
     Raises a ValidationError subclass if the validation fails.
     """
 
-    assert isinstance(scriptSig, CScript)
-    assert type(scriptSig) == type(scriptPubKey),\
-        "scriptSig and scriptPubKey must be of the same script class"
+    if not isinstance(scriptSig, CScript):
+        raise TypeError('scriptSig must be an instance of CScript')
+    if not type(scriptSig) == type(scriptPubKey):
+        raise TypeError(
+            "scriptSig and scriptPubKey must be of the same script class")
 
     script_class = scriptSig.__class__
 
@@ -1153,7 +1156,9 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
             stack = stack[:1]
 
     if SCRIPT_VERIFY_CLEANSTACK in flags:
-        assert SCRIPT_VERIFY_P2SH in flags
+        if SCRIPT_VERIFY_P2SH not in flags:
+            raise ValueError(
+                'SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH')
 
         if len(stack) == 0:
             raise VerifyScriptError("scriptPubKey left an empty stack")
@@ -1164,7 +1169,9 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
         # We can't check for correct unexpected witness data if P2SH was off, so require
         # that WITNESS implies P2SH. Otherwise, going from WITNESS->P2SH+WITNESS would be
         # possible, which is not a softfork.
-        assert SCRIPT_VERIFY_P2SH in flags, "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH"
+        if SCRIPT_VERIFY_P2SH not in flags:
+            raise ValueError(
+                "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH")
 
         if not hadWitness and witness:
             raise VerifyScriptError("Unexpected witness")

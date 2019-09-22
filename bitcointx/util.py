@@ -78,7 +78,10 @@ def get_class_dispatcher_depends(dclass):
 def activate_class_dispatcher(dclass):
     """Activate particular class dispatcher - so that the mapping it contains
     will be active. Activates its dependent dispatchers, recursively, too."""
-    assert ClassMappingDispatcher in dclass.__mro__
+    if ClassMappingDispatcher not in dclass.__mro__:
+        raise TypeError(
+            f'{dclass.__name__} does not appear to be a subclass '
+            'of ClassMappingDispatcher')
 
     if dclass._class_dispatcher__no_direct_use:
         raise ValueError("{} must not be used directly"

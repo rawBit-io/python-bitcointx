@@ -71,8 +71,10 @@ class CSHA256():
 
     # Perform a number of SHA-256 transformations, processing 64-byte chunks.
     def Transform(self, chunk, blocks):
-        assert isinstance(blocks, int)
-        assert isinstance(chunk, (bytes, bytearray))
+        if not isinstance(blocks, int):
+            raise TypeError('blocks must be an instance of int')
+        if not isinstance(chunk, (bytes, bytearray)):
+            raise TypeError('chunk must be an instance of bytes or bytearray')
         s = self.s
         while blocks:
             blocks -= 1
@@ -221,7 +223,8 @@ class CSHA256():
             chunk = chunk[64:]
 
     def Write(self, data):
-        assert isinstance(data, (bytes, bytearray))
+        if not isinstance(data, (bytes, bytearray)):
+            raise TypeError('data must be instance of bytes or bytearray')
 
         bufsize = self.bytes_count % 64
         assert len(self.buf) == bufsize
