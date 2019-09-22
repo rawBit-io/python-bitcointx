@@ -168,10 +168,14 @@ def _add_function_definitions(_secp256k1):
 
 
 def secp256k1_create_and_init_context(_secp256k1, flags):
-    assert (flags & ~(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY)) == 0
+    if flags not in (SECP256K1_CONTEXT_SIGN, SECP256K1_CONTEXT_VERIFY):
+        raise ValueError(
+            'Value for flags is unexpected. '
+            'Must be either SECP256K1_CONTEXT_SIGN or SECP256K1_CONTEXT_VERIFY')
 
     ctx = _secp256k1.secp256k1_context_create(flags)
-    assert ctx is not None
+    if ctx is None:
+        raise RuntimeError('secp256k1_context_create() returned None')
 
     _secp256k1.secp256k1_context_set_error_callback(ctx, _secp256k1_error_callback_fn, 0)
     _secp256k1.secp256k1_context_set_illegal_callback(ctx, _secp256k1_illegal_callback_fn, 0)
@@ -182,8 +186,12 @@ def secp256k1_create_and_init_context(_secp256k1, flags):
     # so we always call randomize, but check for success only for
     # signing context, because older lib versions return 0 for non-signing ctx.
     res = _secp256k1.secp256k1_context_randomize(ctx, seed)
-    if (flags & SECP256K1_CONTEXT_SIGN) == SECP256K1_CONTEXT_SIGN:
-        assert res == 1, "randomization must succeed for signing context"
+    if res != 1:
+        assert res == 0
+        if flags == SECP256K1_CONTEXT_SIGN:
+            raise RuntimeError("secp256k1 context randomization failed")
+        elif flags != SECP256K1_CONTEXT_VERIFY:
+            raise AssertionError('unexpected value for flags')
 
     return ctx
 

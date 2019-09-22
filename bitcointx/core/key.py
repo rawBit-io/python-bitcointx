@@ -142,13 +142,17 @@ class CKeyBase():
         raw_sig = ctypes.create_string_buffer(64)
         result = _secp256k1.secp256k1_ecdsa_sign(
             secp256k1_context_sign, raw_sig, hash, self.secret_bytes, None, None)
-        assert 1 == result
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_ecdsa_sign returned failure')
         sig_size0 = ctypes.c_size_t()
         sig_size0.value = SIGNATURE_SIZE
         mb_sig = ctypes.create_string_buffer(sig_size0.value)
         result = _secp256k1.secp256k1_ecdsa_signature_serialize_der(
             secp256k1_context_sign, mb_sig, ctypes.byref(sig_size0), raw_sig)
-        assert 1 == result
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_ecdsa_signature_parse_der returned failure')
         # secp256k1 creates signatures already in lower-S form, no further
         # conversion needed.
         return mb_sig.raw[:sig_size0.value]
@@ -168,7 +172,9 @@ class CKeyBase():
         result = _secp256k1.secp256k1_ecdsa_sign_recoverable(
             secp256k1_context_sign, recoverable_sig, hash, self.secret_bytes, None, None)
 
-        assert 1 == result
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_ecdsa_sign_recoverable returned failure')
 
         recid = ctypes.c_int()
         recid.value = 0
@@ -176,7 +182,9 @@ class CKeyBase():
         result = _secp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact(
             secp256k1_context_sign, output, ctypes.byref(recid), recoverable_sig)
 
-        assert 1 == result
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_ecdsa_recoverable_signature_serialize_compact returned failure')
 
         return bytes(output), recid.value
 
@@ -201,7 +209,9 @@ class CKeyBase():
         result_data = ctypes.create_string_buffer(32)
         ret = _secp256k1.secp256k1_ecdh(secp256k1_context_sign, result_data, pub._to_raw(), self,
                                         None, None)
-        assert ret == 1
+        if 1 != ret:
+            assert(ret == 0)
+            raise RuntimeError('secp256k1_ecdh returned failure')
         return bytes(result_data)
 
     @classmethod
@@ -241,7 +251,9 @@ class CKeyBase():
                 'You should use newer version of secp256k1 library')
         key_buf = ctypes.create_string_buffer(self.secret_bytes)
         ret = _secp256k1.secp256k1_ec_privkey_negate(secp256k1_context_sign, key_buf)
-        assert ret == 1
+        if 1 != ret:
+            assert(ret == 0)
+            raise RuntimeError('secp256k1_ec_privkey_negate returned failure')
         return self.__class__.from_secret_bytes(key_buf[:32], compressed=self.is_compressed())
 
 
@@ -305,7 +317,9 @@ class CPubKey(bytes):
         raw_pub = ctypes.create_string_buffer(64)
         result = _secp256k1.secp256k1_ec_pubkey_parse(
             secp256k1_context_verify, raw_pub, self, len(self))
-        assert 1 == result
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_ec_pubkey_parse returned failure')
         return raw_pub
 
     @classmethod
@@ -462,7 +476,9 @@ class CPubKey(bytes):
                 'You should use newer version of secp256k1 library')
         pubkey_buf = self._to_raw()
         ret = _secp256k1.secp256k1_ec_pubkey_negate(secp256k1_context_verify, pubkey_buf)
-        assert ret == 1
+        if 1 != ret:
+            assert(ret == 0)
+            raise RuntimeError('secp256k1_ec_pubkey_negate returned failure')
         return self.__class__._from_raw(pubkey_buf, compressed=self.is_compressed())
 
     @classmethod
@@ -669,7 +685,9 @@ class CExtPubKeyBase(CExtKeyCommonBase):
             secp256k1_context_verify, child_pubkey, ctypes.byref(child_pubkey_size0), raw_pub,
             SECP256K1_EC_COMPRESSED)
 
-        assert 1 == result
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_ec_pubkey_serialize returned failure')
 
         parent_fp = self.pub.key_id[:4]
         cls = self.__class__
