@@ -168,10 +168,12 @@ def _add_function_definitions(_secp256k1):
 
 
 def secp256k1_create_and_init_context(_secp256k1, flags):
-    if flags not in (SECP256K1_CONTEXT_SIGN, SECP256K1_CONTEXT_VERIFY):
+    if flags not in (SECP256K1_CONTEXT_SIGN, SECP256K1_CONTEXT_VERIFY,
+                     (SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY)):
         raise ValueError(
             'Value for flags is unexpected. '
-            'Must be either SECP256K1_CONTEXT_SIGN or SECP256K1_CONTEXT_VERIFY')
+            'Must be either SECP256K1_CONTEXT_SIGN, SECP256K1_CONTEXT_VERIFY, '
+            'or a combination of these two')
 
     ctx = _secp256k1.secp256k1_context_create(flags)
     if ctx is None:
@@ -188,7 +190,7 @@ def secp256k1_create_and_init_context(_secp256k1, flags):
     res = _secp256k1.secp256k1_context_randomize(ctx, seed)
     if res != 1:
         assert res == 0
-        if flags == SECP256K1_CONTEXT_SIGN:
+        if (flags & SECP256K1_CONTEXT_SIGN) == SECP256K1_CONTEXT_SIGN:
             raise RuntimeError("secp256k1 context randomization failed")
         elif flags != SECP256K1_CONTEXT_VERIFY:
             raise AssertionError('unexpected value for flags')
