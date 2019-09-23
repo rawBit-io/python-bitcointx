@@ -29,15 +29,16 @@ class CBech32Data(bytes):
 
     Includes a witver and checksum.
     """
-    bech32_hrp = None
+    bech32_hrp: str
 
-    def __new__(cls, s):
+    def __new__(cls, s: str):
         """from bech32 addr to """
         if cls.bech32_hrp is None:
             raise TypeError(
                 'CBech32Data subclasses should define bech32_hrp attribute')
         witver, data = decode(cls.bech32_hrp, s)
-        if witver is None and data is None:
+        if witver is None or data is None:
+            assert witver is None and data is None
             raise Bech32Error('Bech32 decoding error')
 
         return cls.from_bytes(data, witver=witver)
@@ -50,18 +51,22 @@ class CBech32Data(bytes):
         __init__() with None in place of the string.
         """
 
+    witver: int
+
     @classmethod
-    def from_bytes(cls, witprog, witver=None):
+    def from_bytes(cls, witprog: bytes, witver=None):
         """Instantiate from witver and data"""
         if witver is None or not (0 <= witver <= 16):
             raise ValueError(
                 'witver must be in range 0 to 16 inclusive; got %r' % witver)
-        self = bytes.__new__(cls, witprog)
+        # mypy cannot handle arguments to `bytes.__new__()` at the moment,
+        # issue: https://github.com/python/typeshed/issues/2630
+        self = bytes.__new__(cls, witprog)  # type: ignore
         self.witver = witver
 
         return self
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         """Convert to bytes instance
 
         Note that it's the data represented that is converted; the checkum and
@@ -69,11 +74,16 @@ class CBech32Data(bytes):
         """
         return b'' + self
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Convert to string"""
-        return encode(self.__class__.bech32_hrp, self.witver, self)
+        result = encode(self.__class__.bech32_hrp, self.witver, self)
+        if result is None:
+            raise AssertionError(
+                'encode should not fail, this is data that '
+                'was successfully decoded earlier')
+        return result
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '%s(%r)' % (self.__class__.__name__, str(self))
 
 

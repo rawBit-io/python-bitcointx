@@ -26,6 +26,8 @@ import bitcointx.core._bignum
 import bitcointx.core.key
 import bitcointx.core.serialize
 
+from bitcointx.util import ensure_isinstance
+
 from bitcointx.core.script import (
     CScript, OPCODE_NAMES,
     SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
@@ -1067,8 +1069,7 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
     Raises a ValidationError subclass if the validation fails.
     """
 
-    if not isinstance(scriptSig, CScript):
-        raise TypeError('scriptSig must be an instance of CScript')
+    ensure_isinstance(scriptSig, CScript, 'scriptSig')
     if not type(scriptSig) == type(scriptPubKey):
         raise TypeError(
             "scriptSig and scriptPubKey must be of the same script class")

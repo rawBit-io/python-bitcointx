@@ -17,19 +17,20 @@ import binascii
 import struct
 from abc import abstractmethod
 from io import BytesIO
+from typing import Union, List, Tuple, Iterable, Optional, Set
 
 from . import script
 
 from .serialize import (
     ImmutableSerializable, make_mutable,
     BytesSerializer, VectorSerializer,
-    ser_read, uint256_to_str, uint256_from_str,
+    ser_read, uint256_to_bytes, uint256_from_bytes,
     Hash, Hash160
 )
 
 from ..util import (
     no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher,
-    dispatcher_wrap_methods, classgetter
+    dispatcher_wrap_methods, classgetter, ensure_isinstance
 )
 
 
@@ -107,12 +108,12 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
 
     @no_bool_use_as_property
     @classmethod
-    def is_immutable(cls):
+    def is_immutable(cls) -> bool:
         return not cls.is_mutable()
 
     @no_bool_use_as_property
     @classmethod
-    def is_mutable(cls):
+    def is_mutable(cls) -> bool:
         if cls is cls._mutable_cls:
             return True
 
@@ -157,21 +158,24 @@ class CoreBitcoinParams(CoreCoinParams, CoreBitcoinClass):
     ...
 
 
-def MoneyRange(nValue):
+def MoneyRange(nValue: int) -> bool:
+    # check is in satoshis, supplying float might indicate that
+    # caller supplied the value in coins, not in satoshi
+    ensure_isinstance(nValue, int, 'value for MoneyRange check')
     return 0 <= nValue <= CoreCoinParams.MAX_MONEY
 
 
-def x(h):
+def x(h: str) -> bytes:
     """Convert a hex string to bytes"""
     return binascii.unhexlify(h.encode('utf8'))
 
 
-def b2x(b):
+def b2x(b: Union[bytes, bytearray]) -> str:
     """Convert bytes to a hex string"""
     return binascii.hexlify(b).decode('utf8')
 
 
-def lx(h):
+def lx(h: str) -> bytes:
     """Convert a little-endian hex string to bytes
 
     Lets you write uint256's and uint160's the way the Satoshi codebase shows
@@ -180,7 +184,7 @@ def lx(h):
     return binascii.unhexlify(h.encode('utf8'))[::-1]
 
 
-def b2lx(b):
+def b2lx(b: Union[bytes, bytearray]) -> str:
     """Convert bytes to a little-endian hex string
 
     Lets you show uint256's and uint160's the way the Satoshi codebase shows
@@ -189,7 +193,7 @@ def b2lx(b):
     return binascii.hexlify(b[::-1]).decode('utf8')
 
 
-def str_money_value(value):
+def str_money_value(value: int) -> str:
     """Convert an integer money value to a fixed point string"""
     COIN = CoreCoinParams.COIN
     r = '%i.%08i' % (value // COIN, value % COIN)
@@ -199,16 +203,21 @@ def str_money_value(value):
     return r
 
 
-def str_money_value_for_repr(nValue):
+def str_money_value_for_repr(nValue: int) -> str:
     if nValue >= 0:
-        "%s*COIN" % (str_money_value(nValue), )
+        return "%s*COIN" % (str_money_value(nValue), )
     else:
-        "%d" % (nValue,)
+        return "%d" % (nValue,)
 
 
-def coins_to_satoshi(value, check_range=True):
+def coins_to_satoshi(value: Union[int, float], check_range=True) -> int:
     """Simple utility function to convert from
     floating-point coins amount to integer satoshi amonut"""
+
+    # Shole number of coins can be expressed as int, so we allow both
+    # float and int
+    ensure_isinstance(value, (int, float), 'value in coins')
+
     result = int(round(float(value) * CoreCoinParams.COIN))
 
     if check_range:
@@ -219,9 +228,13 @@ def coins_to_satoshi(value, check_range=True):
     return result
 
 
-def satoshi_to_coins(value, check_range=True):
+def satoshi_to_coins(value: int, check_range=True) -> float:
     """Simple utility function to convert from
     integer satoshi amonut to floating-point coins amount"""
+
+    # We expect that satoshi would always be expressed as integer
+    ensure_isinstance(value, int, 'value in satoshi')
+
     if check_range:
         if not MoneyRange(value):
             raise ValueError('supplied value ({}) is outside MoneyRange'
@@ -229,7 +242,7 @@ def satoshi_to_coins(value, check_range=True):
     return float(float(value) / CoreCoinParams.COIN)
 
 
-def get_size_of_compact_size(size):
+def get_size_of_compact_size(size: int) -> int:
     # comment from GetSizeOfCompactSize() src/serialize.h in Bitcoin Core:
     #
     # Compact Size
@@ -249,11 +262,11 @@ def get_size_of_compact_size(size):
 
 
 def calculate_transaction_virtual_size(*,
-                                       num_inputs,
-                                       inputs_serialized_size,
-                                       num_outputs,
-                                       outputs_serialized_size,
-                                       witness_size):
+                                       num_inputs: int,
+                                       inputs_serialized_size: int,
+                                       num_outputs: int,
+                                       outputs_serialized_size: int,
+                                       witness_size: int) -> int:
 
     """Calculate vsize of transaction given the number of inputs and
        outputs, the serialized size of inputs and outputs, and witness size.
@@ -322,7 +335,7 @@ def calculate_transaction_virtual_size(*,
     return unscaled_size // WITNESS_SCALE_FACTOR
 
 
-def bytes_for_repr(buf, hexfun=x):
+def bytes_for_repr(buf: bytes, hexfun=x):
     if hexfun is x:
         bfun = b2x
     elif hexfun is lx:
@@ -361,7 +374,7 @@ class ReprOrStrMixin():
 
 class _UintBitVectorMeta(type):
     def __init__(self, name, bases, dct):
-        if self._UINT_WIDTH_BITS is not None:
+        if getattr(self, '_UINT_WIDTH_BITS', None) is not None:
             self._UINT_WIDTH_BYTES = self._UINT_WIDTH_BITS // 8
             assert self._UINT_WIDTH_BITS == self._UINT_WIDTH_BYTES * 8
             self.null_instance = bytes([0 for _ in range(self._UINT_WIDTH_BYTES)])
@@ -369,22 +382,22 @@ class _UintBitVectorMeta(type):
 
 class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
     # should be specified by subclasses
-    _UINT_WIDTH_BITS = None
+    _UINT_WIDTH_BITS: int
     # to be set automatically by _UintBitVectorMeta
-    _UINT_WIDTH_BYTES = None
+    _UINT_WIDTH_BYTES: int
+    data: bytes
 
-    def __init__(self, data=None):
+    def __init__(self, data: Optional[Union[bytes, bytearray]] = None):
         if data is None:
             data = b'\x00'*self._UINT_WIDTH_BYTES
-        if not isinstance(data, (bytes, bytearray)):
-            raise TypeError('invalid data type, should be bytes')
+        ensure_isinstance(data, (bytes, bytearray), 'data')
         if len(data) != self._UINT_WIDTH_BYTES:
             raise ValueError('invalid data length, should be {}'
                              .format(self._UINT_WIDTH_BYTES))
         object.__setattr__(self, 'data', bytes(data))
 
     @no_bool_use_as_property
-    def is_null(self):
+    def is_null(self) -> bool:
         return all(b == 0 for b in self.data)
 
     @classmethod
@@ -395,11 +408,11 @@ class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
     def stream_serialize(self, f):
         f.write(self.data)
 
-    def to_hex(self):
+    def to_hex(self) -> str:
         return b2lx(self.data)
 
     @classmethod
-    def from_hex(cls, hexdata):
+    def from_hex(cls, hexdata: str) -> '_UintBitVector':
         return cls(lx(hexdata))
 
     def __repr__(self):
@@ -410,20 +423,26 @@ class Uint256(_UintBitVector):
     _UINT_WIDTH_BITS = 256
 
     @classmethod
-    def from_int(cls, num):
+    def from_int(cls, num: int) -> 'Uint256':
+        ensure_isinstance(num, int, 'value')
         if not (num < 2**256):
             raise ValueError('value is too large')
-        return cls(uint256_to_str(num))
+        return cls(uint256_to_bytes(num))
 
-    def to_int(self):
-        return uint256_from_str(self.data)
+    def to_int(self) -> int:
+        return uint256_from_bytes(self.data)
 
 
 class COutPoint(CoreCoinClass, next_dispatch_final=True):
     """The combination of a transaction hash and an index n into its vout"""
-    __slots__ = ['hash', 'n']
+    __slots__: List[str] = ['hash', 'n']
+    hash: bytes
+    n: int
 
-    def __init__(self, hash=b'\x00'*32, n=0xffffffff):
+    def __init__(self, hash: Union[bytes, bytearray] = b'\x00'*32,
+                 n: int = 0xffffffff):
+        ensure_isinstance(hash, (bytes, bytearray), 'hash')
+        ensure_isinstance(n, int, 'n')
         if not len(hash) == 32:
             raise ValueError('%s: hash must be exactly 32 bytes; got %d bytes'
                              % (self.__class__.__name__, len(hash)))
@@ -445,7 +464,7 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
         f.write(struct.pack(b"<I", self.n))
 
     @no_bool_use_as_property
-    def is_null(self):
+    def is_null(self) -> bool:
         return ((self.hash == b'\x00'*32) and (self.n == 0xffffffff))
 
     def __repr__(self):
@@ -466,7 +485,7 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
         return cls(other.hash, other.n)
 
     @classmethod
-    def from_outpoint(cls, outpoint):
+    def from_outpoint(cls, outpoint: 'COutPoint') -> 'COutPoint':
         return cls.from_instance(outpoint)
 
 
@@ -477,14 +496,14 @@ class CMutableOutPoint(COutPoint, mutable_of=COutPoint,
 
 class CBitcoinOutPoint(COutPoint, CoreBitcoinClass):
     """Bitcoin COutPoint"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CBitcoinMutableOutPoint(CBitcoinOutPoint, CMutableOutPoint,
                               mutable_of=CBitcoinOutPoint):
     """A mutable Bitcoin COutPoint"""
 
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CTxIn(CoreCoinClass, next_dispatch_final=True):
@@ -493,23 +512,34 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
     Contains the location of the previous transaction's output that it claims,
     and a signature that matches the output's public key.
     """
-    __slots__ = ['prevout', 'scriptSig', 'nSequence']
+    __slots_: List[str] = ['prevout', 'scriptSig', 'nSequence']
 
-    def __init__(self, prevout=None, scriptSig=None, nSequence=0xffffffff):
+    prevout: COutPoint
+    scriptSig: script.CScript
+    nSequence: int
+
+    def __init__(self, prevout: Optional[COutPoint] = None,
+                 scriptSig: Optional[Union[script.CScript, bytes, bytearray]] = None,
+                 nSequence: int = 0xffffffff):
+
+        ensure_isinstance(nSequence, int, 'nSequence')
+
         if not (0 <= nSequence <= 0xffffffff):
             raise ValueError('CTxIn: nSequence must be an integer between 0x0 and 0xffffffff; got %x' % nSequence)
         if scriptSig is None:
             scriptSig = script.CScript()
         elif not isinstance(scriptSig, script.CScript):
-            if not isinstance(scriptSig, (bytes, bytearray)):
-                raise TypeError(
-                    f'scriptSig is expected to be an instance of bytes or bytearray, '
-                    'but it is an instance of {scriptSig.__class__.__name__}')
+            ensure_isinstance(scriptSig, (bytes, bytearray),
+                              'scriptSig that is not an instance of CScript')
             scriptSig = script.CScript(scriptSig)
+        else:
+            ensure_isinstance(scriptSig, script.CScript().__class__,
+                              'scriptSig that is an instance of CScript')
         if prevout is None:
             prevout = COutPoint()
         elif self.is_mutable() or prevout.is_mutable():
             prevout = COutPoint.from_outpoint(prevout)
+        ensure_isinstance(prevout, COutPoint, 'prevout')
         object.__setattr__(self, 'nSequence', nSequence)
         object.__setattr__(self, 'prevout', prevout)
         object.__setattr__(self, 'scriptSig', scriptSig)
@@ -527,17 +557,17 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
         f.write(struct.pack(b"<I", self.nSequence))
 
     @no_bool_use_as_property
-    def is_final(self):
+    def is_final(self) -> bool:
         return (self.nSequence == 0xffffffff)
 
     @classmethod
-    def clone_from_instance(cls, txin):
+    def clone_from_instance(cls, txin: 'CTxIn'):
         return cls(
             COutPoint.from_outpoint(txin.prevout),
             txin.scriptSig, txin.nSequence)
 
     @classmethod
-    def from_txin(cls, txin):
+    def from_txin(cls, txin: 'CTxIn') -> 'CTxIn':
         """Create a mutable or immutable copy of an existing TxIn,
         depending on the class this method is called on.
 
@@ -557,12 +587,12 @@ class CMutableTxIn(CTxIn, mutable_of=CTxIn, next_dispatch_final=True):
 
 class CBitcoinTxIn(CTxIn, CoreBitcoinClass):
     """An immutable Bitcoin TxIn"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CBitcoinMutableTxIn(CBitcoinTxIn, CMutableTxIn, mutable_of=CBitcoinTxIn):
     """A mutable Bitcoin TxIn"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CTxOut(CoreCoinClass, next_dispatch_final=True):
@@ -571,15 +601,25 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
     Contains the public key that the next input must be able to sign with to
     claim it.
     """
-    __slots__ = ['nValue', 'scriptPubKey']
+    __slots_: List[str] = ['nValue', 'scriptPubKey']
 
-    def __init__(self, nValue=-1, scriptPubKey=script.CScript()):
-        if not isinstance(scriptPubKey, script.CScript):
-            if not isinstance(scriptPubKey, (bytes, bytearray)):
-                raise TypeError(
-                    f'scriptPubKey is expected to be an instance of bytes or bytearray, '
-                    'but it is an instance of {scriptPubKey.__class__.__name__}')
+    nValue: int
+    scriptPubKey: script.CScript
+
+    def __init__(self, nValue: int = -1,
+                 scriptPubKey: Optional[script.CScript] = None):
+        ensure_isinstance(nValue, int, 'nValue'),
+
+        if scriptPubKey is None:
+            scriptPubKey = script.CScript()
+        elif not isinstance(scriptPubKey, script.CScript):
+            ensure_isinstance(scriptPubKey, (bytes, bytearray),
+                              'scriptPubKey that is not an instance of CScript')
             scriptPubKey = script.CScript(scriptPubKey)
+        else:
+            ensure_isinstance(scriptPubKey, script.CScript().__class__,
+                              'scriptPubKey that is an instance of CScript')
+
         object.__setattr__(self, 'nValue', int(nValue))
         object.__setattr__(self, 'scriptPubKey', scriptPubKey)
 
@@ -594,7 +634,7 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
         BytesSerializer.stream_serialize(self.scriptPubKey, f)
 
     @no_bool_use_as_property
-    def is_valid(self):
+    def is_valid(self) -> bool:
         if not MoneyRange(self.nValue):
             return False
         if not self.scriptPubKey.is_valid():
@@ -621,24 +661,27 @@ class CMutableTxOut(CTxOut, mutable_of=CTxOut, next_dispatch_final=True):
 
 class CBitcoinTxOut(CTxOut, CoreBitcoinClass):
     """A immutable Bitcoin TxOut"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CBitcoinMutableTxOut(CBitcoinTxOut, CMutableTxOut,
                            mutable_of=CBitcoinTxOut):
     """A mutable Bitcoin CTxOut"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
     """A base class for witness data for a single transaction input"""
-    __slots__ = ['scriptWitness']
+    __slots_: List[str] = ['scriptWitness']
 
-    def __init__(self, scriptWitness=script.CScriptWitness()):
+    scriptWitness: script.CScriptWitness
+
+    def __init__(self, scriptWitness: script.CScriptWitness = script.CScriptWitness()):
+        ensure_isinstance(scriptWitness, script.CScriptWitness, 'scriptWitness')
         object.__setattr__(self, 'scriptWitness', scriptWitness)
 
     @no_bool_use_as_property
-    def is_null(self):
+    def is_null(self) -> bool:
         return self.scriptWitness.is_null()
 
     @classmethod
@@ -654,7 +697,7 @@ class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
         return cls(txin_witness.scriptWitness)
 
     @classmethod
-    def from_txin_witness(cls, txin_witness):
+    def from_txin_witness(cls, txin_witness: 'CTxInWitness') -> 'CTxInWitness':
         return cls.from_instance(txin_witness)
 
     def __repr__(self):
@@ -668,13 +711,13 @@ class CMutableTxInWitness(CTxInWitness, mutable_of=CTxInWitness,
 
 class CBitcoinTxInWitness(CTxInWitness, CoreBitcoinClass):
     """Immutable Bitcoin witness data for a single transaction input"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CBitcoinMutableTxInWitness(CBitcoinTxInWitness, CMutableTxInWitness,
                                  mutable_of=CBitcoinTxInWitness):
     """Mutable Bitcoin witness data for a single transaction input"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CTxOutWitness(CoreCoinClass, next_dispatch_final=True):
@@ -699,22 +742,25 @@ class _CBitcoinDummyMutableTxOutWitness(
 
 class CTxWitness(CoreCoinClass, next_dispatch_final=True):
     """Witness data for all inputs to a transaction"""
-    __slots__ = ['vtxinwit']
+    __slots_: List[str] = ['vtxinwit']
 
-    def __init__(self, vtxinwit=(), vtxoutwit=None):
+    vtxinwit: Union[List[CTxInWitness], Tuple[CTxInWitness, ...]]
+
+    def __init__(self, vtxinwit: Iterable[CTxInWitness] = (), vtxoutwit=None):
         # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
-        txinwit = []
-        for w in vtxinwit:
-            txinwit.append(CTxInWitness.from_txin_witness(w))
+        txinwit_list = [CTxInWitness.from_txin_witness(w) for w in vtxinwit]
 
+        txinwit: Union[List[CTxInWitness], Tuple[CTxInWitness, ...]]
         if self.is_immutable():
-            txinwit = tuple(txinwit)
+            txinwit = tuple(txinwit_list)
+        else:
+            txinwit = txinwit_list
 
         # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
         object.__setattr__(self, 'vtxinwit', txinwit)
 
     @no_bool_use_as_property
-    def is_null(self):
+    def is_null(self) -> bool:
         for n in range(len(self.vtxinwit)):
             if not self.vtxinwit[n].is_null():
                 return False
@@ -738,7 +784,7 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
         return cls(vtxinwit)
 
     @classmethod
-    def from_witness(cls, witness):
+    def from_witness(cls, witness: 'CTxWitness') -> 'CTxWitness':
         return cls.from_instance(witness)
 
     def __repr__(self):
@@ -753,40 +799,52 @@ class CMutableTxWitness(CTxWitness, mutable_of=CTxWitness,
 
 class CBitcoinTxWitness(CTxWitness, CoreBitcoinClass):
     """Immutable witness data for all inputs to a transaction"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CBitcoinMutableTxWitness(CBitcoinTxWitness, CMutableTxWitness,
                                mutable_of=CBitcoinTxWitness):
     """Witness data for all inputs to a transaction, mutable version"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
-    __slots__ = ['nVersion', 'vin', 'vout', 'nLockTime', 'wit']
+    __slots_: List[str] = ['nVersion', 'vin', 'vout', 'nLockTime', 'wit']
 
-    CURRENT_VERSION = 2
+    nVersion: int
+    vin: Union[List[CTxIn], Tuple[CTxIn, ...]]
+    vout: Union[List[CTxOut], Tuple[CTxOut, ...]]
+    nLockTime: int
+    wit: CTxWitness
 
-    def __init__(self, vin=(), vout=(), nLockTime=0, nVersion=None, witness=None):
+    CURRENT_VERSION: int = 2
+
+    def __init__(self, vin: Iterable[CTxIn] = (), vout: Iterable[CTxOut] = (),
+                 nLockTime: int = 0, nVersion: Optional[int] = None,
+                 witness: Optional[CTxWitness] = None):
         """Create a new transaction
 
         vin and vout are iterables of transaction inputs and outputs
         respectively. If their contents are not already immutable, immutable
         copies will be made.
         """
+        ensure_isinstance(nLockTime, int, 'nLockTime')
+
         if not (0 <= nLockTime <= 0xffffffff):
             raise ValueError('CTransaction: nLockTime must be in range 0x0 to 0xffffffff; got %x' % nLockTime)
 
         if nVersion is None:
             nVersion = self.CURRENT_VERSION
+        else:
+            ensure_isinstance(nVersion, int, 'nVersion')
 
         if witness is None or witness.is_null():
             if witness is None and self.is_immutable():
                 witness = CTxWitness()
             else:
                 witness = CTxWitness(
-                    [CTxInWitness() for dummy in range(len(vin))],
-                    [CTxOutWitness() for dummy in range(len(vout))])
+                    [CTxInWitness() for dummy in vin],
+                    [CTxOutWitness() for dummy in vout])
         else:
             witness = CTxWitness.from_witness(witness)
 
@@ -801,10 +859,10 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         object.__setattr__(self, 'wit', witness)
 
     @no_bool_use_as_property
-    def is_coinbase(self):
+    def is_coinbase(self) -> bool:
         return len(self.vin) == 1 and self.vin[0].prevout.is_null()
 
-    def has_witness(self):
+    def has_witness(self) -> bool:
         """True if witness"""
         return not self.wit.is_null()
 
@@ -814,7 +872,7 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
             ', '.join(strfn(v) for v in self.vin), ', '.join(strfn(v) for v in self.vout),
             self.nLockTime, self.nVersion, strfn(self.wit))
 
-    def GetTxid(self):
+    def GetTxid(self) -> bytes:
         """Get the transaction ID.  This differs from the transactions hash as
             given by GetHash.  GetTxid excludes witness data, while GetHash
             includes it. """
@@ -835,7 +893,7 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         return cls(vin, vout, tx.nLockTime, tx.nVersion, wit)
 
     @classmethod
-    def from_tx(cls, tx):
+    def from_tx(cls, tx: 'CTransaction') -> 'CTransaction':
         return cls.from_instance(tx)
 
     @classmethod
@@ -886,7 +944,7 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
             VectorSerializer.stream_serialize(self.vout, f)
         f.write(struct.pack(b"<I", self.nLockTime))
 
-    def get_virtual_size(self):
+    def get_virtual_size(self) -> int:
         """Calculate virtual size for the transaction.
 
         Note that calculation does not take sigops into account.
@@ -926,20 +984,20 @@ class CMutableTransaction(CTransaction, mutable_of=CTransaction,
 
 class CBitcoinTransaction(CTransaction, CoreBitcoinClass):
     """Bitcoin transaction"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CBitcoinMutableTransaction(CBitcoinTransaction, CMutableTransaction,
                                  mutable_of=CBitcoinTransaction):
     """Bitcoin transaction, mutable version"""
-    __slots__ = []
+    __slots_: List[str] = []
 
 
 class CheckTransactionError(ValidationError):
     pass
 
 
-def CheckTransaction(tx):  # noqa
+def CheckTransaction(tx: CTransaction) -> None:  # noqa
     """Basic transaction checks that don't depend on any context.
 
     Raises CheckTransactionError
@@ -969,7 +1027,7 @@ def CheckTransaction(tx):  # noqa
             raise CheckTransactionError("CheckTransaction() : txout total out of range")
 
     # Check for duplicate inputs
-    vin_outpoints = set()
+    vin_outpoints: Set[COutPoint] = set()
     for txin in tx.vin:
         if txin.prevout in vin_outpoints:
             raise CheckTransactionError("CheckTransaction() : duplicate inputs")
@@ -985,7 +1043,7 @@ def CheckTransaction(tx):  # noqa
                 raise CheckTransactionError("CheckTransaction() : prevout is null")
 
 
-def GetLegacySigOpCount(tx):
+def GetLegacySigOpCount(tx: CTransaction) -> int:
     nSigOps = 0
     for txin in tx.vin:
         nSigOps += txin.scriptSig.GetSigOpCount(False)

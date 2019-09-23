@@ -20,6 +20,7 @@
 # pylama:ignore=E501
 
 import struct
+from typing import Union, List  # noqa
 
 
 def Ch(x, y, z):
@@ -70,7 +71,7 @@ class CSHA256():
         self.Reset()
 
     # Perform a number of SHA-256 transformations, processing 64-byte chunks.
-    def Transform(self, chunk, blocks):
+    def Transform(self, chunk: Union[bytes, bytearray], blocks: int):
         if not isinstance(blocks, int):
             raise TypeError('blocks must be an instance of int')
         if not isinstance(chunk, (bytes, bytearray)):
@@ -222,7 +223,7 @@ class CSHA256():
 
             chunk = chunk[64:]
 
-    def Write(self, data):
+    def Write(self, data: Union[bytes, bytearray]):
         if not isinstance(data, (bytes, bytearray)):
             raise TypeError('data must be instance of bytes or bytearray')
 
@@ -235,7 +236,7 @@ class CSHA256():
             data = data[remainder_len:]
             self.bytes_count += remainder_len
             self.Transform(buf, 1)
-            self.buf = b''
+            self.buf = b''  # type: bytes
             bufsize = 0
 
         if len(data) >= 64:
@@ -252,14 +253,14 @@ class CSHA256():
 
         return self
 
-    def Finalize(self):
+    def Finalize(self) -> bytes:
         pad = b'\x80'+b'\x00'*63
         sizedesc = struct.pack(b">q", self.bytes_count << 3)
         self.Write(pad[:1 + ((119 - (self.bytes_count % 64)) % 64)])
         self.Write(sizedesc)
         return self.Midstate()
 
-    def Midstate(self):
+    def Midstate(self) -> bytes:
         s = self.s
 
         def ToBE32(x):
@@ -277,9 +278,9 @@ class CSHA256():
 
         return b''.join(hash_chunks)
 
-    def Reset(self):
-        self.buf = b''
-        self.bytes_count = 0
+    def Reset(self) -> 'CSHA256':
+        self.buf = b''  # type: bytes
+        self.bytes_count = 0  # type: int
         self.s = [0x6a09e667,
                   0xbb67ae85,
                   0x3c6ef372,
@@ -287,7 +288,7 @@ class CSHA256():
                   0x510e527f,
                   0x9b05688c,
                   0x1f83d9ab,
-                  0x5be0cd19]
+                  0x5be0cd19]  # type: List[int]
         return self
 
 

@@ -16,7 +16,6 @@
 """Base58 encoding and decoding"""
 
 import binascii
-
 import bitcointx.core
 
 B58_DIGITS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -41,7 +40,7 @@ class InvalidBase58Error(Base58Error):
     pass
 
 
-def encode(b):
+def encode(b: bytes) -> str:
     """Encode bytes to a base58-encoded string"""
 
     # Convert big-endian bytes to integer
@@ -52,7 +51,7 @@ def encode(b):
     while n > 0:
         n, r = divmod(n, 58)
         res.append(B58_DIGITS[r])
-    res = ''.join(res[::-1])
+    res_str = ''.join(res[::-1])
 
     # Encode leading zeros as base58 zeros
     czero = 0
@@ -62,10 +61,10 @@ def encode(b):
             pad += 1
         else:
             break
-    return B58_DIGITS[0] * pad + res
+    return B58_DIGITS[0] * pad + res_str
 
 
-def decode(s):
+def decode(s: str) -> bytes:
     """Decode a base58-encoding string, returning bytes"""
     if not s:
         return b''
@@ -110,7 +109,7 @@ class CBase58Data(bytes):
 
     base58_prefix = b''
 
-    def __new__(cls, s):
+    def __new__(cls, s) -> 'CBase58Data':
         k = decode(s)
         if len(k) < 4:
             raise Base58Error('data too short')
@@ -128,7 +127,7 @@ class CBase58Data(bytes):
         __init__() with None in place of the string.
         """
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Convert to string"""
         check = bitcointx.core.Hash(self.base58_prefix + self)[0:4]
         return encode(self.base58_prefix + self + check)
@@ -168,13 +167,15 @@ class CBase58Data(bytes):
             'base58 prefix does not match any known base58 address class')
 
     @classmethod
-    def from_bytes(cls, data):
+    def from_bytes(cls, data: bytes):
         """Instantiate from data"""
-        self = bytes.__new__(cls, data)
+        # mypy cannot handle arguments to `bytes.__new__()` at the moment,
+        # issue: https://github.com/python/typeshed/issues/2630
+        self = bytes.__new__(cls, data)  # type: ignore
         self.__init__(None)
         return self
 
-    def to_bytes(self):
+    def to_bytes(self) -> bytes:
         """Convert to bytes instance
 
         Note that it's the data represented that is converted;
@@ -182,7 +183,7 @@ class CBase58Data(bytes):
         """
         return b'' + self
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '%s(%r)' % (self.__class__.__name__, str(self))
 
 

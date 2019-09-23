@@ -19,6 +19,7 @@ to evaluate bitcoin script.
 """
 
 import ctypes
+from bitcointx.util import ensure_isinstance
 from bitcointx.core import MoneyRange
 from bitcointx.core.script import CScriptWitness
 from bitcointx.core.scripteval import (
@@ -200,8 +201,7 @@ def ConsensusVerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
         raise ValueError('amount out of MoneyRange')
 
     if witness is not None:
-        if not isinstance(witness, CScriptWitness):
-            raise TypeError('witness is not of type CScriptWitness')
+        ensure_isinstance(witness, CScriptWitness, 'witness')
         if not txTo.wit.vtxinwit[inIdx].scriptWitness.is_null() \
                 and txTo.wit.vtxinwit[inIdx].scriptWitness != witness:
             raise ValueError(

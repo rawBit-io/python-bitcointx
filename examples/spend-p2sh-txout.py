@@ -18,7 +18,7 @@ import hashlib
 from bitcointx import select_chain_params
 from bitcointx.core import (
     b2x, lx, COutPoint, CMutableTxOut, CMutableTxIn, CMutableTransaction,
-    CoreCoinParams
+    CoreCoinParams, coins_to_satoshi
 )
 from bitcointx.core.script import (
     CScript, OP_CHECKSIG, SignatureHash, SIGHASH_ALL
@@ -65,7 +65,7 @@ txin = CMutableTxIn(COutPoint(txid, vout))
 
 # Create the txout. This time we create the scriptPubKey from a Bitcoin
 # address.
-txout = CMutableTxOut(0.0005*COIN,
+txout = CMutableTxOut(coins_to_satoshi(0.0005),
                       CBitcoinAddress(
                           '323uf9MgLaSn9T7vDaK1cGAZ2qpvYUuqSp'
                       ).to_scriptPubKey())

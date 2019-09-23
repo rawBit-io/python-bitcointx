@@ -10,6 +10,11 @@
 * fix class attribute dispatching code - ignore attributes of `abc.ABC` class
   when dispatching attribute access - otherwise isinstance/issubclass might
   give incorrect results due to `ABC._abc_cache` confusion
+* add type declarations for the functions
+* fixes for minor bugs revealed by mypy after type declarations was added
+* `CPubKey.recover_compact()` now returns None on failure to recover
+  (it previously returned False, which is not consistent with the fact
+  that it returns CPubKey on success)
 
 ## v1.0.1
 
@@ -210,6 +215,7 @@ python-bitcointx is now much easier. See for example
       (unless `check_range=False` is passed)
     - `MoneyRange()` function does not accept `params=` argument anymore.
       To get money range for different params, you can use `with ChainParams():`.
+    -  `CPubKey.recover_compact()` returns None on failure to recover, instead of False
 
 ## v0.10.3.post0
 

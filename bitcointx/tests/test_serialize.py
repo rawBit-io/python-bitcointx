@@ -17,7 +17,7 @@ from binascii import unhexlify
 from bitcointx.core.serialize import (
     Serializable, VarIntSerializer, BytesSerializer, SerializationError,
     SerializationTruncationError, DeserializationExtraDataError,
-    uint256_from_str, uint256_to_str
+    uint256_from_bytes, uint256_to_bytes
 )
 
 
@@ -123,4 +123,4 @@ class Test_Uint256_Serialize(unittest.TestCase):
         for x in range(100):
             values.append(random.getrandbits(256))
         for n in values:
-            assert(uint256_from_str(uint256_to_str(n)) == n)
+            assert(uint256_from_bytes(uint256_to_bytes(n)) == n)

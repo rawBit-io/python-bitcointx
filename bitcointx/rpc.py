@@ -30,8 +30,35 @@ import decimal
 import json
 import os
 import urllib.parse
+from typing import Type, Dict, Tuple, Optional, Union
 
 import bitcointx
+
+try:
+    from typing_extensions import Protocol
+
+    class HTTPClient_Response_Protocol(Protocol):
+        status: int
+        response: str
+
+        def read(self) -> bytes:
+            ...
+
+    class HTTPClient_Protocol(Protocol):
+        def request(self, method: str, path: str, postdata: str,
+                    headers: Dict[str, str]) -> None:
+            ...
+
+        def getresponse(self) -> HTTPClient_Response_Protocol:
+            ...
+
+        def close(self) -> None:
+            ...
+
+    HTTPClient_Type = Union[http.client.HTTPConnection, HTTPClient_Protocol]
+except ImportError:
+    pass
+
 
 DEFAULT_USER_AGENT = "AuthServiceProxy/0.1"
 
@@ -45,10 +72,12 @@ class JSONRPCError(Exception):
     of all subclasses is by no means complete.
     """
 
-    SUBCLS_BY_CODE = {}
+    RPC_ERROR_CODE: int
+    SUBCLS_BY_CODE: Dict[int, Type['JSONRPCError']] = {}
 
     @classmethod
-    def _register_subcls(cls, subcls):
+    def _register_subcls(cls, subcls: Type['JSONRPCError']
+                         ) -> Type['JSONRPCError']:
         cls.SUBCLS_BY_CODE[subcls.RPC_ERROR_CODE] = subcls
         return subcls
 
@@ -102,7 +131,8 @@ class InWarmupError(JSONRPCError):
     RPC_ERROR_CODE = -28
 
 
-def _try_read_conf_file(conf_file, allow_default_conf):
+def _try_read_conf_file(conf_file: str, allow_default_conf: bool
+                        ) -> Dict[str, str]:
     # Bitcoin Core accepts empty rpcuser,
     # not specified in conf_file
     conf = {'rpcuser': ""}
@@ -127,7 +157,7 @@ def _try_read_conf_file(conf_file, allow_default_conf):
     return conf
 
 
-def split_hostport(hostport):
+def split_hostport(hostport: str) -> Tuple[str, Optional[int]]:
     r = hostport.rsplit(':', maxsplit=1)
     if len(r) == 1:
         return (hostport, None)
@@ -150,17 +180,17 @@ def split_hostport(hostport):
 
 class RPCCaller:
     def __init__(self,
-                 service_url=None,
-                 service_port=None,
-                 conf_file=None,
-                 allow_default_conf=False,
-                 timeout=DEFAULT_HTTP_TIMEOUT,
+                 service_url: Optional[str] = None,
+                 service_port: Optional[int] = None,
+                 conf_file: Optional[str] = None,
+                 allow_default_conf: bool = False,
+                 timeout: int = DEFAULT_HTTP_TIMEOUT,
                  connection=None):
 
         # Create a dummy connection early on so if __init__() fails prior to
         # __conn being created __del__() can detect the condition and handle it
         # correctly.
-        self.__conn = None
+        self.__conn: Optional[HTTPClient_Type] = None
         authpair = None
 
         self.__timeout = timeout
@@ -218,21 +248,22 @@ class RPCCaller:
             raise ValueError('Unsupported URL scheme %r' % self.__url.scheme)
 
         if self.__url.port is None:
-            self.__port = service_port or http.client.HTTP_PORT
+            self.__port: int = service_port or http.client.HTTP_PORT
         else:
-            self.__port = self.__url.port
+            self.__port: int = self.__url.port
 
         self.__id_count = 0
 
         if authpair is None:
-            self.__auth_header = None
+            self.__auth_header: Optional[bytes] = None
         else:
-            authpair = authpair.encode('utf8')
-            self.__auth_header = b"Basic " + base64.b64encode(authpair)
+            self.__auth_header: Optional[bytes] = (
+                b"Basic " + base64.b64encode(authpair.encode('utf8'))
+            )
 
         self.connect(connection=connection)
 
-    def connect(self, connection=None):
+    def connect(self, connection: Optional[HTTPClient_Type] = None) -> None:
         if connection:
             self.__conn = connection
         else:
@@ -340,4 +371,5 @@ __all__ = (
     'VerifyAlreadyInChainError',
     'InWarmupError',
     'RPCCaller',
+    'HTTPClient_Type',
 )

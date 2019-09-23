@@ -19,6 +19,7 @@ You probabably don't need to use these directly.
 
 import hashlib
 import struct
+from typing import List
 
 from io import BytesIO
 
@@ -79,7 +80,7 @@ def ser_read(f, n):
 class Serializable(object):
     """Base class for serializable objects"""
 
-    __slots__ = []
+    __slots__: List[str] = []
 
     def stream_serialize(self, f, **kwargs):
         """Serialize to a stream"""
@@ -134,7 +135,7 @@ class Serializable(object):
 class ImmutableSerializable(Serializable):
     """Immutable serializable object"""
 
-    __slots__ = ['_cached_GetHash', '_cached__hash__']
+    __slots__: List[str] = ['_cached_GetHash', '_cached__hash__']
 
     def __setattr__(self, name, value):
         raise AttributeError('Object is immutable')
@@ -309,7 +310,7 @@ class VarStringSerializer(Serializer):
         return ser_read(f, datalen)
 
 
-def uint256_from_str(s):
+def uint256_from_bytes(s: bytes) -> int:
     """Convert bytes to uint256"""
     r = 0
     t = struct.unpack(b"<IIIIIIII", s[:32])
@@ -318,14 +319,14 @@ def uint256_from_str(s):
     return r
 
 
-def uint256_to_str(u):
+def uint256_to_bytes(u: int) -> bytes:
     r = b""
     for i in range(8):
         r += struct.pack('<I', u >> (i * 32) & 0xffffffff)
     return r
 
 
-def uint256_to_shortstr(u):
+def uint256_to_shortstr(u: int) -> str:
     s = "%064x" % (u,)
     return s[:16]
 
@@ -361,8 +362,8 @@ __all__ = (
     'uint256VectorSerializer',
     'intVectorSerializer',
     'VarStringSerializer',
-    'uint256_from_str',
-    'uint256_to_str',
+    'uint256_from_bytes',
+    'uint256_to_bytes',
     'uint256_to_shortstr',
     'make_mutable',
 )

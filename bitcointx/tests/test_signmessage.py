@@ -9,23 +9,14 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import unittest
 
 from bitcointx.core.secp256k1 import secp256k1_has_pubkey_recovery
 from bitcointx.wallet import CBitcoinKey
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
-import sys
 import os
 import json
 
-_bchr = chr
-_bord = ord
-if sys.version > '3':
-    long = int
-    _bchr = lambda x: bytes([x])
-    _bord = lambda x: x
 
 def load_test_vectors(name):
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
@@ -41,7 +32,7 @@ class Test_SignVerifyMessage(unittest.TestCase):
     def test_verify_message_simple(self):
         address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
         message = address
-        signature = "H85WKpqtNZDrajOnYDgUY+abh0KCAcOsAIOQwx2PftAbLEPRA7mzXA/CjXRxzz0MC225pR/hx02Vf2Ag2x33kU4="
+        signature = "H85WKpqtNZDrajOnYDgUY+abh0KCAcOsAIOQwx2PftAbLEPRA7mzXA/CjXRxzz0MC225pR/hx02Vf2Ag2x33kU4="  # noqa
 
         message = BitcoinMessage(message)
 
@@ -66,7 +57,7 @@ class Test_SignVerifyMessage(unittest.TestCase):
     )
     def test_sign_message_simple(self):
 
-        key = CBitcoinKey("L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")
+        key = CBitcoinKey("L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")  # noqa
         address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
         message = address
 

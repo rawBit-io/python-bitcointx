@@ -17,7 +17,7 @@ import threading
 from abc import ABCMeta
 from contextlib import contextmanager
 from collections import OrderedDict
-from typing import Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Type
 
 import bitcointx.core
 import bitcointx.core.script
@@ -39,8 +39,8 @@ class ChainParamsMeta(ABCMeta):
         ('WALLET_DISPATCHER', issubclass,
          bitcointx.wallet.WalletCoinClassDispatcher),
     )
-    _registered_classes = OrderedDict()
-    _common_base_cls = None
+    _registered_classes: Dict[str, 'ChainParamsBase'] = OrderedDict()
+    _common_base_cls: Optional['ChainParamsBase'] = None
 
     def __new__(cls, cls_name, bases, dct, name=None):
         """check that the chainparams class uses unique base class
@@ -94,12 +94,12 @@ class ChainParamsMeta(ABCMeta):
         return cls_instance
 
 
-def find_chain_params(*, name=None):
+def find_chain_params(*, name=None) -> Optional['ChainParamsBase']:
     return ChainParamsMeta._registered_classes.get(name)
 
 
-def get_registered_chain_params():
-    result = []
+def get_registered_chain_params() -> List['ChainParamsBase']:
+    result: List[ChainParamsBase] = []
     for param_cls in ChainParamsMeta._registered_classes.values():
         if param_cls not in result:
             result.append(param_cls)
@@ -110,7 +110,11 @@ def get_registered_chain_params():
 class ChainParamsBase(metaclass=ChainParamsMeta):
     """All chain param classes must be a subclass of this class."""
 
-    def get_confdir_path(self):
+    NAME: str
+    RPC_PORT: int
+    WALLET_DISPATCHER: Type[bitcointx.wallet.WalletCoinClassDispatcher]
+
+    def get_confdir_path(self) -> str:
         """Return default location for config directory"""
         name = self.NAME.split('/')[0]
 
@@ -122,12 +126,12 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
 
         return os.path.expanduser('~/.{}'.format(name))
 
-    def get_config_path(self):
+    def get_config_path(self) -> str:
         """Return default location for config file"""
         name = self.NAME.split('/')[0]
         return '{}/{}.conf'.format(self.get_confdir_path(), name)
 
-    def get_datadir_extra_name(self):
+    def get_datadir_extra_name(self) -> str:
         """Return appropriate dir name to find data for the chain,
         and .cookie file. For mainnet, it will be an empty string -
         because data directory is the same as config directory.
@@ -138,11 +142,11 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
         return name_parts[1]
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.NAME
 
     @property
-    def readable_name(self):
+    def readable_name(self) -> str:
         name_parts = self.NAME.split('/')
         name_parts[0] = name_parts[0].capitalize()
         return ' '.join(name_parts)
@@ -205,6 +209,7 @@ def select_chain_params(params, **kwargs) -> PrevAndNewParams:
         params_cls = find_chain_params(name=params)
         if params_cls is None:
             raise ValueError('Unknown chain %r' % params)
+        assert isinstance(params_cls, type)
         params = params_cls(**kwargs)
     elif isinstance(params, type):
         params = params(**kwargs)

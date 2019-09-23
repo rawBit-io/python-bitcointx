@@ -9,30 +9,29 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from bitcointx.core.key import CPubKey
+from bitcointx.core.key import CPubKey, CKeyBase
 from bitcointx.core.serialize import ImmutableSerializable
-from bitcointx.wallet import P2PKHBitcoinAddress
+from bitcointx.wallet import P2PKHCoinAddress
 import bitcointx
 import base64
 
 # pylama:ignore=E501
 
 
-def VerifyMessage(address, message, sig):
-    sig = base64.b64decode(sig)
+def VerifyMessage(address: P2PKHCoinAddress, message: 'BitcoinMessage',
+                  sig: str) -> bool:
+    sig_bytes = base64.b64decode(sig)
     hash = message.GetHash()
 
-    pubkey = CPubKey.recover_compact(hash, sig)
+    pubkey = CPubKey.recover_compact(hash, sig_bytes)
 
-    if pubkey is False:
+    if pubkey is None:
         return False
 
-    return str(P2PKHBitcoinAddress.from_pubkey(pubkey)) == str(address)
+    return str(P2PKHCoinAddress.from_pubkey(pubkey)) == str(address)
 
 
-def SignMessage(key, message):
+def SignMessage(key: CKeyBase, message: 'BitcoinMessage') -> bytes:
     sig, i = key.sign_compact(message.GetHash())
 
     meta = 27 + i
@@ -45,7 +44,11 @@ def SignMessage(key, message):
 class BitcoinMessage(ImmutableSerializable):
     __slots__ = ['magic', 'message']
 
-    def __init__(self, message="", magic="Bitcoin Signed Message:\n"):
+    message: bytes
+    magic: bytes
+
+    def __init__(self, message: str = "",
+                 magic: str = "Bitcoin Signed Message:\n") -> None:
         object.__setattr__(self, 'message', message.encode("utf-8"))
         object.__setattr__(self, 'magic', magic.encode("utf-8"))
 
@@ -59,8 +62,8 @@ class BitcoinMessage(ImmutableSerializable):
         bitcointx.core.serialize.BytesSerializer.stream_serialize(self.magic, f)
         bitcointx.core.serialize.BytesSerializer.stream_serialize(self.message, f)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.message.decode('ascii')
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'BitcoinMessage(%s, %s)' % (self.magic, self.message)

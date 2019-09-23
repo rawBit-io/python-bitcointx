@@ -21,6 +21,7 @@ is in bitcointx.core.scripteval
 import struct
 import hashlib
 from io import BytesIO
+from typing import List, Dict
 
 import bitcointx.core
 import bitcointx.core.key
@@ -29,7 +30,8 @@ import bitcointx.core._bignum
 from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
 
 from ..util import (
-    no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher
+    no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher,
+    ensure_isinstance
 )
 
 MAX_SCRIPT_SIZE = 10000
@@ -45,9 +47,9 @@ SIGVERSION_WITNESS_V0 = 1
 # out to a (15*(33+1))+3=513 byte redeemScript
 MAX_P2SH_MULTISIG_PUBKEYS = 15
 
-OPCODE_NAMES = {}
+OPCODE_NAMES: Dict['CScriptOp', str] = {}
 
-_opcode_instances = []
+_opcode_instances: List['CScriptOp'] = []
 
 
 class ScriptCoinClassDispatcher(ClassMappingDispatcher, identity='script'):
@@ -68,10 +70,10 @@ class ScriptBitcoinClass(metaclass=ScriptBitcoinClassDispatcher):
 
 class CScriptOp(int):
     """A single script opcode"""
-    __slots__ = []
+    __slots__: List[str] = []
 
     @staticmethod
-    def encode_op_pushdata(d):
+    def encode_op_pushdata(d) -> bytes:
         """Encode a PUSHDATA op, returning bytes"""
         if len(d) < 0x4c:
             return b'' + bytes([len(d)]) + d # OP_PUSHDATA
@@ -85,7 +87,7 @@ class CScriptOp(int):
             raise ValueError("Data too long to encode in a PUSHDATA op")
 
     @staticmethod
-    def encode_op_n(n):
+    def encode_op_n(n) -> 'CScriptOp':
         """Encode a small integer op, returning an opcode"""
         if not (0 <= n <= 16):
             raise ValueError('Integer must be in range 0 <= n <= 16, got %d' % n)
@@ -95,7 +97,7 @@ class CScriptOp(int):
         else:
             return CScriptOp(OP_1 + n-1)
 
-    def decode_op_n(self):
+    def decode_op_n(self) -> int:
         """Decode a small integer opcode, returning an integer"""
         if self == OP_0:
             return 0
@@ -106,7 +108,7 @@ class CScriptOp(int):
         return int(self - OP_1+1)
 
     @no_bool_use_as_property
-    def is_small_int(self):
+    def is_small_int(self) -> bool:
         """Return true if the op pushes a small integer to the stack"""
         if 0x51 <= self <= 0x60 or self == 0:
             return True
@@ -758,7 +760,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         return "%s([%s])" % (self.__class__.__name__, ', '.join(ops))
 
     @no_bool_use_as_property
-    def is_p2sh(self):
+    def is_p2sh(self) -> bool:
         """Test if the script is a p2sh scriptPubKey
 
         Note that this test is consensus-critical.
@@ -772,7 +774,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 self[22] == OP_EQUAL)
 
     @no_bool_use_as_property
-    def is_p2pkh(self):
+    def is_p2pkh(self) -> bool:
         """Test if the script is a p2pkh scriptPubKey"""
         return (len(self) == 25
                 and self[0]  == OP_DUP
@@ -782,7 +784,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 and self[24] == OP_CHECKSIG)
 
     @no_bool_use_as_property
-    def is_witness_scriptpubkey(self):
+    def is_witness_scriptpubkey(self) -> bool:
         """Returns true if this is a scriptpubkey signaling segregated witness data.
 
         A witness program is any valid CScript that consists of a 1-byte push opcode
@@ -801,36 +803,36 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
         return True
 
-    def witness_version(self):
+    def witness_version(self) -> int:
         """Returns the witness version on [0,16]. """
         return next(iter(self))
 
-    def witness_program(self):
+    def witness_program(self) -> bytes:
         """Returns the witness program"""
         return self[2:]
 
     @no_bool_use_as_property
-    def is_witness_v0_keyhash(self):
+    def is_witness_v0_keyhash(self) -> bool:
         """Returns true if this is a scriptpubkey for V0 P2WPKH. """
         return len(self) == 22 and self[0:2] == b'\x00\x14'
 
     @no_bool_use_as_property
-    def is_witness_v0_nested_keyhash(self):
+    def is_witness_v0_nested_keyhash(self) -> bool:
         """Returns true if this is a scriptSig for V0 P2WPKH embedded in P2SH. """
         return len(self) == 23 and self[0:3] == b'\x16\x00\x14'
 
     @no_bool_use_as_property
-    def is_witness_v0_scripthash(self):
+    def is_witness_v0_scripthash(self) -> bool:
         """Returns true if this is a scriptpubkey for V0 P2WSH. """
         return len(self) == 34 and self[0:2] == b'\x00\x20'
 
     @no_bool_use_as_property
-    def is_witness_v0_nested_scripthash(self):
+    def is_witness_v0_nested_scripthash(self) -> bool:
         """Returns true if this is a scriptSig for V0 P2WSH embedded in P2SH. """
         return len(self) == 35 and self[0:3] == b'\x22\x00\x20'
 
     @no_bool_use_as_property
-    def is_push_only(self):
+    def is_push_only(self) -> bool:
         """Test if the script only contains pushdata ops
 
         Note that this test is consensus-critical.
@@ -848,7 +850,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             return False
         return True
 
-    def has_canonical_pushes(self):
+    def has_canonical_pushes(self) -> bool:
         """Test if script only uses canonical pushes
 
         Not yet consensus critical; may be in the future.
@@ -879,12 +881,12 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         return True
 
     @no_bool_use_as_property
-    def is_unspendable(self):
+    def is_unspendable(self) -> bool:
         """Test if the script is provably unspendable"""
         return (len(self) > 0 and self[0] == OP_RETURN) or len(self) > MAX_SCRIPT_SIZE
 
     @no_bool_use_as_property
-    def is_valid(self):
+    def is_valid(self) -> bool:
         """Return True if the script is valid, False otherwise
 
         The script is valid if all PUSHDATA's are valid; invalid opcodes do not
@@ -896,7 +898,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             return False
         return True
 
-    def to_p2sh_scriptPubKey(self, checksize=True):
+    def to_p2sh_scriptPubKey(self, checksize=True) -> 'CScript':
         """Create P2SH scriptPubKey from this redeemScript
 
         That is, create the P2SH scriptPubKey that requires this script as a
@@ -912,7 +914,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
         return self.__class__([OP_HASH160, bitcointx.core.Hash160(self), OP_EQUAL])
 
-    def to_p2wsh_scriptPubKey(self, checksize=True):
+    def to_p2wsh_scriptPubKey(self, checksize=True) -> 'CScript':
         """Create P2WSH scriptPubKey from this redeemScript
 
         That is, create the P2WSH scriptPubKey that requires this script as a
@@ -928,7 +930,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
         return self.__class__([0, hashlib.sha256(self).digest()])
 
-    def to_p2wpkh_scriptPubKey(self, checksize=True):
+    def to_p2wpkh_scriptPubKey(self, checksize=True) -> 'CScript':
         """Create P2WPKH scriptPubKey from this redeemScript
 
         That is, create the P2WPKH scriptPubKey that requires this script as a
@@ -944,7 +946,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             raise ValueError("redeemScript exceeds max allowed size; P2WPKH output would be unspendable")
         return self.__class__([0, bitcointx.core.Hash160(self)])
 
-    def GetSigOpCount(self, fAccurate):
+    def GetSigOpCount(self, fAccurate) -> int:
         """Get the SigOp count.
 
         fAccurate - Accurately count CHECKMULTISIG, see BIP16 for details.
@@ -964,7 +966,8 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             lastOpcode = opcode
         return n
 
-    def sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+    def sighash(self, txTo, inIdx, hashtype, amount=0,
+                sigversion=SIGVERSION_BASE) -> bytes:
         """Calculate a signature hash
 
         'Cooked' version that checks if inIdx is out of bounds - this is *not*
@@ -995,6 +998,10 @@ class CScriptWitness(ImmutableSerializable):
     """
     __slots__ = ['stack']
 
+    # annotate, but do not create the attribute -- no value assigned here
+    # attribute created when `__init__()` does `object.__setattr__(...)`
+    stack: List[bytes]
+
     def __init__(self, stack=()):
         coerced_stack = []
         for (opcode, data, sop_idx) in CScript(stack).raw_iter():
@@ -1014,7 +1021,7 @@ class CScriptWitness(ImmutableSerializable):
         return 'CScriptWitness([' + ','.join("x('%s')" % bitcointx.core.b2x(s) for s in self.stack) + '])'
 
     @no_bool_use_as_property
-    def is_null(self):
+    def is_null(self) -> bool:
         return len(self.stack) == 0
 
     @classmethod
@@ -1053,18 +1060,15 @@ def FindAndDelete(script, sig):
     return script.__class__(r)
 
 
-def IsLowDERSignature(sig):
+def IsLowDERSignature(sig: bytes) -> bool:
     """
     Loosely correlates with IsLowDERSignature() from script/interpreter.cpp
     Verifies that the S value in a DER signature is the lowest possible value.
     Used by BIP62 malleability fixes.
     """
+    ensure_isinstance(sig, (bytes, bytearray), 'signature')
     length_r = sig[3]
-    if isinstance(length_r, str):
-        length_r = int(struct.unpack('B', length_r)[0])
     length_s = sig[5 + length_r]
-    if isinstance(length_s, str):
-        length_s = int(struct.unpack('B', length_s)[0])
     s_val = list(struct.unpack(str(length_s) + 'B', sig[6 + length_r:6 + length_r + length_s]))
 
     # If the S value is above the order of the curve divided by two, its
@@ -1244,7 +1248,7 @@ class CBitcoinScript(CScript, ScriptBitcoinClass):
     ...
 
 
-def parse_standard_multisig_redeem_script(script):
+def parse_standard_multisig_redeem_script(script) -> dict:
     """parse multisig script, raise ValueError if it does not match the
     format of the script produced by construct_multisig_redeem_script"""
     si = iter(script)
@@ -1280,8 +1284,8 @@ def parse_standard_multisig_redeem_script(script):
                 'script is too short for specified number of required '
                 'signatures ({})'.format(required))
 
-    if len(pubkeys) > MAX_P2SH_MULTISIG_PUBKEYS:
-        raise ValueError('script contains more than {} pubkeys'
+    if total is None:
+        raise ValueError('script appears to contain more than {} pubkeys'
                          .format(MAX_P2SH_MULTISIG_PUBKEYS))
 
     if total != len(pubkeys):
@@ -1305,7 +1309,7 @@ def parse_standard_multisig_redeem_script(script):
     return {'total': total, 'required': required, 'pubkeys': pubkeys}
 
 
-def standard_multisig_witness_stack(sigs, redeem_script):
+def standard_multisig_witness_stack(sigs, redeem_script) -> list:
 
     # check valid p2sh script
     info = parse_standard_multisig_redeem_script(redeem_script)
@@ -1330,7 +1334,8 @@ def standard_multisig_witness_stack(sigs, redeem_script):
     return stack
 
 
-def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None):
+def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None
+                                    ) -> CScript:
     """Construct multisignature redeem script.
     We require to supply total number of pubkeys as separate argument
     to be able to catch bugs when pubkeys array is wrong for some reason.
@@ -1507,6 +1512,7 @@ __all__ = (
     'CScriptInvalidError',
     'CScriptTruncatedPushDataError',
     'CScript',
+    'CBitcoinScript',
     'CScriptWitness',
     'SIGHASH_ALL',
     'SIGHASH_NONE',

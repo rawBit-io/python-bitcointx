@@ -13,7 +13,9 @@ import threading
 import functools
 from types import FunctionType
 from abc import ABCMeta, ABC
+from typing import Type, Set, Tuple, Dict, Callable, Iterable, cast
 
+# TODO: convert this to customt thread-local class to be able to apply typing
 class_mapping_dispatch_data = threading.local()
 class_mapping_dispatch_data.core = None
 class_mapping_dispatch_data.wallet = None
@@ -62,9 +64,10 @@ class no_bool_use_as_property():
         return _NoBoolCallable(name, wrapper)
 
 
-def get_class_dispatcher_depends(dclass):
+def get_class_dispatcher_depends(dclass: Type['ClassMappingDispatcher']
+                                 ) -> Set[Type['ClassMappingDispatcher']]:
     """Return a set of dispatcher the supplied dispatcher class depends on"""
-    dset = set()
+    dset: Set[Type['ClassMappingDispatcher']] = set()
 
     for dep_dclass in dclass._class_dispatcher__depends:
         dset.add(dep_dclass)
@@ -77,13 +80,14 @@ def get_class_dispatcher_depends(dclass):
     return dset
 
 
-def activate_class_dispatcher(dclass):
+def activate_class_dispatcher(dclass: Type['ClassMappingDispatcher']
+                              ) -> Type['ClassMappingDispatcher']:
     """Activate particular class dispatcher - so that the mapping it contains
     will be active. Activates its dependent dispatchers, recursively, too."""
     if ClassMappingDispatcher not in dclass.__mro__:
         raise TypeError(
             f'{dclass.__name__} does not appear to be a subclass '
-            'of ClassMappingDispatcher')
+            f'of ClassMappingDispatcher')
 
     if dclass._class_dispatcher__no_direct_use:
         raise ValueError("{} must not be used directly"
@@ -103,7 +107,8 @@ def activate_class_dispatcher(dclass):
     return prev
 
 
-def dispatcher_mapped_list(cls):
+def dispatcher_mapped_list(cls: 'ClassMappingDispatcher'
+                           ) -> Tuple['ClassMappingDispatcher', ...]:
     """Get a list of the classes that particular class is to be
     dispatched to. Returns empty list when class is not in a dispatch map"""
     mcs = type(cls)
@@ -112,16 +117,18 @@ def dispatcher_mapped_list(cls):
 
     dispatcher = getattr(class_mapping_dispatch_data,
                          mcs._class_dispatcher__identity)
-
-    return dispatcher._class_dispatcher__clsmap.get(cls, [])
+    dclass_list = dispatcher._class_dispatcher__clsmap.get(cls, [])
+    # We do not have type-annotead thread-local data at the moment,
+    # - it requires custom thread-local class, which is in TODO.
+    return tuple(cast(Tuple['ClassMappingDispatcher'], dclass_list))
 
 
 class DispatcherMethodWrapper():
     """A helper class that allows to wrap both classmethods and staticmethods,
     in addition to normal instance methods"""
-    def __init__(self, method, wrapper):
+    def __init__(self, method, wrapper: Callable) -> None:
         self.method = method
-        self.wrapper = wrapper
+        self.wrapper: Callable = wrapper
 
     def __get__(self, instance, owner):
         bound_method = self.method.__get__(instance, owner)
@@ -148,7 +155,22 @@ class ClassMappingDispatcher(ABCMeta):
     the classes, with the help of a few additional flags that control the
     final mapping"""
 
-    def __init_subclass__(mcs, identity=None, depends=()):
+    # metaclass attributes pollute the namespace of all the classes
+    # that use the metaclass.
+    # Use '_class_dispatcher__' prefix to minimize pollution.
+
+    _class_dispatcher__final_dispatch: Set['ClassMappingDispatcher']
+    _class_dispatcher__pre_final_dispatch: Set['ClassMappingDispatcher']
+    _class_dispatcher__no_direct_use: bool
+    _class_dispatcher__clsmap: Dict['ClassMappingDispatcher',
+                                    'ClassMappingDispatcher']
+    _class_dispatcher__identity: str
+    _class_dispatcher__depends: Iterable[Type['ClassMappingDispatcher']]
+
+    def __init_subclass__(
+        mcs, identity: str = None,
+        depends: Iterable[Type['ClassMappingDispatcher']] = ()
+    ) -> None:
         """Initialize the dispatcher metaclass.
            Arguments:
                 identity:
@@ -169,10 +191,6 @@ class ClassMappingDispatcher(ABCMeta):
                     activated, along with ScriptBitcoinDispatcher, for the
                     class dispatching situation to be consistent.
             """
-
-        # metaclass attributes pollute the namespace of all the classes
-        # that use the metaclass.
-        # Use '_class_dispatcher__' prefix to minimize pollution.
 
         if identity is not None:
             if not hasattr(class_mapping_dispatch_data, identity):
@@ -399,3 +417,18 @@ class classgetter:
 
     def __get__(self, obj, owner):
         return self.f(owner)
+
+
+def ensure_isinstance(var, type_or_types, var_name):
+    if not isinstance(var, type_or_types):
+        if isinstance(type_or_types, type):  # single type
+            msg = (f"{var_name} is expected to be an instance of "
+                   f"{type_or_types.__name__}, but an instance of "
+                   f"{var.__class__.__name__} was supplied")
+        else:
+            names = ', '.join(t.__name__ for t in type_or_types)
+            msg = (f"{var_name} is expected to be an instance of any of "
+                   f"({names}), but an instance of "
+                   f"{var.__class__.__name__} was supplied")
+
+        raise TypeError(msg)
