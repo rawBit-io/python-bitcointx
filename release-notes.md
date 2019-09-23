@@ -9,7 +9,7 @@
   `ValueError` or `TypeError` depending on the check.
 * fix class attribute dispatching code - ignore attributes of `abc.ABC` class
   when dispatching attribute access - otherwise isinstance/issubclass might
-  give incorrect results due to `ABC._abc_cache` confision
+  give incorrect results due to `ABC._abc_cache` confusion
 
 ## v1.0.1
 
