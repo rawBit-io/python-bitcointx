@@ -12,12 +12,14 @@
 import threading
 import functools
 from types import FunctionType
-from abc import ABCMeta
+from abc import ABCMeta, ABC
 
 class_mapping_dispatch_data = threading.local()
 class_mapping_dispatch_data.core = None
 class_mapping_dispatch_data.wallet = None
 class_mapping_dispatch_data.script = None
+
+_attributes_of_ABC = dir(ABC)
 
 
 class _NoBoolCallable():
@@ -367,7 +369,8 @@ class ClassMappingDispatcher(ABCMeta):
     def __getattribute__(cls, name):
         """Perform class attribute mapping in accordance to the currently
         active dispatcher class (except python-specific attributes)"""
-        if name.startswith('__') and name.endswith('__'):
+        if name.startswith('__') and name.endswith('__') \
+                or name in _attributes_of_ABC:
             return type.__getattribute__(cls, name)
         mcs = type(cls)
         cur_dispatcher = getattr(class_mapping_dispatch_data,
@@ -382,6 +385,7 @@ class ClassMappingDispatcher(ABCMeta):
             # its own dispatching, and we do not need to do any
             # attribute substition here.
             return type.__getattribute__(cls, name)
+
         # Unambigous target - do the substitution.
         return getattr(class_list[0], name)
 

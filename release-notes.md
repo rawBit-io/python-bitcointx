@@ -7,6 +7,9 @@
 * `select_chain_params` returns tuple of previous chain params and new chain params. 
 * some asserts in the library are conveted to the checks that raise
   `ValueError` or `TypeError` depending on the check.
+* fix class attribute dispatching code - ignore attributes of `abc.ABC` class
+  when dispatching attribute access - otherwise isinstance/issubclass might
+  give incorrect results due to `ABC._abc_cache` confision
 
 ## v1.0.1
 
