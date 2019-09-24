@@ -30,5 +30,6 @@ setup(
     packages=find_packages(),
     zip_safe=False,
     install_requires=requires,
-    test_suite="bitcointx.tests"
+    test_suite="bitcointx.tests",
+    extras_require={"typing_extensions": ["typing_extensions>=3.6"]}
 )

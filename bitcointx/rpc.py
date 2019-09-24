@@ -36,28 +36,35 @@ import bitcointx
 
 try:
     from typing_extensions import Protocol
-
-    class HTTPClient_Response_Protocol(Protocol):
-        status: int
-        response: str
-
-        def read(self) -> bytes:
-            ...
-
-    class HTTPClient_Protocol(Protocol):
-        def request(self, method: str, path: str, postdata: str,
-                    headers: Dict[str, str]) -> None:
-            ...
-
-        def getresponse(self) -> HTTPClient_Response_Protocol:
-            ...
-
-        def close(self) -> None:
-            ...
-
-    HTTPClient_Type = Union[http.client.HTTPConnection, HTTPClient_Protocol]
 except ImportError:
-    pass
+    # This is relevant only for mypy.
+    # Those who want to typecheck their code need to have typing_extensions
+    # installed, or included with their newer python version (3.8+).
+    class Protocol:
+        ...
+
+
+class HTTPClient_Response_Protocol(Protocol):
+    status: int
+    response: str
+
+    def read(self) -> bytes:
+        ...
+
+
+class HTTPClient_Protocol(Protocol):
+    def request(self, method: str, path: str, postdata: str,
+                headers: Dict[str, str]) -> None:
+        ...
+
+    def getresponse(self) -> HTTPClient_Response_Protocol:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
+HTTPClient_Type = Union[http.client.HTTPConnection, HTTPClient_Protocol]
 
 
 DEFAULT_USER_AGENT = "AuthServiceProxy/0.1"
