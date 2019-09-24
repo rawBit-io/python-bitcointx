@@ -21,7 +21,7 @@ import bitcointx.rpc
 from bitcointx import select_chain_params
 from bitcointx.core import (
     Hash, x, lx, b2x, coins_to_satoshi, CoreCoinParams,
-    CTransaction, CTxIn, CMutableTxOut, COutPoint
+    CTransaction, CTxIn, CTxOut, COutPoint
 )
 from bitcointx.core.script import CScript, OP_RETURN, OP_CHECKSIG
 
@@ -70,8 +70,6 @@ if __name__ == '__main__':
             continue
 
     for digest in digests:
-        txouts = []
-
         unspent = sorted(rpc.listunspent(0), key=lambda x: hash(x['amount']))
 
         txins = [CTxIn(COutPoint(lx(unspent[-1]['txid']),
@@ -80,13 +78,9 @@ if __name__ == '__main__':
 
         change_addr = rpc.getnewaddress()
         change_pubkey_hex = rpc.getaddressinfo(change_addr)['pubkey']
-        change_out = CMutableTxOut(CoreCoinParams.MAX_MONEY,
-                                   CScript([x(change_pubkey_hex),
-                                            OP_CHECKSIG]))
-
-        digest_outs = [CMutableTxOut(0, CScript([OP_RETURN, digest]))]
-
-        txouts = [change_out] + digest_outs
+        txouts = [CTxOut(CoreCoinParams.MAX_MONEY,
+                         CScript([x(change_pubkey_hex), OP_CHECKSIG])),
+                  CTxOut(0, CScript([OP_RETURN, digest]))]
 
         tx = CTransaction(txins, txouts).to_mutable()
 

@@ -17,6 +17,7 @@ from bitcointx.core import b2x
 from bitcointx.core.key import BIP32Path
 from bitcointx.base58 import Base58Error, UnexpectedBase58PrefixError
 from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
+from typing import Union
 
 if __name__ == '__main__':
     if len(sys.argv) < 2 or len(sys.argv) > 3:
@@ -24,14 +25,26 @@ if __name__ == '__main__':
               .format(sys.argv[0]))
         sys.exit(-1)
 
+    xkey: Union[CBitcoinExtKey, CBitcoinExtPubKey]
+
     if len(sys.argv) == 2:
         xkey = CBitcoinExtKey.from_seed(os.urandom(32))
         print("generated xpriv: ", xkey)
     else:
-        for cls in (CBitcoinExtKey, CBitcoinExtPubKey):
+        key_classes = (CBitcoinExtKey, CBitcoinExtPubKey)
+        for i, cls in enumerate(key_classes):
             try:
-                xkey = cls(sys.argv[2])
+
+                # mypy seems to have problems with tracking the types when
+                # iterating over a list of classes.
+                # These two lines are essentially the same,
+                # but the second one typechecks successfully with mypy 0.701
+
+                # xkey = cls(sys.argv[2])
+                xkey = key_classes[i](sys.argv[2])
+
                 break
+
             except UnexpectedBase58PrefixError:
                 pass
             except Base58Error:

@@ -34,6 +34,7 @@ import sys
 import argparse
 import logging
 import os
+from typing import List, Tuple
 
 import bitcointx.rpc
 from bitcointx.core import (
@@ -129,7 +130,7 @@ for line in raw_padded_lines:
 if prev_line:
     padded_lines.append(prev_line)
 
-scripts = []
+scripts: List[Tuple[CScript, CScript]] = []
 while padded_lines:
     def make_scripts(lines, n):
         # The n makes sure every p2sh addr is unique; the pubkey lets us
@@ -168,7 +169,10 @@ while padded_lines:
     else:
         padded_lines = []
 
-    scripts.append((scriptSig, redeemScript))
+    if scriptSig is not None and redeemScript is not None:
+        scripts.append((scriptSig, redeemScript))
+    else:
+        assert scriptSig is None and redeemScript is None
 
 # pay to the redeemScripts to make them spendable
 

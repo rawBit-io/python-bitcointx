@@ -24,7 +24,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 # https://developers.google.com/protocol-buffers/docs/pythontutorial
 # using .proto file located at
 # https://github.com/bitcoin/bips/blob/master/bip-0070/paymentrequest.proto
-import paymentrequest_pb2 as o
+import paymentrequest_pb2 as o  # type: ignore
 
 # import bitcointx
 
@@ -36,7 +36,8 @@ from time import time
 
 # bitcointx.select_chain_params('bitcoin/regtest')
 
-listen_on = {'host': '127.0.0.1', 'port': 8080}
+listen_on_host = '127.0.0.1'
+listen_on_port = 8080
 req_url_path = 'payment_request'
 ack_url_path = 'payment_ack'
 
@@ -60,8 +61,8 @@ def payment_request():
     pdo.outputs.add(amount=btc_amount, script=serialized_pubkey)
     pdo.time = int(time())
     pdo.memo = 'String shown to user before confirming payment'
-    pdo.payment_url = 'http://{}:{}/{}'.format(listen_on['host'],
-                                               listen_on['port'],
+    pdo.payment_url = 'http://{}:{}/{}'.format(listen_on_host,
+                                               listen_on_port,
                                                ack_url_path)
 
     pro = o.PaymentRequest()
@@ -122,5 +123,5 @@ class ReqHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    httpd = HTTPServer((listen_on['host'], listen_on['port']), ReqHandler)
+    httpd = HTTPServer((listen_on_host, listen_on_port), ReqHandler)
     httpd.serve_forever()
