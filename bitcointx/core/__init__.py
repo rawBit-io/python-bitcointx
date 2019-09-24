@@ -214,7 +214,7 @@ def coins_to_satoshi(value: Union[int, float], check_range=True) -> int:
     """Simple utility function to convert from
     floating-point coins amount to integer satoshi amonut"""
 
-    # Shole number of coins can be expressed as int, so we allow both
+    # Sole number of coins can be expressed as int, so we allow both
     # float and int
     ensure_isinstance(value, (int, float), 'value in coins')
 
