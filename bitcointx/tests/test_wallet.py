@@ -132,7 +132,7 @@ class Test_CBitcoinAddress(unittest.TestCase):
             if isinstance(addr, CBase58BitcoinAddress):
                 self.assertEqual(addr.base58_prefix[0], expected_version)
             elif isinstance(addr, CBech32BitcoinAddress):
-                self.assertEqual(addr.witver, expected_version)
+                self.assertEqual(addr.bech32_witness_version, expected_version)
 
         T('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
           x('62e907b15cbf27d5425399ebf6f0fb50ebb88f18'), 0,

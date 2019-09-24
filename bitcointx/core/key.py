@@ -667,10 +667,6 @@ class CExtKeyBase(CExtKeyCommonBase):
         return self._xpub_class.from_bytes(
             bytes([self.depth]) + self.parent_fp + self.child_number_bytes + self.chaincode + self.pub)
 
-    @classmethod
-    def from_bytes(cls, data: bytes):
-        return cls(data)
-
 
 class CExtPubKeyBase(CExtKeyCommonBase):
     """An encapsulated extended public key
@@ -688,10 +684,6 @@ class CExtPubKeyBase(CExtKeyCommonBase):
         self.pub = CPubKey(self.key_bytes)
         if not self.pub.is_fullyvalid():
             raise ValueError('pubkey part of xpubkey is not valid')
-
-    @classmethod
-    def from_bytes(cls, data: bytes):
-        return cls(data)
 
     def derive(self: T_CExtPubKeyBase, child_number) -> T_CExtPubKeyBase:
         if (child_number >> 31) != 0:
@@ -736,12 +728,6 @@ class CExtPubKeyBase(CExtKeyCommonBase):
         parent_fp = self.pub.key_id[:4]
         cls = self.__class__
         return cls.from_bytes(bytes([depth]) + parent_fp + child_number_packed + chaincode + child_pubkey)
-
-    def __str__(self):
-        return repr(self)
-
-    def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, super().__repr__())
 
 
 T_CExtPubKey = TypeVar('T_CExtPubKey', bound='CExtPubKey')

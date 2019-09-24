@@ -26,7 +26,7 @@ class Base58Error(bitcointx.core.AddressDataEncodingError):
 
 
 class UnexpectedBase58PrefixError(Base58Error):
-    """Raised by check_base58_prefix_correct() when unexpected prefix encountered
+    """Raised by base58_match_prefix() when unexpected prefix encountered
 
     """
     pass
@@ -163,7 +163,7 @@ class CBase58Data(bytes):
                         bitcointx.core.b2x(pfx),
                         bitcointx.core.b2x(cls.base58_prefix)))
 
-        raise bitcointx.base58.UnexpectedBase58PrefixError(
+        raise UnexpectedBase58PrefixError(
             'base58 prefix does not match any known base58 address class')
 
     @classmethod

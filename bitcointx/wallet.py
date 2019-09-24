@@ -214,43 +214,12 @@ class P2WPKHCoinAddressError(CBech32AddressError):
     """Raised when an invalid PW2PKH address is encountered"""
 
 
-class CBech32CoinAddress(bitcointx.bech32.CBech32Data, CCoinAddress):
-    """A Bech32-encoded coin address"""
-
-    _witness_version: int
-
-    @classmethod
-    def from_bytes(cls, witprog: bytes, witver=None) -> 'CBech32CoinAddress':
-        if getattr(cls, '_witness_version', None) is None:
-            if witver is None:
-                raise ValueError(
-                    f'witver must be specified for {cls.__name__}.from_bytes()')
-            for candidate in dispatcher_mapped_list(cls):
-                if len(witprog) == candidate._data_length and \
-                        witver == candidate._witness_version:
-                    break
-            else:
-                raise CBech32AddressError(
-                    'witness program does not match any known Bech32 '
-                    'address length or version')
-        else:
-            candidate = cls
-
-        if len(witprog) != candidate._data_length or \
-                (witver is not None and witver != candidate._witness_version):
-            raise CBech32AddressError(
-                'witness program does not match {}'
-                ' expected length or version'.format(cls.__name__))
-
-        self = super(CBech32CoinAddress, cls).from_bytes(
-            witprog, witver=candidate._witness_version
-        )
-        self.__class__ = candidate
-
-        return cast('CBech32CoinAddress', self)
-
-
 class CBase58DataDispatched(bitcointx.base58.CBase58Data):
+
+    def __init__(self, _s):
+        if not self.base58_prefix:
+            raise TypeError(
+                f'{self.__class__.__name__} must not be instantiated directly')
 
     @classmethod
     def base58_get_match_candidates(cls):
@@ -264,9 +233,34 @@ class CBase58DataDispatched(bitcointx.base58.CBase58Data):
         return candidates
 
 
+class CBech32DataDispatched(bitcointx.bech32.CBech32Data):
+
+    def __init__(self, _s):
+        if self.__class__.bech32_witness_version < 0:
+            raise TypeError(
+                f'{self.__class__.__name__} must not be instantiated directly')
+        if len(self) != self.__class__._data_length:
+            raise TypeError(
+                f'lengh of the data is not {self.__class__._data_length}')
+
+    @classmethod
+    def bech32_get_match_candidates(cls):
+        candidates = dispatcher_mapped_list(cls)
+        if not candidates:
+            if cls.bech32_witness_version < 0:
+                raise TypeError(
+                    "if class has no dispatched descendants, it must have "
+                    "bech32_witness_version set to non-negative value")
+            candidates = [cls]
+        return candidates
+
+
+class CBech32CoinAddress(CBech32DataDispatched, CCoinAddress):
+    """A Bech32-encoded coin address"""
+
+
 class CBase58CoinAddress(CBase58DataDispatched, CCoinAddress):
     """A Base58-encoded coin address"""
-    ...
 
 
 class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
@@ -352,7 +346,7 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
 
 class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     _data_length = 32
-    _witness_version = 0
+    bech32_witness_version = 0
     _scriptpubkey_type = 'witness_v0_scripthash'
 
     @classmethod
@@ -387,7 +381,7 @@ class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
 
 class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     _data_length = 20
-    _witness_version = 0
+    bech32_witness_version = 0
     _scriptpubkey_type = 'witness_v0_keyhash'
 
     @classmethod
@@ -586,14 +580,12 @@ class CCoinKey(CBase58DataDispatched, CKeyBase,
     secret_bytes property is 32 bytes long in both cases.
     """
 
-    @classmethod
-    def from_bytes(cls, data: bytes) -> 'CCoinKey':
+    def __init__(self, _s) -> None:
+        data = self
         if len(data) > 33:
             raise ValueError('data size must not exceed 33 bytes')
         compressed = (len(data) > 32 and data[32] == 1)
-        self = super(CCoinKey, cls).from_bytes(data)
         CKeyBase.__init__(self, None, compressed=compressed)
-        return self
 
     @classmethod
     def from_secret_bytes(cls, secret: bytes, compressed: bool = True
@@ -601,9 +593,7 @@ class CCoinKey(CBase58DataDispatched, CKeyBase,
         """Create a secret key from a 32-byte secret"""
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
-        self = super(CCoinKey, cls).from_bytes(secret + (b'\x01' if compressed else b''))
-        CKeyBase.__init__(self, None, compressed=compressed)
-        return cast('CCoinKey', self)
+        return cls.from_bytes(secret + (b'\x01' if compressed else b''))
 
     def to_compressed(self) -> 'CCoinKey':
         if self.is_compressed():

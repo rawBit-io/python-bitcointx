@@ -62,10 +62,30 @@ class MockBech32Data(CBech32Data):
 
 class Test_CBech32Data(unittest.TestCase):
     def test_from_data(self):
-        b = MockBech32Data.from_bytes(unhexlify('751e76e8199196d454941c45d1b3a323f1433bd6'),
-                                      witver=0)
-        self.assertEqual(b.witver, 0)
+        test_bytes = unhexlify('751e76e8199196d454941c45d1b3a323f1433bd6')
+        b = MockBech32Data.from_bytes(test_bytes, witver=0)
+        self.assertEqual(b.bech32_witness_version, 0)
+        self.assertEqual(b.__class__.bech32_witness_version, -1)
         self.assertEqual(str(b).upper(), 'BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4')
+
+        with self.assertRaises(ValueError):
+            MockBech32Data.from_bytes(test_bytes, witver=-1)
+
+        MockBech32Data.bech32_witness_version = 16
+
+        with self.assertRaises(ValueError):
+            MockBech32Data.from_bytes(test_bytes, witver=-1)
+
+        with self.assertRaises(ValueError):
+            MockBech32Data.from_bytes(test_bytes, witver=0)
+
+        b = MockBech32Data.from_bytes(test_bytes, witver=16)
+        self.assertEqual(b.bech32_witness_version, 16)
+        self.assertEqual(MockBech32Data.bech32_witness_version, 16)
+
+        witver, data = decode(MockBech32Data.bech32_hrp, str(b))
+        self.assertEqual(data, test_bytes)
+        self.assertEqual(witver, 16)
 
     def test_invalid_bech32_exception(self):
 

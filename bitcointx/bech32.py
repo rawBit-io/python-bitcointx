@@ -24,12 +24,20 @@ class Bech32ChecksumError(Bech32Error):
     pass
 
 
+class UnexpectedBech32LenghOrVersion(Bech32Error):
+    """Raised by bech32_match_progam_and_version()
+    when unexpected prefix encountered
+
+    """
+
+
 class CBech32Data(bytes):
     """Bech32-encoded data
 
     Includes a witver and checksum.
     """
     bech32_hrp: str
+    bech32_witness_version: int = -1
 
     def __new__(cls, s: str):
         """from bech32 addr to """
@@ -41,7 +49,7 @@ class CBech32Data(bytes):
             assert witver is None and data is None
             raise Bech32Error('Bech32 decoding error')
 
-        return cls.from_bytes(data, witver=witver)
+        return cls.bech32_match_progam_and_version(data, witver)
 
     def __init__(self, s):
         """Initialize from bech32-encoded string
@@ -51,18 +59,68 @@ class CBech32Data(bytes):
         __init__() with None in place of the string.
         """
 
-    witver: int
+    @classmethod
+    def bech32_get_match_candidates(cls):
+        if cls.bech32_witness_version >= 0:
+            return [cls]
+        return []
 
     @classmethod
-    def from_bytes(cls, witprog: bytes, witver=None):
+    def bech32_match_progam_and_version(cls, data, witver):
+        """Instantiate from data and witver.
+        if witver is not set for class, this is equivalent of from_bytes()"""
+        candidates = cls.bech32_get_match_candidates()
+        if not candidates:
+            return cls.from_bytes(data, witver=witver)
+
+        for candidate in candidates:
+            wv = candidate.bech32_witness_version
+            if wv < 0:
+                try:
+                    return candidate.bech32_match_progam_and_version(
+                        data, witver)
+                except UnexpectedBech32LenghOrVersion:
+                    pass
+            elif len(data) == candidate._data_length and witver == wv:
+                return candidate.from_bytes(data, witver=witver)
+
+        if len(candidates) == 1:
+            raise UnexpectedBech32LenghOrVersion(
+                f'Incorrect length/version for {cls.__name__}: '
+                f'{len(data)}/{witver}, expected '
+                f'{cls._data_length}/{cls.bech32_witness_version}')
+
+        raise UnexpectedBech32LenghOrVersion(
+            'witness program or version does not match any known Bech32 '
+            'address class')
+
+    @classmethod
+    def from_bytes(cls, witprog: bytes, witver: int = None):
         """Instantiate from witver and data"""
-        if witver is None or not (0 <= witver <= 16):
+        cls_wv = cls.bech32_witness_version
+        if witver is None:
+            if cls_wv < 0:
+                raise ValueError(
+                    f'witver must be specified, {cls.__name__} does not '
+                    f'specify bech32_witness_version')
+            witver = cls_wv
+        elif witver < 0:
+            raise ValueError('negative witver specified')
+        elif cls_wv >= 0 and witver != cls_wv:
+            raise ValueError(
+                f'witver specified but is not the same as '
+                f'{cls.__name__}.bech32_witness_version')
+
+        if not (0 <= witver <= 16):
             raise ValueError(
                 'witver must be in range 0 to 16 inclusive; got %r' % witver)
+
         # mypy cannot handle arguments to `bytes.__new__()` at the moment,
         # issue: https://github.com/python/typeshed/issues/2630
         self = bytes.__new__(cls, witprog)  # type: ignore
-        self.witver = witver
+        if cls_wv < 0:
+            self.bech32_witness_version = witver
+        self.__init__(None)
 
         return self
 
@@ -76,7 +134,7 @@ class CBech32Data(bytes):
 
     def __str__(self) -> str:
         """Convert to string"""
-        result = encode(self.__class__.bech32_hrp, self.witver, self)
+        result = encode(self.bech32_hrp, self.bech32_witness_version, self)
         if result is None:
             raise AssertionError(
                 'encode should not fail, this is data that '
