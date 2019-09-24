@@ -10,11 +10,14 @@
 * fix class attribute dispatching code - ignore attributes of `abc.ABC` class
   when dispatching attribute access - otherwise isinstance/issubclass might
   give incorrect results due to `ABC._abc_cache` confusion
-* add type declarations for the functions
+* add type declarations for the functions, and checks for instance types at runtime
 * fixes for minor bugs revealed by mypy after type declarations was added
 * `CPubKey.recover_compact()` now returns None on failure to recover
   (it previously returned False, which is not consistent with the fact
   that it returns CPubKey on success)
+* CBech32Data now has `bech32_witness_version` field instead of `witver`
+* parsed JSON returned by rpc.RPCCaller had decimal.Decimal type for the float
+  values in json. Now all the floats in parsed JSON have type `float`.
 
 ## v1.0.1
 
