@@ -24,7 +24,7 @@ import struct
 import ctypes
 import ctypes.util
 import hashlib
-from typing import TypeVar, Type, Union, Tuple, Optional
+from typing import TypeVar, Type, Union, Sequence, Tuple, Optional
 
 import bitcointx.core
 from bitcointx.util import no_bool_use_as_property, ensure_isinstance
@@ -766,10 +766,13 @@ class BIP32Path:
 
     __slots__ = ['_indexlist', '_hardened_marker']
 
-    def __init__(self, path, hardened_marker=None):
+    def __init__(self, path: Union[str, 'BIP32Path', Sequence[int]],
+                 hardened_marker: Optional[str] = None):
         if hardened_marker is not None:
             if hardened_marker not in self.__class__.HARDENED_MARKERS:
                 raise ValueError('unsupported hardened_marker')
+
+        indexlist: Sequence[int]
 
         if isinstance(path, str):
             indexlist, hardened_marker = self._parse_string(
@@ -788,15 +791,15 @@ class BIP32Path:
         if len(indexlist) > 255:
             raise ValueError('derivation path longer than 255 elements')
 
-        for n in indexlist:
-            n = int(n)  # ensure index is an integer
+        for i, n in enumerate(indexlist):
+            ensure_isinstance(n, int, f'element at position {i} in the path')
             self._check_bip32_index_bounds(n, allow_hardened=True)
 
         if hardened_marker is None:
             hardened_marker = self.__class__.HARDENED_MARKERS[0]
 
-        self._indexlist = tuple(indexlist)
-        self._hardened_marker = hardened_marker
+        self._indexlist: Tuple[int, ...] = tuple(indexlist)
+        self._hardened_marker: str = hardened_marker
 
     def __str__(self):
         if len(self._indexlist) == 0:
@@ -808,16 +811,16 @@ class BIP32Path:
                                            self._hardened_marker)
                                  for n in self._indexlist)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._indexlist)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> int:
         return self._indexlist[key]
 
     def __iter__(self):
         return (n for n in self._indexlist)
 
-    def _check_bip32_index_bounds(self, n, allow_hardened=False):
+    def _check_bip32_index_bounds(self, n: int, allow_hardened: bool = False):
         if n < 0:
             raise ValueError('derivation index cannot be negative')
 
@@ -827,7 +830,7 @@ class BIP32Path:
             raise ValueError(
                 'derivation index cannot be > {}' .format(limit))
 
-    def _parse_string(self, path, hardened_marker=None):
+    def _parse_string(self, path: str, hardened_marker: Optional[str] = None):
         """Parse bip32 derivation path. returns list of indexes.
         hardened indexes will have BIP32_HARDENED_KEY_OFFSET added to them."""
 
