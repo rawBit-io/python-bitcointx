@@ -45,7 +45,7 @@ T_CExtKeyBase = TypeVar('T_CExtKeyBase', bound='CExtKeyBase')
 T_CExtPubKeyBase = TypeVar('T_CExtPubKeyBase', bound='CExtPubKeyBase')
 
 try:
-    _ssl: Union[ctypes.CDLL, None] = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
+    _ssl: Optional[ctypes.CDLL] = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
     if not getattr(_ssl, 'EC_KEY_new_by_curve_name', None):
         _ssl = None
 except OSError:
@@ -618,7 +618,7 @@ class CExtKeyBase(CExtKeyCommonBase):
         return self.priv.pub
 
     @classmethod
-    def from_seed(cls: Type[T_CExtKeyBase], seed) -> T_CExtKeyBase:
+    def from_seed(cls: Type[T_CExtKeyBase], seed: bytes) -> T_CExtKeyBase:
         if len(seed) not in (128//8, 256//8, 512//8):
             raise ValueError('Unexpected seed length')
 

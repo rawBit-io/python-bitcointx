@@ -20,7 +20,7 @@
 # pylama:ignore=E501
 
 import struct
-from typing import Union, List  # noqa
+from typing import Union, List
 
 
 def Ch(x, y, z):
@@ -236,7 +236,7 @@ class CSHA256():
             data = data[remainder_len:]
             self.bytes_count += remainder_len
             self.Transform(buf, 1)
-            self.buf = b''  # type: bytes
+            self.buf: bytes = b''
             bufsize = 0
 
         if len(data) >= 64:
@@ -281,14 +281,14 @@ class CSHA256():
     def Reset(self) -> 'CSHA256':
         self.buf = b''  # type: bytes
         self.bytes_count = 0  # type: int
-        self.s = [0x6a09e667,
-                  0xbb67ae85,
-                  0x3c6ef372,
-                  0xa54ff53a,
-                  0x510e527f,
-                  0x9b05688c,
-                  0x1f83d9ab,
-                  0x5be0cd19]  # type: List[int]
+        self.s: List[int] = [0x6a09e667,
+                             0xbb67ae85,
+                             0x3c6ef372,
+                             0xa54ff53a,
+                             0x510e527f,
+                             0x9b05688c,
+                             0x1f83d9ab,
+                             0x5be0cd19]
         return self
 
 

@@ -38,6 +38,7 @@ class CBech32Data(bytes):
     """
     bech32_hrp: str
     bech32_witness_version: int = -1
+    _data_length: int
 
     def __new__(cls, s: str):
         """from bech32 addr to """
@@ -66,7 +67,7 @@ class CBech32Data(bytes):
         return []
 
     @classmethod
-    def bech32_match_progam_and_version(cls, data, witver):
+    def bech32_match_progam_and_version(cls, data: bytes, witver: int):
         """Instantiate from data and witver.
         if witver is not set for class, this is equivalent of from_bytes()"""
         candidates = cls.bech32_get_match_candidates()

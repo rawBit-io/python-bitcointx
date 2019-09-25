@@ -32,7 +32,8 @@ class Test_SignVerifyMessage(unittest.TestCase):
     def test_verify_message_simple(self):
         address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
         message = address
-        signature = "H85WKpqtNZDrajOnYDgUY+abh0KCAcOsAIOQwx2PftAbLEPRA7mzXA/CjXRxzz0MC225pR/hx02Vf2Ag2x33kU4="  # noqa
+        signature = ("H85WKpqtNZDrajOnYDgUY+abh0KCAcOsAIOQwx2PftAbLEPRA7mzXA"
+                     "/CjXRxzz0MC225pR/hx02Vf2Ag2x33kU4=")
 
         message = BitcoinMessage(message)
 
@@ -57,7 +58,8 @@ class Test_SignVerifyMessage(unittest.TestCase):
     )
     def test_sign_message_simple(self):
 
-        key = CBitcoinKey("L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")  # noqa
+        key = CBitcoinKey(
+            "L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")
         address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
         message = address
 

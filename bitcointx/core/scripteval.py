@@ -20,6 +20,7 @@ module.
 """
 
 import hashlib
+from typing import Iterable, Optional, List, Type
 
 import bitcointx.core
 import bitcointx.core._bignum
@@ -34,7 +35,7 @@ from bitcointx.core.script import (
     SIGHASH_ALL, SIGHASH_SINGLE, SIGHASH_ANYONECANPAY,
     MAX_SCRIPT_ELEMENT_SIZE, MAX_SCRIPT_OPCODES, MAX_SCRIPT_SIZE,
     IsLowDERSignature, FindAndDelete, DISABLED_OPCODES,
-    CScriptInvalidError, CScriptWitness,
+    CScriptInvalidError, CScriptWitness, SIGVERSION_Type,
 
     OP_CHECKMULTISIGVERIFY, OP_CHECKMULTISIG, OP_CHECKSIG, OP_CHECKSIGVERIFY,
     OP_1ADD, OP_1SUB, OP_1NEGATE, OP_NEGATE, OP_ABS, OP_ADD, OP_SUB,
@@ -54,23 +55,28 @@ from bitcointx.core.script import (
 MAX_NUM_SIZE = 4
 MAX_STACK_ITEMS = 1000
 
-SCRIPT_VERIFY_P2SH = object()
-SCRIPT_VERIFY_STRICTENC = object()
-SCRIPT_VERIFY_DERSIG = object()
-SCRIPT_VERIFY_LOW_S = object()
-SCRIPT_VERIFY_NULLDUMMY = object()
-SCRIPT_VERIFY_SIGPUSHONLY = object()
-SCRIPT_VERIFY_MINIMALDATA = object()
-SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS = object()
-SCRIPT_VERIFY_CLEANSTACK = object()
-SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = object()
-SCRIPT_VERIFY_CHECKSEQUENCEVERIFY = object()
-SCRIPT_VERIFY_MINIMALIF = object()
-SCRIPT_VERIFY_NULLFAIL = object()
-SCRIPT_VERIFY_WITNESS = object()
-SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = object()
-SCRIPT_VERIFY_WITNESS_PUBKEYTYPE = object()
-SCRIPT_VERIFY_CONST_SCRIPTCODE = object()
+
+class ScriptVerifyFlag_Type:
+    ...
+
+
+SCRIPT_VERIFY_P2SH = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_STRICTENC = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_DERSIG = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_LOW_S = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_NULLDUMMY = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_SIGPUSHONLY = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_MINIMALDATA = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_CLEANSTACK = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_CHECKSEQUENCEVERIFY = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_MINIMALIF = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_NULLFAIL = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_WITNESS = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_WITNESS_PUBKEYTYPE = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_CONST_SCRIPTCODE = ScriptVerifyFlag_Type()
 
 _STRICT_ENCODING_FLAGS = set((SCRIPT_VERIFY_DERSIG, SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_STRICTENC))
 
@@ -130,7 +136,7 @@ SCRIPT_VERIFY_FLAGS_BY_NAME = {
 SCRIPT_VERIFY_FLAGS_NAMES = {v: k for k, v in SCRIPT_VERIFY_FLAGS_BY_NAME.items()}
 
 
-def script_verify_flags_to_string(flags):
+def script_verify_flags_to_string(flags: Iterable[ScriptVerifyFlag_Type]) -> str:
     return ",".join(SCRIPT_VERIFY_FLAGS_NAMES[f] for f in flags)
 
 
@@ -311,8 +317,13 @@ def _IsCompressedPubKey(pubkey):
     return True
 
 
-def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(),
-                         amount=0, script_class=None):
+def VerifyWitnessProgram(witness: CScriptWitness,
+                         witversion: int, program: bytes,
+                         txTo: 'bitcointx.core.CTransaction',
+                         inIdx: int, flags:
+                         Iterable[ScriptVerifyFlag_Type] = (),
+                         amount: int = 0,
+                         script_class: Type[CScript] = None) -> None:
 
     if script_class is None:
         raise ValueError("script class must be specified")
@@ -345,7 +356,7 @@ def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(),
         raise VerifyScriptError("upgradeable witness program is not accepted")
     else:
         # Higher version witness scripts return true for future softfork compatibility
-        return True
+        return
 
     assert sigversion is not None
 
@@ -372,7 +383,7 @@ def VerifyWitnessProgram(witness, witversion, program, txTo, inIdx, flags=(),
     if not _CastToBool(stack[-1]):
         raise VerifyScriptError("scriptPubKey returned false")
 
-    return True
+    return
 
 
 def _CastToBigNum(s, err_raiser):
@@ -664,8 +675,11 @@ def _CheckExec(vfExec):
     return True
 
 
-def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(),  # noqa
-                amount=0, sigversion=SIGVERSION_BASE):
+def _EvalScript(stack: List[bytes], scriptIn: CScript,
+                txTo: 'bitcointx.core.CTransaction',
+                inIdx: int, flags: Iterable[ScriptVerifyFlag_Type] = (),
+                amount: int = 0, sigversion: SIGVERSION_Type = SIGVERSION_BASE
+                ) -> None:
     """Evaluate a script
 
     """
@@ -678,8 +692,8 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(),  # noqa
                               inIdx=inIdx,
                               flags=flags)
 
-    altstack = []
-    vfExec = []
+    altstack: List[bytes] = []
+    vfExec: List[bool] = []
     pbegincodehash = 0
     nOpCount = [0]
     for (sop, sop_data, sop_pc) in scriptIn.raw_iter():
@@ -1023,7 +1037,11 @@ def _EvalScript(stack, scriptIn, txTo, inIdx, flags=(),  # noqa
                               flags=flags)
 
 
-def EvalScript(stack, scriptIn, txTo, inIdx, flags=(), amount=0, sigversion=SIGVERSION_BASE):
+def EvalScript(stack: List[bytes], scriptIn: CScript,
+               txTo: 'bitcointx.core.CTransaction',
+               inIdx: int, flags: Iterable[ScriptVerifyFlag_Type] = (),
+               amount: int = 0, sigversion: SIGVERSION_Type = SIGVERSION_BASE
+               ) -> None:
     """Evaluate a script
 
     stack      - Initial stack
@@ -1054,8 +1072,11 @@ class VerifyScriptError(bitcointx.core.ValidationError):
     pass
 
 
-def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
-                 flags=None, amount=0, witness=None):
+def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
+                 txTo: 'bitcointx.core.CTransaction', inIdx: int,
+                 flags: Optional[Iterable[ScriptVerifyFlag_Type]] = None,
+                 amount: int = 0, witness: Optional[CScriptWitness] = None
+                 ) -> None:
     """Verify a scriptSig satisfies a scriptPubKey
 
     scriptSig    - Signature
@@ -1086,7 +1107,7 @@ def VerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
             "some of the flags cannot be handled by current code: {}"
             .format(script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)))
 
-    stack = []
+    stack: List[bytes] = []
     EvalScript(stack, scriptSig, txTo, inIdx, flags=flags)
     if SCRIPT_VERIFY_P2SH in flags:
         stackCopy = list(stack)
@@ -1183,7 +1204,9 @@ class VerifySignatureError(bitcointx.core.ValidationError):
 
 
 # XXX not tested for segwit, not covered by tests
-def VerifySignature(txFrom, txTo, inIdx):
+def VerifySignature(txFrom: 'bitcointx.core.CTransaction',
+                    txTo: 'bitcointx.core.CTransaction',
+                    inIdx: int) -> None:
     """Verify a scriptSig signature can spend a txout
 
     Verifies that the scriptSig in txTo.vin[inIdx] is a valid scriptSig for the

@@ -13,9 +13,9 @@ import threading
 import functools
 from types import FunctionType
 from abc import ABCMeta, ABC
-from typing import Type, Set, Tuple, Dict, Callable, Iterable, cast
+from typing import Type, Set, Tuple, Dict, Union, Any, Callable, Iterable, cast
 
-# TODO: convert this to customt thread-local class to be able to apply typing
+# TODO: convert this to custom thread-local class to be able to apply typing
 class_mapping_dispatch_data = threading.local()
 class_mapping_dispatch_data.core = None
 class_mapping_dispatch_data.wallet = None
@@ -419,16 +419,19 @@ class classgetter:
         return self.f(owner)
 
 
-def ensure_isinstance(var, type_or_types, var_name):
+def ensure_isinstance(var,
+                      type_or_types: Union[Type[Any], Tuple[Type[Any], ...]],
+                      var_description: str) -> None:
+
     if not isinstance(var, type_or_types):
         if isinstance(type_or_types, type):  # single type
-            msg = (f"{var_name} is expected to be an instance of "
+            msg = (f"{var_description} is expected to be an instance of "
                    f"{type_or_types.__name__}, but an instance of "
                    f"{var.__class__.__name__} was supplied")
         else:
             names = ', '.join(t.__name__ for t in type_or_types)
-            msg = (f"{var_name} is expected to be an instance of any of "
-                   f"({names}), but an instance of "
+            msg = (f"{var_description} is expected to be an instance of "
+                   f"any of ({names}), but an instance of "
                    f"{var.__class__.__name__} was supplied")
 
         raise TypeError(msg)

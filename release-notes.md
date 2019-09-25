@@ -18,6 +18,16 @@
 * CBech32Data now has `bech32_witness_version` field instead of `witver`
 * parsed JSON returned by rpc.RPCCaller had decimal.Decimal type for the float
   values in json. Now all the floats in parsed JSON have type `float`.
+* bitcointx.core.serialize module: `uint256_from_str` renamed to `uint256_from_bytes`,
+  `uint256_to_str` renamed to `uint256_to_bytes`, for the name to reflect the
+  actual returning type (`_str` suffix is likely a remnant of python2)
+* result types for `to_mutable()` / `to_immutable` methods are only provided
+  for `CTransaction` and its subclasses. Classes for transaction components,
+  such as `CTxOut` etc. still have `to_mutable()`/`to_immutable()` methods,
+  but their return types will be Any.
+* `scripteval.VerifyWitnessProgram()` returns None. It was returning True previously,
+  in case of success, but in case of failure, it raised an exception. The result was
+  never examined - so it was not correct to use bool as a return type.
 
 ## v1.0.1
 

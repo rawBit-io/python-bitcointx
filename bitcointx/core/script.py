@@ -21,7 +21,7 @@ is in bitcointx.core.scripteval
 import struct
 import hashlib
 from io import BytesIO
-from typing import List, Dict
+from typing import List, Tuple, Dict, Union, Iterable, Optional, TypeVar, Type
 
 import bitcointx.core
 import bitcointx.core.key
@@ -38,8 +38,41 @@ MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
 MAX_SCRIPT_OPCODES = 201
 
-SIGVERSION_BASE = 0
-SIGVERSION_WITNESS_V0 = 1
+# CScriptOp is a subclass of int, and CPubKey is a subclass of bytes,
+# but is incuded here for documentaion purposes - what we expect in a script.
+ScriptElement_Type = Union['CScriptOp', 'bitcointx.core.key.CPubKey',
+                           int, bytes, bytearray]
+
+
+T_CScript = TypeVar('T_CScript', bound='CScript')
+
+
+# By using an int-derived class for SIGVERSION_*
+# instead of enum, we allow the code that define their own sighash
+# functions for to extend the list of accepted SIGVERSION_* values,
+# without the need to redefine the enum (subclassing enum cannot add members)
+class SIGVERSION_Type(int):
+    ...
+
+
+SIGVERSION_BASE: SIGVERSION_Type = SIGVERSION_Type(0)
+SIGVERSION_WITNESS_V0: SIGVERSION_Type = SIGVERSION_Type(1)
+
+
+class SIGHASH_Type(int):
+    def __or__(self, other) -> 'SIGHASH_Type':
+        if self != SIGHASH_ANYONECANPAY and other != SIGHASH_ANYONECANPAY:
+            raise ValueError(
+                'combining SIGHASH_* values only make sense with '
+                'SIGHASH_ANYONECANPAY, other values are not a bit flags')
+        return SIGHASH_Type(super().__or__(other))
+
+
+SIGHASH_ALL: SIGHASH_Type = SIGHASH_Type(1)
+SIGHASH_NONE: SIGHASH_Type = SIGHASH_Type(2)
+SIGHASH_SINGLE: SIGHASH_Type = SIGHASH_Type(3)
+SIGHASH_ANYONECANPAY: SIGHASH_Type = SIGHASH_Type(0x80)
+
 
 # (partial) comment from Bitcoin Core IsStandardTx() function:
 # Biggest 'standard' txin is a 15-of-15 P2SH multisig with compressed
@@ -73,7 +106,7 @@ class CScriptOp(int):
     __slots__: List[str] = []
 
     @staticmethod
-    def encode_op_pushdata(d) -> bytes:
+    def encode_op_pushdata(d: Union[bytes, bytearray]) -> bytes:
         """Encode a PUSHDATA op, returning bytes"""
         if len(d) < 0x4c:
             return b'' + bytes([len(d)]) + d # OP_PUSHDATA
@@ -87,7 +120,7 @@ class CScriptOp(int):
             raise ValueError("Data too long to encode in a PUSHDATA op")
 
     @staticmethod
-    def encode_op_n(n) -> 'CScriptOp':
+    def encode_op_n(n: int) -> 'CScriptOp':
         """Encode a small integer op, returning an opcode"""
         if not (0 <= n <= 16):
             raise ValueError('Integer must be in range 0 <= n <= 16, got %d' % n)
@@ -115,21 +148,24 @@ class CScriptOp(int):
         else:
             return False
 
-    def __str__(self):
+    def __str__(self) -> str:
         return repr(self)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self in OPCODE_NAMES:
             return OPCODE_NAMES[self]
         else:
             return 'CScriptOp(0x%x)' % self
 
-    def __new__(cls, n):
+    def __new__(cls, n: int):
         try:
             return _opcode_instances[n]
         except IndexError:
             assert len(_opcode_instances) == n
-            _opcode_instances.append(super().__new__(cls, n))
+            # mypy cannot handle arguments to `bytes.__new__()` at the moment,
+            # issue: https://github.com/python/typeshed/issues/2630
+            # apparently it can't handle args to `int.__new__()`, too.
+            _opcode_instances.append(super().__new__(cls, n))  # type: ignore
             return _opcode_instances[n]
 
 
@@ -537,12 +573,14 @@ class DATA(bytes):
     with CScript([DATA(var)]), this is communicated clearly, and will
     raise TypeError if var is not bytes or bytearray instance."""
 
-    def __new__(cls, data):
+    def __new__(cls, data: Union[bytes, bytearray]):
         if not isinstance(data, (bytes, bytearray)):
             raise TypeError(
                 'DATA can only accept bytes or bytearray instance')
 
-        return super().__new__(cls, data)
+        # mypy cannot handle arguments to `bytes.__new__()` at the moment,
+        # issue: https://github.com/python/typeshed/issues/2630
+        return super().__new__(cls, data)  # type: ignore
 
 
 class NUMBER(int):
@@ -555,7 +593,7 @@ class NUMBER(int):
     and instance of CScriptOp (special case needed because CScriptOp is
     a subclas of int, but there are special OPCODE guard for it"""
 
-    def __new__(cls, num):
+    def __new__(cls, num: int):
         if not isinstance(num, int):
             raise TypeError(
                 'NUMBER can only accept values that are instance of '
@@ -564,10 +602,13 @@ class NUMBER(int):
         if isinstance(num, CScriptOp):
             raise TypeError('NUMBER can not accept CScriptOp instance')
 
-        return super().__new__(cls, num)
+        # mypy cannot handle arguments to `bytes.__new__()` at the moment,
+        # issue: https://github.com/python/typeshed/issues/2630
+        # apparently it can't handle args to `int.__new__()`, too.
+        return super().__new__(cls, num)  # type: ignore
 
 
-def OPCODE(op):
+def OPCODE(op: CScriptOp):
     """A function that can be used to prevent accidental use of non-opcode
     elements in the script where opcode elemets were expected. For example,
     the code `CScript([var])` does not communicate to the reader if `var`
@@ -591,7 +632,7 @@ class CScriptInvalidError(Exception):
 
 class CScriptTruncatedPushDataError(CScriptInvalidError):
     """Invalid pushdata due to truncation"""
-    def __init__(self, msg, data):
+    def __init__(self, msg: str, data: bytes):
         self.data = data
         super().__init__(msg)
 
@@ -607,7 +648,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
     iter(script) however does iterate by opcode.
     """
     @classmethod
-    def __coerce_instance(cls, other):
+    def __coerce_instance(cls, other: ScriptElement_Type) -> bytes:
         # Coerce other into bytes
         if isinstance(other, CScriptOp):
             other = bytes([other])
@@ -622,11 +663,11 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         elif isinstance(other, (bytes, bytearray)):
             other = CScriptOp.encode_op_pushdata(other)
         else:
-            raise TypeError('type {} cannot be represented in the script'
+            raise TypeError("type '{}' cannot be represented in the script"
                             .format(type(other).__name__))
         return other
 
-    def __add__(self, other):
+    def __add__(self: T_CScript, other: ScriptElement_Type) -> T_CScript:
         # Do the coercion outside of the try block so that errors in it are
         # noticed.
         other = self.__coerce_instance(other)
@@ -641,16 +682,27 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         # join makes no sense for a CScript()
         raise NotImplementedError
 
-    def __new__(cls, value=b''):
+    def __new__(cls: Type[T_CScript],
+                value: Union[
+                    bytes, Iterable[ScriptElement_Type]] = b''
+                ) -> T_CScript:
+
         if isinstance(value, (bytes, bytearray)):
-            return super().__new__(cls, value)
+            # mypy cannot handle arguments to `bytes.__new__()` at the moment,
+            # issue: https://github.com/python/typeshed/issues/2630
+            return super().__new__(cls, value)  # type: ignore
         else:
             def coerce_iterable(iterable):
                 for instance in iterable:
                     yield cls.__coerce_instance(instance)
-            # Annoyingly on both python2 and python3 bytes.join() always
+
+            # Annoyingly bytes.join() always
             # returns a bytes instance even when subclassed.
-            return super().__new__(cls, b''.join(coerce_iterable(value)))
+
+            # mypy cannot handle arguments to `bytes.__new__()` at the moment,
+            # issue: https://github.com/python/typeshed/issues/2630
+            return super().__new__(  # type: ignore
+                cls, b''.join(coerce_iterable(value)))
 
     def raw_iter(self):
         """Raw iteration
@@ -730,7 +782,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 else:
                     yield CScriptOp(opcode)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         # For Python3 compatibility add b before strings so testcases don't
         # need to change
         def _repr(o):
@@ -898,7 +950,8 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             return False
         return True
 
-    def to_p2sh_scriptPubKey(self, checksize=True) -> 'CScript':
+    def to_p2sh_scriptPubKey(self: T_CScript, checksize: bool = True
+                             ) -> T_CScript:
         """Create P2SH scriptPubKey from this redeemScript
 
         That is, create the P2SH scriptPubKey that requires this script as a
@@ -914,7 +967,8 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
         return self.__class__([OP_HASH160, bitcointx.core.Hash160(self), OP_EQUAL])
 
-    def to_p2wsh_scriptPubKey(self, checksize=True) -> 'CScript':
+    def to_p2wsh_scriptPubKey(self: T_CScript, checksize: bool = True
+                              ) -> T_CScript:
         """Create P2WSH scriptPubKey from this redeemScript
 
         That is, create the P2WSH scriptPubKey that requires this script as a
@@ -930,7 +984,8 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
         return self.__class__([0, hashlib.sha256(self).digest()])
 
-    def to_p2wpkh_scriptPubKey(self, checksize=True) -> 'CScript':
+    def to_p2wpkh_scriptPubKey(self: T_CScript, checksize: bool = True
+                               ) -> T_CScript:
         """Create P2WPKH scriptPubKey from this redeemScript
 
         That is, create the P2WPKH scriptPubKey that requires this script as a
@@ -946,7 +1001,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             raise ValueError("redeemScript exceeds max allowed size; P2WPKH output would be unspendable")
         return self.__class__([0, bitcointx.core.Hash160(self)])
 
-    def GetSigOpCount(self, fAccurate) -> int:
+    def GetSigOpCount(self, fAccurate: bool) -> int:
         """Get the SigOp count.
 
         fAccurate - Accurately count CHECKMULTISIG, see BIP16 for details.
@@ -966,8 +1021,9 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             lastOpcode = opcode
         return n
 
-    def sighash(self, txTo, inIdx, hashtype, amount=0,
-                sigversion=SIGVERSION_BASE) -> bytes:
+    def sighash(self, txTo: 'bitcointx.core.CTransaction', inIdx: int,
+                hashtype: SIGHASH_Type, amount: int = 0,
+                sigversion: SIGVERSION_Type = SIGVERSION_BASE) -> bytes:
         """Calculate a signature hash
 
         'Cooked' version that checks if inIdx is out of bounds - this is *not*
@@ -979,7 +1035,10 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             raise ValueError(err)
         return h
 
-    def raw_sighash(self, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+    def raw_sighash(self, txTo: 'bitcointx.core.CTransaction', inIdx: int,
+                    hashtype: SIGHASH_Type, amount: int = 0,
+                    sigversion: SIGVERSION_Type = SIGVERSION_BASE
+                    ) -> Tuple[bytes, Optional[str]]:
         """Consensus-correct SignatureHash
 
         Returns (hash, err) to precisely match the consensus-critical behavior of
@@ -1036,13 +1095,7 @@ class CScriptWitness(ImmutableSerializable):
             BytesSerializer.stream_serialize(s, f)
 
 
-SIGHASH_ALL = 1
-SIGHASH_NONE = 2
-SIGHASH_SINGLE = 3
-SIGHASH_ANYONECANPAY = 0x80
-
-
-def FindAndDelete(script, sig):
+def FindAndDelete(script: T_CScript, sig: bytes) -> T_CScript:
     """Consensus critical, see FindAndDelete() in Satoshi codebase"""
     r = b''
     last_sop_idx = sop_idx = 0
@@ -1110,7 +1163,10 @@ def CompareBigEndian(c1, c2):
     return 0
 
 
-def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
+                            hashtype: SIGHASH_Type, amount: int = 0,
+                            sigversion: SIGVERSION_Type = SIGVERSION_BASE
+                            ) -> Tuple[bytes, Optional[str]]:
     """Consensus-correct SignatureHash
 
     Returns (hash, err) to precisely match the consensus-critical behavior of
@@ -1131,20 +1187,20 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
 
         if not (hashtype & SIGHASH_ANYONECANPAY):
             serialize_prevouts = bytes()
-            for i in txTo.vin:
-                serialize_prevouts += i.prevout.serialize()
+            for vin in txTo.vin:
+                serialize_prevouts += vin.prevout.serialize()
             hashPrevouts = bitcointx.core.Hash(serialize_prevouts)
 
         if (not (hashtype & SIGHASH_ANYONECANPAY) and (hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
             serialize_sequence = bytes()
-            for i in txTo.vin:
-                serialize_sequence += struct.pack("<I", i.nSequence)
+            for vin in txTo.vin:
+                serialize_sequence += struct.pack("<I", vin.nSequence)
             hashSequence = bitcointx.core.Hash(serialize_sequence)
 
         if ((hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
             serialize_outputs = bytes()
-            for o in txTo.vout:
-                serialize_outputs += o.serialize()
+            for vout in txTo.vout:
+                serialize_outputs += vout.serialize()
             hashOutputs = bitcointx.core.Hash(serialize_outputs)
         elif ((hashtype & 0x1f) == SIGHASH_SINGLE and inIdx < len(txTo.vout)):
             serialize_outputs = txTo.vout[inIdx].serialize()
@@ -1178,7 +1234,7 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
     txtmp = txTo.to_mutable()
 
     for txin in txtmp.vin:
-        txin.scriptSig = b''
+        txin.scriptSig = CScript(b'')
 
     txtmp.vin[inIdx].scriptSig = FindAndDelete(
         script, script.__class__([OP_CODESEPARATOR]))
@@ -1195,20 +1251,20 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
         if outIdx >= len(txtmp.vout):
             return (HASH_ONE, "outIdx %d out of range (%d)" % (outIdx, len(txtmp.vout)))
 
-        tmp = txtmp.vout[outIdx]
+        tmp_vout = txtmp.vout[outIdx]
         txtmp.vout = []
         for i in range(outIdx):
             txtmp.vout.append(bitcointx.core.CMutableTxOut())
-        txtmp.vout.append(tmp)
+        txtmp.vout.append(tmp_vout)
 
         for i in range(len(txtmp.vin)):
             if i != inIdx:
                 txtmp.vin[i].nSequence = 0
 
     if hashtype & SIGHASH_ANYONECANPAY:
-        tmp = txtmp.vin[inIdx]
+        tmp_vin = txtmp.vin[inIdx]
         txtmp.vin = []
-        txtmp.vin.append(tmp)
+        txtmp.vin.append(tmp_vin)
 
     txtmp.wit = bitcointx.core.CMutableTxWitness()
     s = txtmp.serialize(for_sighash=True)
@@ -1219,7 +1275,10 @@ def RawBitcoinSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=
     return (hash, None)
 
 
-def RawSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+def RawSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
+                     hashtype: SIGHASH_Type, amount: int = 0,
+                     sigversion: SIGVERSION_Type = SIGVERSION_BASE
+                     ) -> Tuple[bytes, Optional[str]]:
     """Consensus-correct SignatureHash
 
     Returns (hash, err) to precisely match the consensus-critical behavior of
@@ -1231,7 +1290,9 @@ def RawSignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERS
     return script.raw_sighash(txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
 
 
-def SignatureHash(script, txTo, inIdx, hashtype, amount=0, sigversion=SIGVERSION_BASE):
+def SignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
+                  hashtype: SIGHASH_Type, amount: int = 0,
+                  sigversion: SIGVERSION_Type = SIGVERSION_BASE) -> bytes:
     """Calculate a signature hash
 
     'Cooked' version that checks if inIdx is out of bounds - this is *not*
@@ -1248,7 +1309,7 @@ class CBitcoinScript(CScript, ScriptBitcoinClass):
     ...
 
 
-def parse_standard_multisig_redeem_script(script) -> dict:
+def parse_standard_multisig_redeem_script(script: CScript) -> dict:
     """parse multisig script, raise ValueError if it does not match the
     format of the script produced by construct_multisig_redeem_script"""
     si = iter(script)
@@ -1266,7 +1327,7 @@ def parse_standard_multisig_redeem_script(script) -> dict:
         raise ValueError('required number of signatures are more than {}'
                          .format(MAX_P2SH_MULTISIG_PUBKEYS))
     total = None
-    pubkeys = []
+    pubkeys: List[bitcointx.core.key.CPubKey] = []
     for i in range(MAX_P2SH_MULTISIG_PUBKEYS+1):  # +1 for `total`
         try:
             pub_data = next(si)
@@ -1309,7 +1370,8 @@ def parse_standard_multisig_redeem_script(script) -> dict:
     return {'total': total, 'required': required, 'pubkeys': pubkeys}
 
 
-def standard_multisig_witness_stack(sigs, redeem_script) -> list:
+def standard_multisig_witness_stack(sigs: List[Union[bytes, bytearray]],
+                                    redeem_script: CScript) -> list:
 
     # check valid p2sh script
     info = parse_standard_multisig_redeem_script(redeem_script)
@@ -1328,14 +1390,20 @@ def standard_multisig_witness_stack(sigs, redeem_script) -> list:
                          'in the redeem script'
                          .format(len(sigs), info['required']))
 
+    stack: List[ScriptElement_Type]
+
     stack = [0]  # dummy 0 required for CHECKMULTISIG
     stack.extend(sigs)
     stack.append(redeem_script)
     return stack
 
 
-def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None
-                                    ) -> CScript:
+def standard_multisig_redeem_script(
+    *,
+    total: int,
+    required: int,
+    pubkeys: List[Union['bitcointx.core.key.CPubKey', bytes, bytearray]],
+) -> CScript:
     """Construct multisignature redeem script.
     We require to supply total number of pubkeys as separate argument
     to be able to catch bugs when pubkeys array is wrong for some reason.
@@ -1372,7 +1440,14 @@ def standard_multisig_redeem_script(*, total=None, required=None, pubkeys=None
         # they need to handle it themselves.
         raise ValueError('1-of-1 multisig is not supported')
 
-    return CScript([required] + pubkeys + [total, OP_CHECKMULTISIG])
+    result: List[ScriptElement_Type]
+
+    result = [required]
+    result.extend(pubkeys)
+    result.append(total)
+    result.append(OP_CHECKMULTISIG)
+
+    return CScript(result)
 
 
 # default dispatcher for the module

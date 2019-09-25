@@ -17,7 +17,9 @@ import binascii
 import struct
 from abc import abstractmethod
 from io import BytesIO
-from typing import Union, List, Sequence, Iterable, Optional, Set
+from typing import (
+    Union, List, Sequence, Iterable, Optional, Set, TypeVar, Type, cast
+)
 
 from . import script
 
@@ -36,6 +38,8 @@ from ..util import (
 
 _thread_local = threading.local()
 _thread_local.mutable_context_enabled = False
+
+T__UintBitVector = TypeVar('T__UintBitVector', bound='_UintBitVector')
 
 
 class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
@@ -121,17 +125,18 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
         return False
 
     @classmethod
-    def from_instance(cls, other_inst):
-        if not isinstance(other_inst, cls._immutable_cls):
-            raise TypeError(
-                'incompatible class: expected instance of {}, got {}'
-                .format(cls._immutable_cls.__name__,
-                        other_inst.__class__.__name__))
-
+    def _from_instance(cls, other_inst: 'CoreCoinClass', args_for_new: tuple):
+        ensure_isinstance(other_inst, cls._immutable_cls,
+                          'the argument')
         if cls.is_immutable() and other_inst.is_immutable():
             return other_inst
 
-        return cls.clone_from_instance(other_inst)
+        # CoreCoinClass does not have arguments, but subclasses might have.
+        # mypy complains here that there's too many arguments to CoreCoinClass.
+        # We can define a dummy __init__(self, *args) with args ignored,
+        # but that potentially means we could miss an erroneous arguments at
+        # runtime. Better just ignore this typing check.
+        return cls(*args_for_new)  # type: ignore
 
 
 class CoreBitcoinClassDispatcher(
@@ -412,7 +417,7 @@ class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
         return b2lx(self.data)
 
     @classmethod
-    def from_hex(cls, hexdata: str) -> '_UintBitVector':
+    def from_hex(cls: Type[T__UintBitVector], hexdata: str) -> T__UintBitVector:
         return cls(lx(hexdata))
 
     def __repr__(self):
@@ -431,6 +436,9 @@ class Uint256(_UintBitVector):
 
     def to_int(self) -> int:
         return uint256_from_bytes(self.data)
+
+
+T_COutPoint = TypeVar('T_COutPoint', bound='COutPoint')
 
 
 class COutPoint(CoreCoinClass, next_dispatch_final=True):
@@ -481,11 +489,13 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
         return '%s:%i' % (b2lx(self.hash), self.n)
 
     @classmethod
-    def clone_from_instance(cls, other):
-        return cls(other.hash, other.n)
+    def from_instance(cls: Type[T_COutPoint], outpoint: 'COutPoint'
+                      ) -> T_COutPoint:
+        return cls._from_instance(outpoint, (outpoint.hash, outpoint.n))
 
     @classmethod
-    def from_outpoint(cls, outpoint: 'COutPoint') -> 'COutPoint':
+    def from_outpoint(cls: Type[T_COutPoint], outpoint: 'COutPoint'
+                      ) -> T_COutPoint:
         return cls.from_instance(outpoint)
 
 
@@ -506,6 +516,9 @@ class CBitcoinMutableOutPoint(CBitcoinOutPoint, CMutableOutPoint,
     __slots_: List[str] = []
 
 
+T_CTxIn = TypeVar('T_CTxIn', bound='CTxIn')
+
+
 class CTxIn(CoreCoinClass, next_dispatch_final=True):
     """A base class for an input of a transaction
 
@@ -520,7 +533,7 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
 
     def __init__(self, prevout: Optional[COutPoint] = None,
                  scriptSig: Optional[Union[script.CScript, bytes, bytearray]] = None,
-                 nSequence: int = 0xffffffff):
+                 nSequence: int = 0xffffffff) -> None:
 
         ensure_isinstance(nSequence, int, 'nSequence')
 
@@ -561,13 +574,13 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
         return (self.nSequence == 0xffffffff)
 
     @classmethod
-    def clone_from_instance(cls, txin: 'CTxIn'):
-        return cls(
-            COutPoint.from_outpoint(txin.prevout),
-            txin.scriptSig, txin.nSequence)
+    def from_instance(cls: Type[T_CTxIn], txin: 'CTxIn') -> T_CTxIn:
+        return cls._from_instance(
+            txin, (COutPoint.from_outpoint(txin.prevout),
+                   txin.scriptSig, txin.nSequence))
 
     @classmethod
-    def from_txin(cls, txin: 'CTxIn') -> 'CTxIn':
+    def from_txin(cls: Type[T_CTxIn], txin: 'CTxIn') -> T_CTxIn:
         """Create a mutable or immutable copy of an existing TxIn,
         depending on the class this method is called on.
 
@@ -595,6 +608,9 @@ class CBitcoinMutableTxIn(CBitcoinTxIn, CMutableTxIn, mutable_of=CBitcoinTxIn):
     __slots_: List[str] = []
 
 
+T_CTxOut = TypeVar('T_CTxOut', bound='CTxOut')
+
+
 class CTxOut(CoreCoinClass, next_dispatch_final=True):
     """A base class for an output of a transaction
 
@@ -608,7 +624,7 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
 
     def __init__(self, nValue: int = -1,
                  scriptPubKey: Optional[script.CScript] = None):
-        ensure_isinstance(nValue, int, 'nValue'),
+        ensure_isinstance(nValue, int, 'nValue')
 
         if scriptPubKey is None:
             scriptPubKey = script.CScript()
@@ -647,11 +663,11 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
             str_money_value_for_repr(self.nValue), self.scriptPubKey)
 
     @classmethod
-    def clone_from_instance(cls, txout):
-        return cls(txout.nValue, txout.scriptPubKey)
+    def from_instance(cls: Type[T_CTxOut], txout: 'CTxOut') -> T_CTxOut:
+        return cls._from_instance(txout, (txout.nValue, txout.scriptPubKey))
 
     @classmethod
-    def from_txout(cls, txout):
+    def from_txout(cls: Type[T_CTxOut], txout: 'CTxOut') -> T_CTxOut:
         return cls.from_instance(txout)
 
 
@@ -668,6 +684,9 @@ class CBitcoinMutableTxOut(CBitcoinTxOut, CMutableTxOut,
                            mutable_of=CBitcoinTxOut):
     """A mutable Bitcoin CTxOut"""
     __slots_: List[str] = []
+
+
+T_CTxInWitness = TypeVar('T_CTxInWitness', bound='CTxInWitness')
 
 
 class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
@@ -693,11 +712,16 @@ class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
         self.scriptWitness.stream_serialize(f)
 
     @classmethod
-    def clone_from_instance(cls, txin_witness):
-        return cls(txin_witness.scriptWitness)
+    def from_instance(cls: Type[T_CTxInWitness],
+                      txin_witness: 'CTxInWitness',
+                      ) -> T_CTxInWitness:
+        return cls._from_instance(txin_witness,
+                                  (txin_witness.scriptWitness,))
 
     @classmethod
-    def from_txin_witness(cls, txin_witness: 'CTxInWitness') -> 'CTxInWitness':
+    def from_txin_witness(cls: Type[T_CTxInWitness],
+                          txin_witness: 'CTxInWitness',
+                          ) -> T_CTxInWitness:
         return cls.from_instance(txin_witness)
 
     def __repr__(self):
@@ -740,6 +764,9 @@ class _CBitcoinDummyMutableTxOutWitness(
     pass
 
 
+T_CTxWitness = TypeVar('T_CTxWitness', bound='CTxWitness')
+
+
 class CTxWitness(CoreCoinClass, next_dispatch_final=True):
     """Witness data for all inputs to a transaction"""
     __slots_: List[str] = ['vtxinwit']
@@ -778,13 +805,15 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
             self.vtxinwit[i].stream_serialize(f)
 
     @classmethod
-    def clone_from_instance(cls, witness):
+    def from_instance(cls: Type[T_CTxWitness], witness: 'CTxWitness'
+                      ) -> T_CTxWitness:
         vtxinwit = (CTxInWitness.from_txin_witness(w)
                     for w in witness.vtxinwit)
-        return cls(vtxinwit)
+        return cls._from_instance(witness, (vtxinwit,))
 
     @classmethod
-    def from_witness(cls, witness: 'CTxWitness') -> 'CTxWitness':
+    def from_witness(cls: Type[T_CTxWitness], witness: 'CTxWitness'
+                     ) -> T_CTxWitness:
         return cls.from_instance(witness)
 
     def __repr__(self):
@@ -806,6 +835,9 @@ class CBitcoinMutableTxWitness(CBitcoinTxWitness, CMutableTxWitness,
                                mutable_of=CBitcoinTxWitness):
     """Witness data for all inputs to a transaction, mutable version"""
     __slots_: List[str] = []
+
+
+T_CTransaction = TypeVar('T_CTransaction', bound='CTransaction')
 
 
 class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
@@ -858,6 +890,21 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
             CTxOut.from_txout(txout) for txout in vout))
         object.__setattr__(self, 'wit', witness)
 
+    # Cannot make to_mutable/to_immutable to use generic typing,
+    # because the types are determined at runtime depending on
+    # what class is storred in _mutable_cls/_immutable_cls.
+    # Type of self might be different from return type.
+    #
+    # We have to specify types for these methods manually,
+    # here and in the chain-specific subclasses, too.
+    # In addition, subclasses will need to cast the results to
+    # the type they actually return.
+    def to_mutable(self) -> 'CMutableTransaction':
+        return super().to_mutable()
+
+    def to_immutable(self) -> 'CTransaction':
+        return super().to_immutable()
+
     @no_bool_use_as_property
     def is_coinbase(self) -> bool:
         return len(self.vin) == 1 and self.vin[0].prevout.is_null()
@@ -885,15 +932,18 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         return txid
 
     @classmethod
-    def clone_from_instance(cls, tx):
+    def from_instance(cls: Type[T_CTransaction],
+                      tx: 'CTransaction') -> T_CTransaction:
         vin = [CTxIn.from_txin(txin) for txin in tx.vin]
         vout = [CTxOut.from_txout(txout)
                 for txout in tx.vout]
         wit = CTxWitness.from_witness(tx.wit)
-        return cls(vin, vout, tx.nLockTime, tx.nVersion, wit)
+        return cls._from_instance(
+            tx, (vin, vout, tx.nLockTime, tx.nVersion, wit))
 
     @classmethod
-    def from_tx(cls, tx: 'CTransaction') -> 'CTransaction':
+    def from_tx(cls: Type[T_CTransaction],
+                tx: 'CTransaction') -> T_CTransaction:
         return cls.from_instance(tx)
 
     @classmethod
@@ -985,6 +1035,12 @@ class CMutableTransaction(CTransaction, mutable_of=CTransaction,
 class CBitcoinTransaction(CTransaction, CoreBitcoinClass):
     """Bitcoin transaction"""
     __slots_: List[str] = []
+
+    def to_mutable(self) -> 'CBitcoinMutableTransaction':
+        return cast('CBitcoinMutableTransaction', super().to_mutable())
+
+    def to_immutable(self) -> 'CBitcoinTransaction':
+        return cast('CBitcoinTransaction', super().to_immutable())
 
 
 class CBitcoinMutableTransaction(CBitcoinTransaction, CMutableTransaction,

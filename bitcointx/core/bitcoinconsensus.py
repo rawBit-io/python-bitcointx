@@ -19,14 +19,16 @@ to evaluate bitcoin script.
 """
 
 import ctypes
+from typing import Iterable, Optional
+
 from bitcointx.util import ensure_isinstance
-from bitcointx.core import MoneyRange
-from bitcointx.core.script import CScriptWitness
+from bitcointx.core import MoneyRange, CTransaction
+from bitcointx.core.script import CScript, CScriptWitness
 from bitcointx.core.scripteval import (
     SCRIPT_VERIFY_P2SH, SCRIPT_VERIFY_DERSIG,
     SCRIPT_VERIFY_NULLDUMMY, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY, SCRIPT_VERIFY_WITNESS,
-    ALL_SCRIPT_VERIFY_FLAGS,
+    ALL_SCRIPT_VERIFY_FLAGS, ScriptVerifyFlag_Type,
     VerifyScriptError, script_verify_flags_to_string
 )
 
@@ -85,7 +87,7 @@ BITCOINCONSENSUS_FLAG_MAPPING = {
 BITCOINCONSENSUS_ACCEPTED_FLAGS = set(BITCOINCONSENSUS_FLAG_MAPPING.keys())
 
 
-def _flags_to_libconsensus(flags):
+def _flags_to_libconsensus(flags: Optional[Iterable[ScriptVerifyFlag_Type]]):
     if flags is None:
         raise ValueError('flags must be specified')
     if isinstance(flags, tuple):
@@ -131,7 +133,8 @@ def _add_function_definitions(handle):
     handle.bitcoinconsensus_version.argtypes = []
 
 
-def load_bitcoinconsensus_library(library_name='bitcoinconsensus'):
+def load_bitcoinconsensus_library(library_name='bitcoinconsensus'
+                                  ) -> ctypes.CDLL:
     """load libsbitcoinconsenssus via ctypes, add default function definitions
     to the library handle, and return this handle.
 
@@ -146,11 +149,16 @@ def load_bitcoinconsensus_library(library_name='bitcoinconsensus'):
 
     """
 
+    lib_path = ctypes.util.find_library(library_name)
+    if lib_path is None:
+        raise ImportError('consensus library not found')
+
     try:
-        handle = ctypes.cdll.LoadLibrary(ctypes.util.find_library(library_name))
-        _add_function_definitions(handle)
+        handle = ctypes.cdll.LoadLibrary(lib_path)
     except Exception as e:
         raise ImportError('Cannot import consensus library: {}'.format(e))
+
+    _add_function_definitions(handle)
 
     lib_version = handle.bitcoinconsensus_version()
     if lib_version != BITCOINCONSENSUS_API_VER:
@@ -161,9 +169,15 @@ def load_bitcoinconsensus_library(library_name='bitcoinconsensus'):
 
     return handle
 
-def ConsensusVerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
-                          flags=None, amount=0, witness=None,
-                          consensus_library_hanlde=None):
+
+def ConsensusVerifyScript(
+    scriptSig: CScript, scriptPubKey: CScript,
+    txTo: CTransaction, inIdx: int,
+    flags: Iterable[ScriptVerifyFlag_Type] = None,
+    amount: int = 0,
+    witness: Optional[CScriptWitness] = None,
+    consensus_library_hanlde: Optional[ctypes.CDLL] = None
+) -> None:
 
     """Verify a scriptSig satisfies a scriptPubKey, via libbitcoinconsensus
     `bitcoinconsensus_verify_script_with_amount()` function.
@@ -213,8 +227,8 @@ def ConsensusVerifyScript(scriptSig, scriptPubKey, txTo, inIdx,  # noqa
 
     handle = consensus_library_hanlde
 
-    if not handle:
-        if not _libbitcoin_consensus:
+    if handle is None:
+        if _libbitcoin_consensus is None:
             _libbitcoin_consensus = load_bitcoinconsensus_library()
         handle = _libbitcoin_consensus
 

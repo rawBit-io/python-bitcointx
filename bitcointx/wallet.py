@@ -19,7 +19,7 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 # pylama:ignore=E501,E221
 
 from io import BytesIO
-from typing import Type, Union, Optional, cast
+from typing import Type, TypeVar, Union, Optional, cast
 
 import bitcointx
 import bitcointx.base58
@@ -86,12 +86,15 @@ class WalletBitcoinSignetClass(WalletBitcoinClass,
     ...
 
 
+T_CCoinAddress = TypeVar('T_CCoinAddress', bound='CCoinAddress')
+
+
 class CCoinAddress(WalletCoinClass):
 
     _data_length: int
     _scriptpubkey_type: str
 
-    def __new__(cls, s: str) -> 'CCoinAddress':
+    def __new__(cls: Type[T_CCoinAddress], s: str) -> T_CCoinAddress:
         ensure_isinstance(s, str, 'address string')
         recognized_encoding = []
         target_cls_set = dispatcher_mapped_list(cls)
@@ -113,7 +116,8 @@ class CCoinAddress(WalletCoinClass):
             .format([tcls.__name__ for tcls in target_cls_set]))
 
     @classmethod
-    def from_scriptPubKey(cls, scriptPubKey) -> 'CCoinAddress':
+    def from_scriptPubKey(cls: Type[T_CCoinAddress],
+                          scriptPubKey: CScript) -> T_CCoinAddress:
         """Convert a scriptPubKey to a subclass of CCoinAddress"""
         for candidate in dispatcher_mapped_list(cls):
             try:
@@ -125,9 +129,7 @@ class CCoinAddress(WalletCoinClass):
             'scriptPubKey is not in a recognized address format')
 
     @classmethod
-    def get_output_size(cls_or_inst: Union[Type['CCoinAddress'],
-                                           'CCoinAddress']
-                        ) -> int:
+    def get_output_size(cls_or_inst: Type[T_CCoinAddress]) -> int:
         if isinstance(cls_or_inst, type):
             cls = cls_or_inst
             data_length = getattr(cls, '_data_length', None)
@@ -263,12 +265,16 @@ class CBase58CoinAddress(CBase58DataDispatched, CCoinAddress):
     """A Base58-encoded coin address"""
 
 
+T_P2SHCoinAddress = TypeVar('T_P2SHCoinAddress', bound='P2SHCoinAddress')
+
+
 class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
     _data_length = 20
     _scriptpubkey_type = 'scripthash'
 
     @classmethod
-    def from_redeemScript(cls, redeemScript: CScript) -> 'P2SHCoinAddress':
+    def from_redeemScript(cls: Type[T_P2SHCoinAddress],
+                          redeemScript: CScript) -> T_P2SHCoinAddress:
         """Convert a redeemScript to a P2SH address
 
         Convenience function: equivalent to P2SHBitcoinAddress.from_scriptPubKey(redeemScript.to_p2sh_scriptPubKey())
@@ -276,7 +282,8 @@ class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
         return cls.from_scriptPubKey(redeemScript.to_p2sh_scriptPubKey())
 
     @classmethod
-    def from_scriptPubKey(cls, scriptPubKey: CScript) -> 'P2SHCoinAddress':
+    def from_scriptPubKey(cls: Type[T_P2SHCoinAddress],
+                          scriptPubKey: CScript) -> T_P2SHCoinAddress:
         """Convert a scriptPubKey to a P2SH address
 
         Raises CCoinAddressError if the scriptPubKey isn't of the correct
@@ -296,13 +303,17 @@ class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
         raise NotImplementedError("not enough data in p2sh address to reconstruct redeem script")
 
 
+T_P2PKHCoinAddress = TypeVar('T_P2PKHCoinAddress', bound='P2PKHCoinAddress')
+
+
 class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
     _data_length = 20
     _scriptpubkey_type = 'pubkeyhash'
 
     @classmethod
-    def from_pubkey(cls, pubkey: Union[CPubKey, bytes, bytearray],
-                    accept_invalid=False) -> 'P2PKHCoinAddress':
+    def from_pubkey(cls: Type[T_P2PKHCoinAddress],
+                    pubkey: Union[CPubKey, bytes, bytearray],
+                    accept_invalid=False) -> T_P2PKHCoinAddress:
         """Create a P2PKH address from a pubkey
 
         Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
@@ -322,7 +333,8 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
         return cls.from_bytes(pubkey_hash)
 
     @classmethod
-    def from_scriptPubKey(cls, scriptPubKey: CScript) -> 'P2PKHCoinAddress':
+    def from_scriptPubKey(cls: Type[T_P2PKHCoinAddress],
+                          scriptPubKey: CScript) -> T_P2PKHCoinAddress:
         """Convert a scriptPubKey to a P2PKH address
         Raises CCoinAddressError if the scriptPubKey isn't of the correct
         form.
@@ -340,8 +352,12 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
         return self.to_scriptPubKey()
 
     @classmethod
-    def from_redeemScript(cls, redeemScript: CScript) -> 'P2PKHCoinAddress':
+    def from_redeemScript(cls: Type[T_P2PKHCoinAddress],
+                          redeemScript: CScript) -> T_P2PKHCoinAddress:
         return cls.from_scriptPubKey(redeemScript)
+
+
+T_P2WSHCoinAddress = TypeVar('T_P2WSHCoinAddress', bound='P2WSHCoinAddress')
 
 
 class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
@@ -350,19 +366,21 @@ class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     _scriptpubkey_type = 'witness_v0_scripthash'
 
     @classmethod
-    def from_scriptPubKey(cls, scriptPubKey: CScript) -> 'P2WSHCoinAddress':
+    def from_scriptPubKey(cls: Type[T_P2WSHCoinAddress],
+                          scriptPubKey: CScript) -> T_P2WSHCoinAddress:
         """Convert a scriptPubKey to a P2WSH address
 
         Raises CCoinAddressError if the scriptPubKey isn't of the correct
         form.
         """
         if scriptPubKey.is_witness_v0_scripthash():
-            return cast('P2WSHCoinAddress', cls.from_bytes(scriptPubKey[2:34]))
+            return cls.from_bytes(scriptPubKey[2:34])
         else:
             raise P2WSHCoinAddressError('not a P2WSH scriptPubKey')
 
     @classmethod
-    def from_redeemScript(cls, redeemScript: CScript) -> 'P2WSHCoinAddress':
+    def from_redeemScript(cls: Type[T_P2WSHCoinAddress],
+                          redeemScript: CScript) -> T_P2WSHCoinAddress:
         """Convert a redeemScript to a P2WSH address
 
         Convenience function: equivalent to
@@ -379,14 +397,18 @@ class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
             "not enough data in p2wsh address to reconstruct redeem script")
 
 
+T_P2WPKHCoinAddress = TypeVar('T_P2WPKHCoinAddress', bound='P2WPKHCoinAddress')
+
+
 class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     _data_length = 20
     bech32_witness_version = 0
     _scriptpubkey_type = 'witness_v0_keyhash'
 
     @classmethod
-    def from_pubkey(cls, pubkey: Union[CPubKey, bytes, bytearray],
-                    accept_invalid=False) -> 'P2WPKHCoinAddress':
+    def from_pubkey(cls: Type[T_P2WPKHCoinAddress],
+                    pubkey: Union[CPubKey, bytes, bytearray],
+                    accept_invalid=False) -> T_P2WPKHCoinAddress:
         """Create a P2WPKH address from a pubkey
 
         Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
@@ -403,17 +425,18 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
                 raise P2PKHCoinAddressError('invalid pubkey')
 
         pubkey_hash = bitcointx.core.Hash160(pubkey)
-        return cast('P2WPKHCoinAddress', cls.from_bytes(pubkey_hash))
+        return cls.from_bytes(pubkey_hash)
 
     @classmethod
-    def from_scriptPubKey(cls, scriptPubKey: CScript) -> 'P2WPKHCoinAddress':
+    def from_scriptPubKey(cls: Type[T_P2WPKHCoinAddress],
+                          scriptPubKey: CScript) -> T_P2WPKHCoinAddress:
         """Convert a scriptPubKey to a P2WPKH address
 
         Raises CCoinAddressError if the scriptPubKey isn't of the correct
         form.
         """
         if scriptPubKey.is_witness_v0_keyhash():
-            return cast('P2WPKHCoinAddress', cls.from_bytes(scriptPubKey[2:22]))
+            return cls.from_bytes(scriptPubKey[2:22])
         else:
             raise P2WPKHCoinAddressError('not a P2WPKH scriptPubKey')
 
@@ -426,14 +449,14 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
                         OP_EQUALVERIFY, OP_CHECKSIG])
 
     @classmethod
-    def from_redeemScript(cls, redeemScript: CScript) -> 'P2WPKHCoinAddress':
+    def from_redeemScript(cls: Type[T_P2WPKHCoinAddress],
+                          redeemScript: CScript) -> T_P2WPKHCoinAddress:
         """Convert a redeemScript to a P2WPKH address
 
         Convenience function: equivalent to
         P2WPKHHCoinAddress.from_scriptPubKey(redeemScript.to_p2wpkh_scriptPubKey())
         """
-        return cast('P2WPKHCoinAddress',
-                    cls.from_scriptPubKey(redeemScript.to_p2wpkh_scriptPubKey()))
+        return cls.from_scriptPubKey(redeemScript.to_p2wpkh_scriptPubKey())
 
 
 class CBitcoinAddress(CCoinAddress, WalletBitcoinClass):
@@ -563,6 +586,9 @@ class P2WPKHBitcoinSignetAddress(P2WPKHCoinAddress,
     ...
 
 
+T_CCoinKey = TypeVar('T_CCoinKey', bound='CCoinKey')
+
+
 class CCoinKey(CBase58DataDispatched, CKeyBase,
                WalletCoinClass, next_dispatch_final=True):
     """A base58-encoded secret key
@@ -588,19 +614,20 @@ class CCoinKey(CBase58DataDispatched, CKeyBase,
         CKeyBase.__init__(self, None, compressed=compressed)
 
     @classmethod
-    def from_secret_bytes(cls, secret: bytes, compressed: bool = True
-                          ) -> 'CCoinKey':
+    def from_secret_bytes(cls: Type[T_CCoinKey],
+                          secret: bytes, compressed: bool = True
+                          ) -> T_CCoinKey:
         """Create a secret key from a 32-byte secret"""
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
         return cls.from_bytes(secret + (b'\x01' if compressed else b''))
 
-    def to_compressed(self) -> 'CCoinKey':
+    def to_compressed(self: T_CCoinKey) -> T_CCoinKey:
         if self.is_compressed():
             return self
         return self.__class__.from_secret_bytes(self[:32], True)
 
-    def to_uncompressed(self) -> 'CCoinKey':
+    def to_uncompressed(self: T_CCoinKey) -> T_CCoinKey:
         if not self.is_compressed():
             return self
         return self.__class__.from_secret_bytes(self[:32], False)
