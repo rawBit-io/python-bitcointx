@@ -17,7 +17,7 @@ import binascii
 import struct
 from abc import abstractmethod
 from io import BytesIO
-from typing import Union, List, Tuple, Iterable, Optional, Set
+from typing import Union, List, Sequence, Iterable, Optional, Set
 
 from . import script
 
@@ -744,13 +744,13 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
     """Witness data for all inputs to a transaction"""
     __slots_: List[str] = ['vtxinwit']
 
-    vtxinwit: Union[List[CTxInWitness], Tuple[CTxInWitness, ...]]
+    vtxinwit: Sequence[CTxInWitness]
 
     def __init__(self, vtxinwit: Iterable[CTxInWitness] = (), vtxoutwit=None):
         # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
         txinwit_list = [CTxInWitness.from_txin_witness(w) for w in vtxinwit]
 
-        txinwit: Union[List[CTxInWitness], Tuple[CTxInWitness, ...]]
+        txinwit: Sequence[CTxInWitness]
         if self.is_immutable():
             txinwit = tuple(txinwit_list)
         else:
@@ -812,8 +812,8 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
     __slots_: List[str] = ['nVersion', 'vin', 'vout', 'nLockTime', 'wit']
 
     nVersion: int
-    vin: Union[List[CTxIn], Tuple[CTxIn, ...]]
-    vout: Union[List[CTxOut], Tuple[CTxOut, ...]]
+    vin: Sequence[CTxIn]
+    vout: Sequence[CTxOut]
     nLockTime: int
     wit: CTxWitness
 
