@@ -30,7 +30,7 @@ import decimal
 import json
 import os
 import urllib.parse
-from typing import Type, Dict, Tuple, Optional, Union
+from typing import Type, Dict, Tuple, Optional, Union, TYPE_CHECKING
 
 import bitcointx
 
@@ -40,8 +40,9 @@ except ImportError:
     # This is relevant only for mypy.
     # Those who want to typecheck their code need to have typing_extensions
     # installed, or included with their newer python version (3.8+).
-    class Protocol:
-        ...
+    if not TYPE_CHECKING:
+        class Protocol:
+            ...
 
 
 class HTTPClient_Response_Protocol(Protocol):
