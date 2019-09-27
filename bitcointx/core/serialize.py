@@ -19,19 +19,22 @@ You probabably don't need to use these directly.
 
 import hashlib
 import struct
-from typing import List
+from typing import List, Union, TypeVar, Type, Generic
+from ..util import ensure_isinstance
 
 from io import BytesIO
 
 MAX_SIZE = 0x02000000
 
+T_unbounded = TypeVar('T_unbounded')
 
-def Hash(msg):
+
+def Hash(msg: Union[bytes, bytearray]) -> bytes:
     """SHA256^2)(msg) -> bytes"""
     return hashlib.sha256(hashlib.sha256(msg).digest()).digest()
 
 
-def Hash160(msg):
+def Hash160(msg: Union[bytes, bytearray]) -> bytes:
     """RIPEME160(SHA256(msg)) -> bytes"""
     h = hashlib.new('ripemd160')
     h.update(hashlib.sha256(msg).digest())
@@ -56,13 +59,13 @@ class DeserializationExtraDataError(SerializationError):
     deserialization. The deserialized object and extra padding not consumed are
     saved.
     """
-    def __init__(self, msg, obj, padding):
+    def __init__(self, msg: str, obj: 'Serializable', padding: bytes):
         super().__init__(msg)
         self.obj = obj
         self.padding = padding
 
 
-def ser_read(f, n):
+def ser_read(f: BytesIO, n: int):
     """Read from a stream safely
 
     Raises SerializationError and SerializationTruncationError appropriately.
@@ -77,17 +80,20 @@ def ser_read(f, n):
     return r
 
 
+T_Serializable = TypeVar('T_Serializable', bound='Serializable')
+
+
 class Serializable(object):
     """Base class for serializable objects"""
 
     __slots__: List[str] = []
 
-    def stream_serialize(self, f, **kwargs):
+    def stream_serialize(self, f: BytesIO, **kwargs):
         """Serialize to a stream"""
         raise NotImplementedError
 
     @classmethod
-    def stream_deserialize(cls, f, **kwargs):
+    def stream_deserialize(cls, f: BytesIO, **kwargs):
         """Deserialize from a stream"""
         raise NotImplementedError
 
@@ -98,7 +104,8 @@ class Serializable(object):
         return f.getvalue()
 
     @classmethod
-    def deserialize(cls, buf, allow_padding=False, **kwargs):
+    def deserialize(cls: Type[T_Serializable], buf: Union[bytes, bytearray],
+                    allow_padding: bool = False, **kwargs) -> T_Serializable:
         """Deserialize bytes, returning an instance
 
         allow_padding - Allow buf to include extra padding. (default False)
@@ -115,17 +122,17 @@ class Serializable(object):
                                                     r, padding)
         return r
 
-    def GetHash(self):
+    def GetHash(self) -> bytes:
         """Return the hash of the serialized object"""
         return Hash(self.serialize())
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if not isinstance(other, self.__class__)\
                 and not isinstance(self, other.__class__):
             return NotImplemented
         return self.serialize() == other.serialize()
 
-    def __ne__(self, other):
+    def __ne__(self, other) -> bool:
         return not (self == other)
 
     def __hash__(self):
@@ -137,13 +144,16 @@ class ImmutableSerializable(Serializable):
 
     __slots__: List[str] = ['_cached_GetHash', '_cached__hash__']
 
+    _cached_GetHash: bytes
+    _cached__hash__: bytes
+
     def __setattr__(self, name, value):
         raise AttributeError('Object is immutable')
 
     def __delattr__(self, name):
         raise AttributeError('Object is immutable')
 
-    def GetHash(self):
+    def GetHash(self) -> bytes:
         """Return the hash of the serialized object"""
         try:
             return self._cached_GetHash
@@ -161,33 +171,32 @@ class ImmutableSerializable(Serializable):
             return _cached__hash__
 
 
-class Serializer(object):
+class Serializer(Generic[T_unbounded]):
     """Base class for object serializers"""
     def __new__(cls):
         raise NotImplementedError
 
     @classmethod
-    def stream_serialize(cls, obj, f):
+    def stream_serialize(cls, obj: T_unbounded, f: BytesIO) -> None:
         raise NotImplementedError
 
     @classmethod
-    def stream_deserialize(cls, f):
+    def stream_deserialize(cls, f: BytesIO) -> T_unbounded:
         raise NotImplementedError
 
     @classmethod
-    def serialize(cls, obj):
+    def serialize(cls, obj: T_unbounded) -> bytes:
         f = BytesIO()
         cls.stream_serialize(obj, f)
         return f.getvalue()
 
     @classmethod
-    def deserialize(cls, buf):
-        if isinstance(buf, str) or isinstance(buf, (bytes, bytearray)):
-            buf = BytesIO(buf)
-        return cls.stream_deserialize(buf)
+    def deserialize(cls, buf: bytes) -> T_unbounded:
+        ensure_isinstance(buf, (bytes, bytearray), 'data to deserialize')
+        return cls.stream_deserialize(BytesIO(buf))
 
 
-class VarIntSerializer(Serializer):
+class VarIntSerializer(Serializer[int]):
     """Serialization of variable length ints"""
     @classmethod
     def stream_serialize(cls, i, f):
@@ -218,7 +227,7 @@ class VarIntSerializer(Serializer):
             return struct.unpack(b'<Q', ser_read(f, 8))[0]
 
 
-class BytesSerializer(Serializer):
+class BytesSerializer(Serializer[bytes]):
     """Serialization of bytes instances"""
     @classmethod
     def stream_serialize(cls, b, f):
@@ -231,7 +240,7 @@ class BytesSerializer(Serializer):
         return ser_read(f, datalen)
 
 
-class VectorSerializer(Serializer):
+class VectorSerializer(Serializer[List[Serializable]]):
     """Base class for serializers of object vectors"""
 
     @classmethod
@@ -249,7 +258,7 @@ class VectorSerializer(Serializer):
             inner_cls.stream_serialize(obj, f, **kwargs)
 
     @classmethod
-    def stream_deserialize(cls, f, element_class=None, **kwargs):
+    def stream_deserialize(cls, f, element_class, **kwargs):
         if element_class is None:
             raise ValueError(
                 "The class of the elements in the vector must be supplied")
@@ -260,13 +269,14 @@ class VectorSerializer(Serializer):
         return r
 
 
-class uint256VectorSerializer(Serializer):
+class uint256VectorSerializer(Serializer[bytes]):
     """Serialize vectors of uint256"""
     @classmethod
     def stream_serialize(cls, uints, f):
         VarIntSerializer.stream_serialize(len(uints), f)
         for uint in uints:
-            assert len(uint) == 32
+            if len(uint) != 32:
+                raise ValueError('elements must be 32 bytes in length each')
             f.write(uint)
 
     @classmethod
@@ -278,7 +288,7 @@ class uint256VectorSerializer(Serializer):
         return r
 
 
-class intVectorSerializer(Serializer):
+class intVectorSerializer(Serializer[List[int]]):
 
     @classmethod
     def stream_serialize(cls, ints, f):
@@ -359,9 +369,6 @@ __all__ = (
     'VarIntSerializer',
     'BytesSerializer',
     'VectorSerializer',
-    'uint256VectorSerializer',
-    'intVectorSerializer',
-    'VarStringSerializer',
     'uint256_from_bytes',
     'uint256_to_bytes',
     'uint256_to_shortstr',

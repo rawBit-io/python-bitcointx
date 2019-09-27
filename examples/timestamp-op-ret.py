@@ -82,20 +82,20 @@ if __name__ == '__main__':
                          CScript([x(change_pubkey_hex), OP_CHECKSIG])),
                   CTxOut(0, CScript([OP_RETURN, digest]))]
 
-        tx = CTransaction(txins, txouts).to_mutable()
+        tx_unsigned = CTransaction(txins, txouts).to_mutable()
 
         FEE_PER_VBYTE = 0.00025*CoreCoinParams.COIN/1000
         while True:
-            required_fee = tx.get_virtual_size() * FEE_PER_VBYTE
-            tx.vout[0].nValue = int(
+            required_fee = tx_unsigned.get_virtual_size() * FEE_PER_VBYTE
+            tx_unsigned.vout[0].nValue = int(
                 value_in - max(required_fee, 0.00011*CoreCoinParams.COIN))
 
-            r = rpc.signrawtransactionwithwallet(b2x(tx.serialize()))
+            r = rpc.signrawtransactionwithwallet(b2x(tx_unsigned.serialize()))
             assert r['complete']
-            tx = CTransaction.deserialize(x(r['hex']))
+            tx_signed = CTransaction.deserialize(x(r['hex']))
 
-            if value_in - tx.vout[0].nValue >= required_fee:
-                tx_bytes = tx.serialize()
+            if value_in - tx_signed.vout[0].nValue >= required_fee:
+                tx_bytes = tx_signed.serialize()
                 tx_hex = b2x(tx_bytes)
                 print(tx_hex)
                 print(len(tx_bytes), 'bytes', file=sys.stderr)

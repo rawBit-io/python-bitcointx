@@ -1057,11 +1057,9 @@ class CScriptWitness(ImmutableSerializable):
     """
     __slots__ = ['stack']
 
-    # annotate, but do not create the attribute -- no value assigned here
-    # attribute created when `__init__()` does `object.__setattr__(...)`
-    stack: List[bytes]
+    stack: Tuple[bytes, ...]
 
-    def __init__(self, stack=()):
+    def __init__(self, stack: Iterable[bytes] = ()):
         coerced_stack = []
         for (opcode, data, sop_idx) in CScript(stack).raw_iter():
             if data is not None:
