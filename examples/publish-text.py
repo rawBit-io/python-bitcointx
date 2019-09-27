@@ -44,7 +44,8 @@ from bitcointx.core import (
 from bitcointx.core.script import (
     CScript, MAX_SCRIPT_ELEMENT_SIZE,
     OP_HASH160, OP_CHECKSIGVERIFY, OP_DROP, OP_DEPTH,
-    OP_EQUAL, OP_EQUALVERIFY, OP_RETURN, SIGHASH_NONE
+    OP_EQUAL, OP_EQUALVERIFY, OP_RETURN, SIGHASH_NONE,
+    ScriptElement_Type
 )
 from bitcointx.wallet import CCoinKey, P2SHCoinAddress
 
@@ -132,25 +133,26 @@ if prev_line:
 
 scripts: List[Tuple[CScript, CScript]] = []
 while padded_lines:
-    def make_scripts(lines, n):
+    def make_scripts(lines: List[bytes], n: int) -> Tuple[CScript, CScript]:
         # The n makes sure every p2sh addr is unique; the pubkey lets us
         # control the order the vin order vs. just using hashlocks.
-        redeemScript = []
+        redeemScript: List[ScriptElement_Type] = []
         for chunk in reversed(lines):
             if len(chunk) > MAX_SCRIPT_ELEMENT_SIZE:
                 parser.exit(
-                    'Lines must be less than %d characters; '
-                    'got %d characters' %
-                    (MAX_SCRIPT_ELEMENT_SIZE, len(chunk)))
+                    status=-1,
+                    message=('Error: lines must be less than %d characters; '
+                             'got %d characters\n' %
+                             (MAX_SCRIPT_ELEMENT_SIZE, len(chunk))))
             redeemScript.extend([OP_HASH160, Hash160(chunk), OP_EQUALVERIFY])
-        redeemScript = CScript(
-            redeemScript + [args.privkey.pub, OP_CHECKSIGVERIFY,
-                            # deduplicate push dropped to meet BIP62 rules
-                            n, OP_DROP,
-                            # prevent scriptSig malleability
-                            OP_DEPTH, 0, OP_EQUAL])
 
-        return CScript(lines) + redeemScript, redeemScript
+        redeemScript += [args.privkey.pub, OP_CHECKSIGVERIFY,
+                         # deduplicate push dropped to meet BIP62 rules
+                         n, OP_DROP,
+                         # prevent scriptSig malleability
+                         OP_DEPTH, 0, OP_EQUAL]
+
+        return CScript(lines) + CScript(redeemScript), CScript(redeemScript)
 
     scriptSig = redeemScript = None
     for i in range(len(padded_lines)):
