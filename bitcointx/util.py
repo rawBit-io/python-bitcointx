@@ -13,7 +13,7 @@ import threading
 import functools
 from types import FunctionType
 from abc import ABCMeta, ABC
-from typing import Type, Set, Tuple, Dict, Union, Any, Callable, Iterable, cast
+from typing import Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable
 
 # TODO: convert this to custom thread-local class to be able to apply typing
 class_mapping_dispatch_data = threading.local()
@@ -108,7 +108,7 @@ def activate_class_dispatcher(dclass: Type['ClassMappingDispatcher']
 
 
 def dispatcher_mapped_list(cls: 'ClassMappingDispatcher'
-                           ) -> Tuple['ClassMappingDispatcher', ...]:
+                           ) -> List['ClassMappingDispatcher']:
     """Get a list of the classes that particular class is to be
     dispatched to. Returns empty list when class is not in a dispatch map"""
     mcs = type(cls)
@@ -120,7 +120,7 @@ def dispatcher_mapped_list(cls: 'ClassMappingDispatcher'
     dclass_list = dispatcher._class_dispatcher__clsmap.get(cls, [])
     # We do not have type-annotead thread-local data at the moment,
     # - it requires custom thread-local class, which is in TODO.
-    return tuple(cast(Tuple['ClassMappingDispatcher'], dclass_list))
+    return dclass_list
 
 
 class DispatcherMethodWrapper():
