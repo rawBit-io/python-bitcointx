@@ -145,7 +145,12 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
         if cls.is_immutable() and other_inst.is_immutable():
             return cast(T_CoreCoinClass, other_inst)
 
-        return cls(*args, **kwargs)
+        # CoreCoinClass() does not have arguments, but subclasses might have.
+        # mypy complains here that there's too many arguments to CoreCoinClass.
+        # We can define a dummy __init__(self, *args) with args ignored,
+        # but that potentially means we could miss an erroneous arguments at
+        # runtime. Better just ignore this typing check.
+        return cls(*args, **kwargs)  # type: ignore
 
 
 class CoreBitcoinClassDispatcher(
