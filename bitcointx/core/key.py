@@ -64,6 +64,7 @@ class KeyDerivationFailException(RuntimeError):
 # be applied to every OpenSSL call whose return type is a pointer?)
 def _check_res_openssl_void_p(val, func, args): # pylint: disable=unused-argument
     if val == 0:
+        assert _ssl is not None
         errno = _ssl.ERR_get_error()
         errmsg = ctypes.create_string_buffer(120)
         _ssl.ERR_error_string_n(errno, errmsg, 120)
@@ -110,6 +111,8 @@ class CKeyBase:
     is_compressed() - True if compressed
 
     """
+
+    pub: 'CPubKey'
 
     def __init__(self, s, compressed=True):
         raw_pubkey = ctypes.create_string_buffer(64)

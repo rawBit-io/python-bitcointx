@@ -19,7 +19,7 @@ import decimal
 from abc import abstractmethod
 from io import BytesIO
 from typing import (
-    Union, List, Sequence, Iterable, Optional, Set, TypeVar, Type, cast
+    Union, List, Sequence, Iterable, Optional, Set, TypeVar, Type, Any, cast
 )
 
 from . import script
@@ -134,7 +134,8 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
     @classmethod
     def _from_instance(
         cls: Type[T_CoreCoinClass],
-        other_inst: 'CoreCoinClass', *args, **kwargs
+        other_inst: 'CoreCoinClass',
+        *args: Any, **kwargs: Any
     ) -> T_CoreCoinClass:
         ensure_isinstance(other_inst, cls._immutable_cls,
                           'the argument')

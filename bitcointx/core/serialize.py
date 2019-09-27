@@ -19,7 +19,7 @@ You probabably don't need to use these directly.
 
 import hashlib
 import struct
-from typing import List, Union, TypeVar, Type, Generic
+from typing import List, Union, TypeVar, Type, Generic, Any, cast
 from ..util import ensure_isinstance
 
 from io import BytesIO
@@ -65,7 +65,7 @@ class DeserializationExtraDataError(SerializationError):
         self.padding = padding
 
 
-def ser_read(f: BytesIO, n: int):
+def ser_read(f: BytesIO, n: int) -> bytes:
     """Read from a stream safely
 
     Raises SerializationError and SerializationTruncationError appropriately.
@@ -88,16 +88,17 @@ class Serializable(object):
 
     __slots__: List[str] = []
 
-    def stream_serialize(self, f: BytesIO, **kwargs):
+    def stream_serialize(self, f: BytesIO, **kwargs: Any) -> None:
         """Serialize to a stream"""
         raise NotImplementedError
 
     @classmethod
-    def stream_deserialize(cls, f: BytesIO, **kwargs):
+    def stream_deserialize(cls: Type[T_Serializable], f: BytesIO,
+                           **kwargs: Any) -> T_Serializable:
         """Deserialize from a stream"""
         raise NotImplementedError
 
-    def serialize(self, **kwargs):
+    def serialize(self, **kwargs: Any) -> bytes:
         """Serialize, returning bytes"""
         f = BytesIO()
         self.stream_serialize(f, **kwargs)
@@ -105,7 +106,7 @@ class Serializable(object):
 
     @classmethod
     def deserialize(cls: Type[T_Serializable], buf: Union[bytes, bytearray],
-                    allow_padding: bool = False, **kwargs) -> T_Serializable:
+                    allow_padding: bool = False, **kwargs: Any) -> T_Serializable:
         """Deserialize bytes, returning an instance
 
         allow_padding - Allow buf to include extra padding. (default False)
@@ -126,13 +127,14 @@ class Serializable(object):
         """Return the hash of the serialized object"""
         return Hash(self.serialize())
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, self.__class__)\
                 and not isinstance(self, other.__class__):
             return NotImplemented
-        return self.serialize() == other.serialize()
+        other_serializable = cast(Serializable, other)
+        return self.serialize() == other_serializable.serialize()
 
-    def __ne__(self, other) -> bool:
+    def __ne__(self, other: Any) -> bool:
         return not (self == other)
 
     def __hash__(self):
@@ -306,7 +308,7 @@ class intVectorSerializer(Serializer[List[int]]):
         return ints
 
 
-class VarStringSerializer(Serializer):
+class VarBytesSerializer(Serializer[bytes]):
     """Serialize variable length byte strings"""
     @classmethod
     def stream_serialize(cls, s, f):
@@ -369,6 +371,9 @@ __all__ = (
     'VarIntSerializer',
     'BytesSerializer',
     'VectorSerializer',
+    'uint256VectorSerializer',
+    'intVectorSerializer',
+    'VarBytesSerializer',
     'uint256_from_bytes',
     'uint256_to_bytes',
     'uint256_to_shortstr',

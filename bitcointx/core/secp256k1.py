@@ -26,6 +26,7 @@ import os
 import ctypes
 import ctypes.util
 import threading
+from typing import cast
 
 
 PUBLIC_KEY_SIZE             = 65
@@ -167,7 +168,12 @@ def _add_function_definitions(_secp256k1):
         _secp256k1.secp256k1_ecdh.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
 
 
-def secp256k1_create_and_init_context(_secp256k1: ctypes.CDLL, flags: int):
+class _secp256k1_context:
+    """dummy type for typecheck purposes"""
+
+
+def secp256k1_create_and_init_context(_secp256k1: ctypes.CDLL, flags: int
+                                      ) -> _secp256k1_context:
     if flags not in (SECP256K1_CONTEXT_SIGN, SECP256K1_CONTEXT_VERIFY,
                      (SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY)):
         raise ValueError(
@@ -195,7 +201,7 @@ def secp256k1_create_and_init_context(_secp256k1: ctypes.CDLL, flags: int):
         elif flags != SECP256K1_CONTEXT_VERIFY:
             raise AssertionError('unexpected value for flags')
 
-    return ctx
+    return cast(_secp256k1_context, ctx)
 
 
 def load_secp256k1_library() -> ctypes.CDLL:

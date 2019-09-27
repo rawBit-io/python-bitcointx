@@ -20,7 +20,7 @@
 # pylama:ignore=E501
 
 import struct
-from typing import Union, List
+from typing import Union, List, TypeVar
 
 
 def Ch(x, y, z):
@@ -63,6 +63,9 @@ def ReadBE32(buf):
     return struct.unpack(b">I", buf[:4])[0]
 
 
+T_CSHA256 = TypeVar('T_CSHA256', bound='CSHA256')
+
+
 class CSHA256():
     __slots__ = ['s', 'buf', 'bytes_count']
 
@@ -71,7 +74,7 @@ class CSHA256():
         self.Reset()
 
     # Perform a number of SHA-256 transformations, processing 64-byte chunks.
-    def Transform(self, chunk: Union[bytes, bytearray], blocks: int):
+    def Transform(self, chunk: Union[bytes, bytearray], blocks: int) -> None:
         if not isinstance(blocks, int):
             raise TypeError('blocks must be an instance of int')
         if not isinstance(chunk, (bytes, bytearray)):
@@ -223,7 +226,7 @@ class CSHA256():
 
             chunk = chunk[64:]
 
-    def Write(self, data: Union[bytes, bytearray]):
+    def Write(self: T_CSHA256, data: Union[bytes, bytearray]) -> T_CSHA256:
         if not isinstance(data, (bytes, bytearray)):
             raise TypeError('data must be instance of bytes or bytearray')
 

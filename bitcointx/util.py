@@ -13,7 +13,9 @@ import threading
 import functools
 from types import FunctionType
 from abc import ABCMeta, ABC
-from typing import Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable
+from typing import (
+    Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable, Optional
+)
 
 # TODO: convert this to custom thread-local class to be able to apply typing
 class_mapping_dispatch_data = threading.local()
@@ -27,7 +29,7 @@ _attributes_of_ABC = dir(ABC)
 class _NoBoolCallable():
     __slots__ = ['method_name', 'method']
 
-    def __init__(self, name, method):
+    def __init__(self, name: str, method: Callable[[], bool]) -> None:
         self.method_name = name
         self.method = method
 
@@ -41,8 +43,8 @@ class _NoBoolCallable():
             'Using this attribute as boolean property is disabled. '
             'please use {}()'.format(self.method_name))
 
-    def __call__(self, *args, **kwargs):
-        return self.method(*args, **kwargs)
+    def __call__(self) -> bool:
+        return self.method()
 
 
 class no_bool_use_as_property():
@@ -52,16 +54,13 @@ class no_bool_use_as_property():
     def __init__(self, method):
         self.method = method
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance: object, owner: type) -> _NoBoolCallable:
         method = self.method.__get__(instance, owner)
-
-        def wrapper(*args, **kwargs):
-            return method(*args, **kwargs)
 
         name = '{}{}.{}'.format(owner.__name__,
                                 '' if instance is None else '()',
                                 method.__name__)
-        return _NoBoolCallable(name, wrapper)
+        return _NoBoolCallable(name, method)
 
 
 def get_class_dispatcher_depends(dclass: Type['ClassMappingDispatcher']
@@ -168,7 +167,7 @@ class ClassMappingDispatcher(ABCMeta):
     _class_dispatcher__depends: Iterable[Type['ClassMappingDispatcher']]
 
     def __init_subclass__(
-        mcs, identity: str = None,
+        mcs, identity: Optional[str] = None,
         depends: Iterable[Type['ClassMappingDispatcher']] = ()
     ) -> None:
         """Initialize the dispatcher metaclass.
@@ -419,7 +418,7 @@ class classgetter:
         return self.f(owner)
 
 
-def ensure_isinstance(var,
+def ensure_isinstance(var: object,
                       type_or_types: Union[Type[Any], Tuple[Type[Any], ...]],
                       var_description: str) -> None:
 
