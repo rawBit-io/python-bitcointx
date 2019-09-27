@@ -10,7 +10,9 @@
 * fix class attribute dispatching code - ignore attributes of `abc.ABC` class
   when dispatching attribute access - otherwise isinstance/issubclass might
   give incorrect results due to `ABC._abc_cache` confusion
-* add type declarations for the functions, and checks for instance types at runtime
+* add type declarations for the functions, and checks for function or method
+  argument types at runtime. `coins_to_satoshi()` will raise `TypeError`
+  if the value is not an instance of int, float, or Decimal, for example.
 * fixes for minor bugs revealed by mypy after type declarations was added
 * `CPubKey.recover_compact()` now returns None on failure to recover
   (it previously returned False, which is not consistent with the fact
