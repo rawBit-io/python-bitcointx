@@ -15,6 +15,7 @@
 import threading
 import binascii
 import struct
+import decimal
 from abc import abstractmethod
 from io import BytesIO
 from typing import (
@@ -215,13 +216,18 @@ def str_money_value_for_repr(nValue: int) -> str:
         return "%d" % (nValue,)
 
 
-def coins_to_satoshi(value: Union[int, float], check_range=True) -> int:
-    """Simple utility function to convert from
-    floating-point coins amount to integer satoshi amonut"""
+def coins_to_satoshi(value: Union[int, float, decimal.Decimal],
+                     check_range: bool = True) -> int:
+    """Simple utility function to convert from coins amount
+    expressed as a possibly fractional value - of type float or Decimal
+    (or int, if the value the value in coins is not fractional),
+    to integer satoshi amount. essentially multiplies the value
+    by CoreCoinParams.COIN with rounding, type conversion,
+    and bounds checking (or without bounds checking, if check_range=False"""
 
-    # Sole number of coins can be expressed as int, so we allow both
-    # float and int
-    ensure_isinstance(value, (int, float), 'value in coins')
+    # Sole number of coins can be expressed as int, so we allow int
+    # in addition to fractional types
+    ensure_isinstance(value, (int, float, decimal.Decimal), 'value in coins')
 
     result = int(round(float(value) * CoreCoinParams.COIN))
 
@@ -235,7 +241,9 @@ def coins_to_satoshi(value: Union[int, float], check_range=True) -> int:
 
 def satoshi_to_coins(value: int, check_range=True) -> float:
     """Simple utility function to convert from
-    integer satoshi amonut to floating-point coins amount"""
+    integer satoshi amonut to floating-point coins amount.
+    does type checks and conversions, as well as bounds checking.
+    (if check_range=False, bounds checking is not performed)"""
 
     # We expect that satoshi would always be expressed as integer
     ensure_isinstance(value, int, 'value in satoshi')

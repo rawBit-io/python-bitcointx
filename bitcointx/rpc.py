@@ -335,8 +335,7 @@ class RPCCaller:
 
         rdata = http_response.read().decode('utf8')
         try:
-            return json.loads(
-                rdata, parse_float=lambda x: float(decimal.Decimal(x)))
+            return json.loads(rdata, parse_float=decimal.Decimal)
         except Exception:
             raise JSONRPCError({
                 'code': -342,

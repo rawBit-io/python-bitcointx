@@ -16,8 +16,6 @@
   (it previously returned False, which is not consistent with the fact
   that it returns CPubKey on success)
 * CBech32Data now has `bech32_witness_version` field instead of `witver`
-* parsed JSON returned by rpc.RPCCaller had decimal.Decimal type for the float
-  values in json. Now all the floats in parsed JSON have type `float`.
 * bitcointx.core.serialize module: `uint256_from_str` renamed to `uint256_from_bytes`,
   `uint256_to_str` renamed to `uint256_to_bytes`, for the name to reflect the
   actual returning type (`_str` suffix is likely a remnant of python2)
