@@ -103,6 +103,9 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
         return super().__getattribute__(name)
 
 
+T_CoreCoinClass = TypeVar('T_CoreCoinClass', bound='CoreCoinClass')
+
+
 class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
 
     def to_mutable(self):
@@ -125,19 +128,24 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
         assert cls is cls._immutable_cls
         return False
 
+    # Unfortunately we cannot type other_inst with generic type,
+    # because for the mutable type the other instance might be the immutable
+    # one, and immutable classes are superclases to the mutable.
     @classmethod
-    def _from_instance(cls, other_inst: 'CoreCoinClass', args_for_new: tuple):
+    def _from_instance(
+        cls: Type[T_CoreCoinClass],
+        other_inst: 'CoreCoinClass', *args, **kwargs
+    ) -> T_CoreCoinClass:
         ensure_isinstance(other_inst, cls._immutable_cls,
                           'the argument')
-        if cls.is_immutable() and other_inst.is_immutable():
-            return other_inst
+        assert issubclass(cls, cls._immutable_cls),\
+            (f"_immutable_cls ({cls._immutable_cls.__name__} expected to be "
+             f"the same as cls ({cls.__name__}, or be a superclass of it")
 
-        # CoreCoinClass does not have arguments, but subclasses might have.
-        # mypy complains here that there's too many arguments to CoreCoinClass.
-        # We can define a dummy __init__(self, *args) with args ignored,
-        # but that potentially means we could miss an erroneous arguments at
-        # runtime. Better just ignore this typing check.
-        return cls(*args_for_new)  # type: ignore
+        if cls.is_immutable() and other_inst.is_immutable():
+            return cast(T_CoreCoinClass, other_inst)
+
+        return cls(*args, **kwargs)
 
 
 class CoreBitcoinClassDispatcher(
@@ -499,7 +507,7 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
     @classmethod
     def from_instance(cls: Type[T_COutPoint], outpoint: 'COutPoint'
                       ) -> T_COutPoint:
-        return cls._from_instance(outpoint, (outpoint.hash, outpoint.n))
+        return cls._from_instance(outpoint, outpoint.hash, outpoint.n)
 
     @classmethod
     def from_outpoint(cls: Type[T_COutPoint], outpoint: 'COutPoint'
@@ -583,9 +591,9 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
 
     @classmethod
     def from_instance(cls: Type[T_CTxIn], txin: 'CTxIn') -> T_CTxIn:
-        return cls._from_instance(
-            txin, (COutPoint.from_outpoint(txin.prevout),
-                   txin.scriptSig, txin.nSequence))
+        return cls._from_instance(txin,
+                                  COutPoint.from_outpoint(txin.prevout),
+                                  txin.scriptSig, txin.nSequence)
 
     @classmethod
     def from_txin(cls: Type[T_CTxIn], txin: 'CTxIn') -> T_CTxIn:
@@ -672,7 +680,7 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
 
     @classmethod
     def from_instance(cls: Type[T_CTxOut], txout: 'CTxOut') -> T_CTxOut:
-        return cls._from_instance(txout, (txout.nValue, txout.scriptPubKey))
+        return cls._from_instance(txout, txout.nValue, txout.scriptPubKey)
 
     @classmethod
     def from_txout(cls: Type[T_CTxOut], txout: 'CTxOut') -> T_CTxOut:
@@ -723,8 +731,7 @@ class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
     def from_instance(cls: Type[T_CTxInWitness],
                       txin_witness: 'CTxInWitness',
                       ) -> T_CTxInWitness:
-        return cls._from_instance(txin_witness,
-                                  (txin_witness.scriptWitness,))
+        return cls._from_instance(txin_witness, txin_witness.scriptWitness)
 
     @classmethod
     def from_txin_witness(cls: Type[T_CTxInWitness],
@@ -817,7 +824,7 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
                       ) -> T_CTxWitness:
         vtxinwit = (CTxInWitness.from_txin_witness(w)
                     for w in witness.vtxinwit)
-        return cls._from_instance(witness, (vtxinwit,))
+        return cls._from_instance(witness, vtxinwit)
 
     @classmethod
     def from_witness(cls: Type[T_CTxWitness], witness: 'CTxWitness'
@@ -946,8 +953,8 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         vout = [CTxOut.from_txout(txout)
                 for txout in tx.vout]
         wit = CTxWitness.from_witness(tx.wit)
-        return cls._from_instance(
-            tx, (vin, vout, tx.nLockTime, tx.nVersion, wit))
+        return cls._from_instance(tx,
+                                  vin, vout, tx.nLockTime, tx.nVersion, wit)
 
     @classmethod
     def from_tx(cls: Type[T_CTransaction],
