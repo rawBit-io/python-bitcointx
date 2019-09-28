@@ -21,7 +21,9 @@ is in bitcointx.core.scripteval
 import struct
 import hashlib
 from io import BytesIO
-from typing import List, Tuple, Dict, Union, Iterable, Optional, TypeVar, Type
+from typing import (
+    List, Tuple, Dict, Union, Iterable, Optional, TypeVar, Type, cast
+)
 
 import bitcointx.core
 import bitcointx.core.key
@@ -60,7 +62,12 @@ SIGVERSION_WITNESS_V0: SIGVERSION_Type = SIGVERSION_Type(1)
 
 
 class SIGHASH_Type(int):
-    def __or__(self, other) -> 'SIGHASH_Type':
+    # The type of 'other' is intentionally incompatible wit supertype 'int'
+    # because we do not want that or-ing with anything but bitflag type
+    # produced SIGHAS_Type result.
+    def __or__(self,  # type: ignore
+               other: 'SIGHASH_Bitflag_Type'
+               ) -> 'SIGHASH_Type':
         if self != SIGHASH_ANYONECANPAY and other != SIGHASH_ANYONECANPAY:
             raise ValueError(
                 'combining SIGHASH_* values only make sense with '
@@ -68,11 +75,19 @@ class SIGHASH_Type(int):
         return SIGHASH_Type(super().__or__(other))
 
 
+T_int = TypeVar('T_int', bound=int)
+
+
+class SIGHASH_Bitflag_Type(int):
+    def __or__(self, other: T_int) -> T_int:
+        return cast(T_int, super().__or__(other))
+
+
 SIGHASH_ALL: SIGHASH_Type = SIGHASH_Type(1)
 SIGHASH_NONE: SIGHASH_Type = SIGHASH_Type(2)
 SIGHASH_SINGLE: SIGHASH_Type = SIGHASH_Type(3)
-SIGHASH_ANYONECANPAY: SIGHASH_Type = SIGHASH_Type(0x80)
 
+SIGHASH_ANYONECANPAY: SIGHASH_Bitflag_Type = SIGHASH_Bitflag_Type(0x80)
 
 # (partial) comment from Bitcoin Core IsStandardTx() function:
 # Biggest 'standard' txin is a 15-of-15 P2SH multisig with compressed
