@@ -17,6 +17,7 @@
 import sys
 
 import bitcointx.rpc
+import argparse
 
 from bitcointx import select_chain_params
 from bitcointx.core import (
@@ -30,8 +31,7 @@ if sys.version_info.major < 3:
     sys.exit(1)
 
 
-def parser():
-    import argparse
+def parser() -> 'argparse.ArgumentParser':
 
     parser = argparse.ArgumentParser(
         description=('publish transaction with OP_RETURN containing a hash '

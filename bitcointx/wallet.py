@@ -171,14 +171,13 @@ class CCoinAddress(WalletCoinClass):
         will return None."""
         for target_cls in dispatcher_mapped_list(cls):
             assert issubclass(target_cls, CCoinAddress)
-            adr_cls = cast(Type['CCoinAddress'], target_cls)
-            spk_type = getattr(adr_cls, '_scriptpubkey_type', None)
+            spk_type = getattr(target_cls, '_scriptpubkey_type', None)
             if not spk_type:
-                matched = adr_cls.match_scriptPubKey_type(spk_type_string)
+                matched = target_cls.match_scriptPubKey_type(spk_type_string)
                 if matched is not None:
                     return matched
             elif spk_type_string == spk_type:
-                return adr_cls
+                return target_cls
         return None
 
     def to_scriptPubKey(self) -> CScript:
@@ -313,7 +312,7 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
     @classmethod
     def from_pubkey(cls: Type[T_P2PKHCoinAddress],
                     pubkey: Union[CPubKey, bytes, bytearray],
-                    accept_invalid=False) -> T_P2PKHCoinAddress:
+                    accept_invalid: bool = False) -> T_P2PKHCoinAddress:
         """Create a P2PKH address from a pubkey
 
         Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
@@ -408,7 +407,7 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     @classmethod
     def from_pubkey(cls: Type[T_P2WPKHCoinAddress],
                     pubkey: Union[CPubKey, bytes, bytearray],
-                    accept_invalid=False) -> T_P2WPKHCoinAddress:
+                    accept_invalid: bool = False) -> T_P2WPKHCoinAddress:
         """Create a P2WPKH address from a pubkey
 
         Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
@@ -606,7 +605,7 @@ class CCoinKey(CBase58DataDispatched, CKeyBase,
     secret_bytes property is 32 bytes long in both cases.
     """
 
-    def __init__(self, _s) -> None:
+    def __init__(self, _s: str) -> None:
         data = self
         if len(data) > 33:
             raise ValueError('data size must not exceed 33 bytes')

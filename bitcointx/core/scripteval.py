@@ -20,7 +20,9 @@ module.
 """
 
 import hashlib
-from typing import Iterable, Optional, List, Type
+from typing import (
+    Iterable, Optional, List, Tuple, Set, Type, TypeVar, Union, Callable, Any
+)
 
 import bitcointx.core
 import bitcointx.core._bignum
@@ -51,6 +53,8 @@ from bitcointx.core.script import (
     OP_RIPEMD160, OP_ROT, OP_SIZE, OP_SHA1, OP_SHA256, OP_SWAP, OP_TOALTSTACK,
     OP_TUCK, OP_VERIFY, OP_WITHIN,
 )
+
+T_Exception = TypeVar('T_Exception', bound=Exception)
 
 MAX_NUM_SIZE = 4
 MAX_STACK_ITEMS = 1000
@@ -205,7 +209,7 @@ class VerifyOpFailedError(EvalScriptError):
 #
 # ported from bitcoind's src/script/interpreter.cpp
 #
-def _IsValidSignatureEncoding(sig):  # noqa
+def _IsValidSignatureEncoding(sig: bytes) -> bool:  # noqa
     # Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S] [sighash]
     # * total-length: 1-byte length descriptor of everything that follows,
     #   excluding the sighash byte.
@@ -285,7 +289,7 @@ def _IsValidSignatureEncoding(sig):  # noqa
     return True
 
 
-def _IsCompressedOrUncompressedPubKey(pubkey):
+def _IsCompressedOrUncompressedPubKey(pubkey: bytes) -> bool:
     if len(pubkey) < 33:
         #  Non-canonical public key: too short
         return False
@@ -305,7 +309,7 @@ def _IsCompressedOrUncompressedPubKey(pubkey):
     return True
 
 
-def _IsCompressedPubKey(pubkey):
+def _IsCompressedPubKey(pubkey: bytes) -> bool:
     if len(pubkey) != 33:
         #  Non-canonical public key: invalid length for compressed key
         return False
@@ -320,10 +324,10 @@ def _IsCompressedPubKey(pubkey):
 def VerifyWitnessProgram(witness: CScriptWitness,
                          witversion: int, program: bytes,
                          txTo: 'bitcointx.core.CTransaction',
-                         inIdx: int, flags:
-                         Iterable[ScriptVerifyFlag_Type] = (),
+                         inIdx: int,
+                         flags: Set[ScriptVerifyFlag_Type] = set(),
                          amount: int = 0,
-                         script_class: Type[CScript] = None) -> None:
+                         script_class: Type[CScript] = CScript) -> None:
 
     if script_class is None:
         raise ValueError("script class must be specified")
@@ -386,18 +390,20 @@ def VerifyWitnessProgram(witness: CScriptWitness,
     return
 
 
-def _CastToBigNum(s, err_raiser):
-    v = bitcointx.core._bignum.vch2bn(s)
-    if len(s) > MAX_NUM_SIZE:
+def _CastToBigNum(b: bytes, err_raiser: Callable[..., Exception]) -> int:
+    if len(b) > MAX_NUM_SIZE:
         raise err_raiser(EvalScriptError, 'CastToBigNum() : overflow')
+    v = bitcointx.core._bignum.vch2bn(b)
+    if v is None:
+        raise err_raiser(EvalScriptError, 'CastToBigNum() : invalid value')
     return v
 
 
-def _CastToBool(s):
-    for i in range(len(s)):
-        sv = s[i]
-        if sv != 0:
-            if (i == (len(s) - 1)) and (sv == 0x80):
+def _CastToBool(b: bytes) -> bool:
+    for i in range(len(b)):
+        bv = b[i]
+        if bv != 0:
+            if (i == (len(b) - 1)) and (bv == 0x80):
                 return False
             return True
 
@@ -668,7 +674,7 @@ def _BinOp(opcode, stack, err_raiser):  # noqa
     stack.append(bitcointx.core._bignum.bn2vch(bn))
 
 
-def _CheckExec(vfExec):
+def _CheckExec(vfExec: List[bool]) -> bool:
     for b in vfExec:
         if not b:
             return False
@@ -677,7 +683,7 @@ def _CheckExec(vfExec):
 
 def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 txTo: 'bitcointx.core.CTransaction',
-                inIdx: int, flags: Iterable[ScriptVerifyFlag_Type] = (),
+                inIdx: int, flags: Set[ScriptVerifyFlag_Type] = set(),
                 amount: int = 0, sigversion: SIGVERSION_Type = SIGVERSION_BASE
                 ) -> None:
     """Evaluate a script
@@ -699,7 +705,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
     for (sop, sop_data, sop_pc) in scriptIn.raw_iter():
         fExec = _CheckExec(vfExec)
 
-        def err_raiser(cls, *args):
+        def err_raiser(cls: Type[T_Exception], *args: Any) -> T_Exception:
             """Helper function for raising EvalScriptError exceptions
 
             cls   - subclass you want to raise
@@ -1039,7 +1045,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
 
 def EvalScript(stack: List[bytes], scriptIn: CScript,
                txTo: 'bitcointx.core.CTransaction',
-               inIdx: int, flags: Iterable[ScriptVerifyFlag_Type] = (),
+               inIdx: int, flags: Set[ScriptVerifyFlag_Type] = set(),
                amount: int = 0, sigversion: SIGVERSION_Type = SIGVERSION_BASE
                ) -> None:
     """Evaluate a script
@@ -1074,7 +1080,8 @@ class VerifyScriptError(bitcointx.core.ValidationError):
 
 def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
                  txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                 flags: Optional[Iterable[ScriptVerifyFlag_Type]] = None,
+                 flags: Optional[Union[Tuple[ScriptVerifyFlag_Type, ...],
+                                       Set[ScriptVerifyFlag_Type]]] = None,
                  amount: int = 0, witness: Optional[CScriptWitness] = None
                  ) -> None:
     """Verify a scriptSig satisfies a scriptPubKey

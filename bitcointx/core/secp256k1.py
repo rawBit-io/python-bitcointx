@@ -26,7 +26,8 @@ import os
 import ctypes
 import ctypes.util
 import threading
-from typing import cast
+from types import FunctionType
+from typing import Any, cast
 
 
 PUBLIC_KEY_SIZE             = 65
@@ -73,7 +74,8 @@ def secp256k1_get_last_error():
     return getattr(_secp256k1_error_storage, 'last_error', None)
 
 
-def _check_ressecp256k1_void_p(val, _func, _args):
+def _check_ressecp256k1_void_p(val: int, _func: FunctionType,
+                               _args: Any) -> ctypes.c_void_p:
     if val == 0:
         err = _secp256k1_error_storage.last_error
         raise Libsecp256k1Exception(err['code'], err['message'])
@@ -86,7 +88,7 @@ secp256k1_has_pubkey_negate = False
 secp256k1_has_ecdh = False
 
 
-def _add_function_definitions(_secp256k1):
+def _add_function_definitions(_secp256k1: ctypes.CDLL) -> None:
     global secp256k1_has_pubkey_recovery
     global secp256k1_has_privkey_negate
     global secp256k1_has_pubkey_negate
@@ -107,7 +109,7 @@ def _add_function_definitions(_secp256k1):
         _secp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
 
     _secp256k1.secp256k1_context_create.restype = ctypes.c_void_p
-    _secp256k1.secp256k1_context_create.errcheck = _check_ressecp256k1_void_p
+    _secp256k1.secp256k1_context_create.errcheck = _check_ressecp256k1_void_p  # type: ignore
     _secp256k1.secp256k1_context_create.argtypes = [ctypes.c_uint]
 
     _secp256k1.secp256k1_context_randomize.restype = ctypes.c_int

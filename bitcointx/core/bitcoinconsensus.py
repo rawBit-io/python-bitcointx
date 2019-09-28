@@ -19,7 +19,7 @@ to evaluate bitcoin script.
 """
 
 import ctypes
-from typing import Iterable, Optional
+from typing import Union, Tuple, Set, Optional
 
 from bitcointx.util import ensure_isinstance
 from bitcointx.core import MoneyRange, CTransaction
@@ -87,9 +87,9 @@ BITCOINCONSENSUS_FLAG_MAPPING = {
 BITCOINCONSENSUS_ACCEPTED_FLAGS = set(BITCOINCONSENSUS_FLAG_MAPPING.keys())
 
 
-def _flags_to_libconsensus(flags: Optional[Iterable[ScriptVerifyFlag_Type]]):
-    if flags is None:
-        raise ValueError('flags must be specified')
+def _flags_to_libconsensus(flags: Union[Tuple[ScriptVerifyFlag_Type, ...],
+                                        Set[ScriptVerifyFlag_Type]]
+                           ) -> int:
     if isinstance(flags, tuple):
         flags = set(flags)
     elif not isinstance(flags, set):
@@ -111,7 +111,7 @@ def _flags_to_libconsensus(flags: Optional[Iterable[ScriptVerifyFlag_Type]]):
     return flags_value
 
 
-def _add_function_definitions(handle):
+def _add_function_definitions(handle: ctypes.CDLL) -> None:
 
     # Returns 1 if the input nIn of the serialized transaction pointed to by
     # txTo correctly spends the scriptPubKey pointed to by scriptPubKey under
@@ -133,7 +133,7 @@ def _add_function_definitions(handle):
     handle.bitcoinconsensus_version.argtypes = []
 
 
-def load_bitcoinconsensus_library(library_name='bitcoinconsensus'
+def load_bitcoinconsensus_library(library_name: str = 'bitcoinconsensus'
                                   ) -> ctypes.CDLL:
     """load libsbitcoinconsenssus via ctypes, add default function definitions
     to the library handle, and return this handle.
@@ -173,7 +173,8 @@ def load_bitcoinconsensus_library(library_name='bitcoinconsensus'
 def ConsensusVerifyScript(
     scriptSig: CScript, scriptPubKey: CScript,
     txTo: CTransaction, inIdx: int,
-    flags: Iterable[ScriptVerifyFlag_Type] = None,
+    flags: Union[Tuple[ScriptVerifyFlag_Type, ...],
+                 Set[ScriptVerifyFlag_Type]] = (),
     amount: int = 0,
     witness: Optional[CScriptWitness] = None,
     consensus_library_hanlde: Optional[ctypes.CDLL] = None

@@ -18,7 +18,13 @@
 import binascii
 import bitcointx.core
 
+from typing import TypeVar, Type, List, cast
+
 B58_DIGITS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+
+T_CBase58Data = TypeVar('T_CBase58Data', bound='CBase58Data')
+T_unbounded = TypeVar('T_unbounded')
 
 
 class Base58Error(bitcointx.core.AddressDataEncodingError):
@@ -26,7 +32,7 @@ class Base58Error(bitcointx.core.AddressDataEncodingError):
 
 
 class UnexpectedBase58PrefixError(Base58Error):
-    """Raised by base58_match_prefix() when unexpected prefix encountered
+    """Raised by base58_from_bytes_match_prefix() when unexpected prefix encountered
 
     """
     pass
@@ -109,7 +115,7 @@ class CBase58Data(bytes):
 
     base58_prefix = b''
 
-    def __new__(cls, s) -> 'CBase58Data':
+    def __new__(cls: Type[T_CBase58Data], s: str) -> T_CBase58Data:
         k = decode(s)
         if len(k) < 4:
             raise Base58Error('data too short')
@@ -117,9 +123,9 @@ class CBase58Data(bytes):
         check1 = bitcointx.core.Hash(data)[:4]
         if check0 != check1:
             raise Base58ChecksumError('Checksum mismatch: expected %r, calculated %r' % (check0, check1))
-        return cls.base58_match_prefix(data)
+        return cls.base58_from_bytes_match_prefix(data)
 
-    def __init__(self, s):
+    def __init__(self, s: str) -> None:
         """Initialize from base58-encoded string
 
         Note: subclasses put your initialization routines here, but ignore the
@@ -133,13 +139,15 @@ class CBase58Data(bytes):
         return encode(self.base58_prefix + self + check)
 
     @classmethod
-    def base58_get_match_candidates(cls):
+    def base58_get_match_candidates(cls: Type[T_CBase58Data]
+                                    ) -> List[Type[T_CBase58Data]]:
         if cls.base58_prefix:
             return [cls]
         return []
 
     @classmethod
-    def base58_match_prefix(cls, data):
+    def base58_from_bytes_match_prefix(cls: Type[T_CBase58Data], data: bytes
+                                       ) -> T_CBase58Data:
         """Instantiate from data with prefix.
         if prefix is empty, this is equivalent of from_bytes()"""
         candidates = cls.base58_get_match_candidates()
@@ -150,7 +158,7 @@ class CBase58Data(bytes):
             pfx = candidate.base58_prefix
             if not pfx:
                 try:
-                    return candidate.base58_match_prefix(data)
+                    return candidate.base58_from_bytes_match_prefix(data)
                 except UnexpectedBase58PrefixError:
                     pass
             elif data[:len(pfx)] == pfx:
@@ -167,13 +175,13 @@ class CBase58Data(bytes):
             'base58 prefix does not match any known base58 address class')
 
     @classmethod
-    def from_bytes(cls, data: bytes):
+    def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
         """Instantiate from data"""
         # mypy cannot handle arguments to `bytes.__new__()` at the moment,
         # issue: https://github.com/python/typeshed/issues/2630
         self = bytes.__new__(cls, data)  # type: ignore
         self.__init__(None)
-        return self
+        return cast(T_unbounded, self)
 
     def to_bytes(self) -> bytes:
         """Convert to bytes instance

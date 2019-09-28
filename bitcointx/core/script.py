@@ -22,14 +22,17 @@ import struct
 import hashlib
 from io import BytesIO
 from typing import (
-    List, Tuple, Dict, Union, Iterable, Sequence, Optional, TypeVar, Type, cast
+    List, Tuple, Dict, Union, Iterable, Sequence, Optional, TypeVar, Type,
+    Generator, Any, cast
 )
 
 import bitcointx.core
 import bitcointx.core.key
 import bitcointx.core._bignum
 
-from .serialize import VarIntSerializer, BytesSerializer, ImmutableSerializable
+from .serialize import (
+    VarIntSerializer, BytesSerializer, ImmutableSerializable, ByteStream_Type
+)
 
 from ..util import (
     no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher,
@@ -47,6 +50,7 @@ ScriptElement_Type = Union['CScriptOp', 'bitcointx.core.key.CPubKey',
 
 
 T_CScript = TypeVar('T_CScript', bound='CScript')
+T_CScriptWitness = TypeVar('T_CScriptWitness', bound='CScriptWitness')
 
 
 # By using an int-derived class for SIGVERSION_*
@@ -698,8 +702,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         raise NotImplementedError
 
     def __new__(cls: Type[T_CScript],
-                value: Union[
-                    bytes, Iterable[ScriptElement_Type]] = b''
+                value: Iterable[ScriptElement_Type] = b''
                 ) -> T_CScript:
 
         if isinstance(value, (bytes, bytearray)):
@@ -707,7 +710,8 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             # issue: https://github.com/python/typeshed/issues/2630
             return super().__new__(cls, value)  # type: ignore
         else:
-            def coerce_iterable(iterable):
+            def coerce_iterable(iterable: Iterable[ScriptElement_Type]
+                                ) -> Generator[bytes, None, None]:
                 for instance in iterable:
                     yield cls.__coerce_instance(instance)
 
@@ -719,7 +723,8 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             return super().__new__(  # type: ignore
                 cls, b''.join(coerce_iterable(value)))
 
-    def raw_iter(self):
+    def raw_iter(self) -> Generator[Tuple[CScriptOp, Optional[bytes], int],
+                                    None, None]:
         """Raw iteration
 
         Yields tuples of (opcode, data, sop_idx) so that the different possible
@@ -733,7 +738,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             i += 1
 
             if opcode > OP_PUSHDATA4:
-                yield (opcode, None, sop_idx)
+                yield (CScriptOp(opcode), None, sop_idx)
             else:
                 datasize = None
                 pushdata_type = None
@@ -773,7 +778,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
                 i += datasize
 
-                yield (opcode, data, sop_idx)
+                yield (CScriptOp(opcode), data, sop_idx)
 
     def __iter__(self):
         """'Cooked' iteration
@@ -800,7 +805,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
     def __repr__(self) -> str:
         # For Python3 compatibility add b before strings so testcases don't
         # need to change
-        def _repr(o):
+        def _repr(o: Any) -> str:
             if isinstance(o, (bytes, bytearray)):
                 return "x('%s')" % bitcointx.core.b2x(o)
             else:
@@ -924,7 +929,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         """
         try:
             for (op, data, idx) in self.raw_iter():
-                if op > OP_16:
+                if op > OP_16 or data is None:
                     continue
 
                 elif op < OP_PUSHDATA1 and op > OP_0 and len(data) == 1 and data[0] <= 16:
@@ -1097,15 +1102,17 @@ class CScriptWitness(ImmutableSerializable):
         return len(self.stack) == 0
 
     @classmethod
-    def stream_deserialize(cls, f):
-        n = VarIntSerializer.stream_deserialize(f)
-        stack = tuple(BytesSerializer.stream_deserialize(f) for i in range(n))
+    def stream_deserialize(cls: Type[T_CScriptWitness], f: ByteStream_Type,
+                           **kwargs: Any) -> T_CScriptWitness:
+        n = VarIntSerializer.stream_deserialize(f, **kwargs)
+        stack = tuple(BytesSerializer.stream_deserialize(f, **kwargs)
+                      for i in range(n))
         return cls(stack)
 
-    def stream_serialize(self, f):
-        VarIntSerializer.stream_serialize(len(self.stack), f)
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
+        VarIntSerializer.stream_serialize(len(self.stack), f, **kwargs)
         for s in self.stack:
-            BytesSerializer.stream_serialize(s, f)
+            BytesSerializer.stream_serialize(s, f, **kwargs)
 
 
 def FindAndDelete(script: T_CScript, sig: bytes) -> T_CScript:

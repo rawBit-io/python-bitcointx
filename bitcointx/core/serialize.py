@@ -19,14 +19,26 @@ You probabably don't need to use these directly.
 
 import hashlib
 import struct
-from typing import List, Union, TypeVar, Type, Generic, Any, cast
+from typing import (
+    List, Sequence, Union, TypeVar, Type, Generic, Any, Optional, cast
+)
 from ..util import ensure_isinstance
 
 from io import BytesIO
 
+# Using IOBase here is not possible, because it does not define read(),
+# for example. And RawIOBase and BufferedIOBase are distinct, and thus
+# we will need to use a Union, and this still will not be universal.
+# Better stick with BytesIO for now.
+# Might switch to a Protocol later, but to date there was no need
+# for anything other than BytesIO.
+ByteStream_Type = BytesIO
+
 MAX_SIZE = 0x02000000
 
 T_unbounded = TypeVar('T_unbounded')
+T_ImmutableSerializable = TypeVar('T_ImmutableSerializable',
+                                  bound='ImmutableSerializable')
 
 
 def Hash(msg: Union[bytes, bytearray]) -> bytes:
@@ -65,7 +77,7 @@ class DeserializationExtraDataError(SerializationError):
         self.padding = padding
 
 
-def ser_read(f: BytesIO, n: int) -> bytes:
+def ser_read(f: ByteStream_Type, n: int) -> bytes:
     """Read from a stream safely
 
     Raises SerializationError and SerializationTruncationError appropriately.
@@ -88,12 +100,12 @@ class Serializable(object):
 
     __slots__: List[str] = []
 
-    def stream_serialize(self, f: BytesIO, **kwargs: Any) -> None:
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
         """Serialize to a stream"""
         raise NotImplementedError
 
     @classmethod
-    def stream_deserialize(cls: Type[T_Serializable], f: BytesIO,
+    def stream_deserialize(cls: Type[T_Serializable], f: ByteStream_Type,
                            **kwargs: Any) -> T_Serializable:
         """Deserialize from a stream"""
         raise NotImplementedError
@@ -106,7 +118,8 @@ class Serializable(object):
 
     @classmethod
     def deserialize(cls: Type[T_Serializable], buf: Union[bytes, bytearray],
-                    allow_padding: bool = False, **kwargs: Any) -> T_Serializable:
+                    allow_padding: bool = False, **kwargs: Any
+                    ) -> T_Serializable:
         """Deserialize bytes, returning an instance
 
         allow_padding - Allow buf to include extra padding. (default False)
@@ -179,29 +192,33 @@ class Serializer(Generic[T_unbounded]):
         raise NotImplementedError
 
     @classmethod
-    def stream_serialize(cls, obj: T_unbounded, f: BytesIO) -> None:
+    def stream_serialize(cls, obj: T_unbounded, f: ByteStream_Type,
+                         **kwargs: Any) -> None:
         raise NotImplementedError
 
     @classmethod
-    def stream_deserialize(cls, f: BytesIO) -> T_unbounded:
+    def stream_deserialize(cls, f: ByteStream_Type,
+                           **kwargs: Any) -> T_unbounded:
         raise NotImplementedError
 
     @classmethod
-    def serialize(cls, obj: T_unbounded) -> bytes:
+    def serialize(cls, obj: T_unbounded, **kwargs: Any) -> bytes:
         f = BytesIO()
-        cls.stream_serialize(obj, f)
+        cls.stream_serialize(obj, f, **kwargs)
         return f.getvalue()
 
     @classmethod
-    def deserialize(cls, buf: bytes) -> T_unbounded:
+    def deserialize(cls, buf: bytes, **kwargs: Any) -> T_unbounded:
         ensure_isinstance(buf, (bytes, bytearray), 'data to deserialize')
-        return cls.stream_deserialize(BytesIO(buf))
+        return cls.stream_deserialize(BytesIO(buf), **kwargs)
 
 
 class VarIntSerializer(Serializer[int]):
     """Serialization of variable length ints"""
     @classmethod
-    def stream_serialize(cls, i, f):
+    def stream_serialize(cls, obj: int, f: ByteStream_Type,
+                         **kwargs: Any) -> None:
+        i = obj
         if i < 0:
             raise ValueError('varint must be non-negative integer')
         elif i < 0xfd:
@@ -217,91 +234,103 @@ class VarIntSerializer(Serializer[int]):
             f.write(struct.pack(b'<Q', i))
 
     @classmethod
-    def stream_deserialize(cls, f):
+    def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any) -> int:
         r = ser_read(f, 1)[0]
         if r < 0xfd:
             return r
         elif r == 0xfd:
-            return struct.unpack(b'<H', ser_read(f, 2))[0]
+            return int(struct.unpack(b'<H', ser_read(f, 2))[0])
         elif r == 0xfe:
-            return struct.unpack(b'<I', ser_read(f, 4))[0]
+            return int(struct.unpack(b'<I', ser_read(f, 4))[0])
         else:
-            return struct.unpack(b'<Q', ser_read(f, 8))[0]
+            return int(struct.unpack(b'<Q', ser_read(f, 8))[0])
 
 
 class BytesSerializer(Serializer[bytes]):
     """Serialization of bytes instances"""
     @classmethod
-    def stream_serialize(cls, b, f):
-        VarIntSerializer.stream_serialize(len(b), f)
-        f.write(b)
+    def stream_serialize(cls, obj: bytes, f: ByteStream_Type,
+                         **kwargs: Any) -> None:
+        VarIntSerializer.stream_serialize(len(obj), f, **kwargs)
+        f.write(obj)
 
     @classmethod
-    def stream_deserialize(cls, f):
-        datalen = VarIntSerializer.stream_deserialize(f)
+    def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any) -> bytes:
+        datalen = VarIntSerializer.stream_deserialize(f, **kwargs)
         return ser_read(f, datalen)
 
 
-class VectorSerializer(Serializer[List[Serializable]]):
+class VectorSerializer(Serializer[Sequence[Serializable]]):
     """Base class for serializers of object vectors"""
 
     @classmethod
-    def stream_serialize(cls, objs, f, **kwargs):
-        VarIntSerializer.stream_serialize(len(objs), f)
-        if not len(objs):
+    def stream_serialize(cls, obj: Sequence[Serializable],
+                         f: ByteStream_Type, **kwargs: Any) -> None:
+        obj_seq = obj
+        VarIntSerializer.stream_serialize(len(obj_seq), f, **kwargs)
+        if not len(obj_seq):
             return
-        inner_cls = type(objs[0])
-        for obj in objs:
-            if type(obj) is not inner_cls:
+        inner_cls = type(obj_seq[0])
+        for inst in obj_seq:
+            if type(inst) is not inner_cls:
                 raise ValueError(
                     'supplied objects are of different types, '
                     'first object is of type {}, but there is also an object '
-                    'of type {}'.format(inner_cls.__name__, type(obj).__name__))
-            inner_cls.stream_serialize(obj, f, **kwargs)
+                    'of type {}'.format(inner_cls.__name__, type(inst).__name__))
+            inner_cls.stream_serialize(inst, f, **kwargs)
 
     @classmethod
-    def stream_deserialize(cls, f, element_class, **kwargs):
+    def stream_deserialize(
+        cls, f: ByteStream_Type,
+        element_class: Optional[Type[T_Serializable]] = None,
+        **kwargs: Any
+    ) -> Sequence[T_Serializable]:
         if element_class is None:
             raise ValueError(
                 "The class of the elements in the vector must be supplied")
-        n = VarIntSerializer.stream_deserialize(f)
+        n = VarIntSerializer.stream_deserialize(f, **kwargs)
         r = []
         for i in range(n):
             r.append(element_class.stream_deserialize(f, **kwargs))
         return r
 
 
-class uint256VectorSerializer(Serializer[bytes]):
+class uint256VectorSerializer(Serializer[Sequence[bytes]]):
     """Serialize vectors of uint256"""
     @classmethod
-    def stream_serialize(cls, uints, f):
-        VarIntSerializer.stream_serialize(len(uints), f)
+    def stream_serialize(cls, obj: Sequence[bytes], f: ByteStream_Type,
+                         **kwargs: Any) -> None:
+        uints = obj
+        VarIntSerializer.stream_serialize(len(uints), f, **kwargs)
         for uint in uints:
             if len(uint) != 32:
                 raise ValueError('elements must be 32 bytes in length each')
             f.write(uint)
 
     @classmethod
-    def stream_deserialize(cls, f):
-        n = VarIntSerializer.stream_deserialize(f)
+    def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any
+                           ) -> List[bytes]:
+        n = VarIntSerializer.stream_deserialize(f, **kwargs)
         r = []
         for i in range(n):
             r.append(ser_read(f, 32))
         return r
 
 
-class intVectorSerializer(Serializer[List[int]]):
+class intVectorSerializer(Serializer[Sequence[int]]):
 
     @classmethod
-    def stream_serialize(cls, ints, f):
+    def stream_serialize(cls, obj: Sequence[int], f: ByteStream_Type,
+                         **kwargs: Any) -> None:
+        ints = obj
         datalen = len(ints)
-        VarIntSerializer.stream_serialize(datalen, f)
+        VarIntSerializer.stream_serialize(datalen, f, **kwargs)
         for i in ints:
             f.write(struct.pack(b"<i", i))
 
     @classmethod
-    def stream_deserialize(cls, f):
-        datalen = VarIntSerializer.stream_deserialize(f)
+    def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any) -> List[int]:
+        datalen = VarIntSerializer.stream_deserialize(f, **kwargs)
         ints = []
         for i in range(datalen):
             ints.append(struct.unpack(b"<i", ser_read(f, 4))[0])
@@ -311,14 +340,16 @@ class intVectorSerializer(Serializer[List[int]]):
 class VarBytesSerializer(Serializer[bytes]):
     """Serialize variable length byte strings"""
     @classmethod
-    def stream_serialize(cls, s, f):
-        datalen = len(s)
-        VarIntSerializer.stream_serialize(datalen, f)
-        f.write(s)
+    def stream_serialize(cls, obj: bytes, f: ByteStream_Type,
+                         **kwargs: Any) -> None:
+        b = obj
+        datalen = len(b)
+        VarIntSerializer.stream_serialize(datalen, f, **kwargs)
+        f.write(b)
 
     @classmethod
-    def stream_deserialize(cls, f):
-        datalen = VarIntSerializer.stream_deserialize(f)
+    def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any) -> bytes:
+        datalen = VarIntSerializer.stream_deserialize(f, **kwargs)
         return ser_read(f, datalen)
 
 
@@ -343,17 +374,18 @@ def uint256_to_shortstr(u: int) -> str:
     return s[:16]
 
 
-def make_mutable(cls):
+def make_mutable(cls: Type[T_ImmutableSerializable]
+                 ) -> Type[T_ImmutableSerializable]:
     if not issubclass(cls, ImmutableSerializable):
         raise TypeError("make_mutable can only be applied to subclasses "
                         "of ImmutableSerializable")
     # For speed we use a class decorator that removes the immutable
     # restrictions directly. In addition the modified behavior of GetHash() and
     # hash() is undone.
-    cls.__setattr__ = object.__setattr__
-    cls.__delattr__ = object.__delattr__
-    cls.GetHash = Serializable.GetHash
-    cls.__hash__ = Serializable.__hash__
+    cls.__setattr__ = object.__setattr__  # type: ignore
+    cls.__delattr__ = object.__delattr__  # type: ignore
+    cls.GetHash = Serializable.GetHash    # type: ignore
+    cls.__hash__ = Serializable.__hash__  # type: ignore
     return cls
 
 

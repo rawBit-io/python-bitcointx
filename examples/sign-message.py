@@ -12,12 +12,14 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import argparse
+
 from bitcointx import select_chain_params
 from bitcointx.wallet import CCoinKey, P2PKHCoinAddress
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
 
 
-def sign_message(key, msg):
+def sign_message(key: str, msg: str) -> bytes:
     secret = CCoinKey(key)
     message = BitcoinMessage(msg)
     return SignMessage(secret, message)
@@ -40,8 +42,7 @@ def print_verbose(signature, key, msg):
           % (address, signature.decode('ascii'), msg))
 
 
-def parser():
-    import argparse
+def parser() -> 'argparse.ArgumentParser':
     parser = argparse.ArgumentParser(
         description='Sign a message with a private key.',
         epilog=('Security warning: arguments may be visible to other users '

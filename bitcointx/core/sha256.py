@@ -23,44 +23,45 @@ import struct
 from typing import Union, List, TypeVar
 
 
-def Ch(x, y, z):
+def Ch(x: int, y: int, z: int) -> int:
     return z ^ (x & (y ^ z))
 
 
-def Maj(x, y, z):
+def Maj(x: int, y: int, z: int) -> int:
     return (x & y) | (z & (x | y))
 
 
-def Sigma0(x):
+def Sigma0(x: int) -> int:
     return (x >> 2 | x << 30) ^ (x >> 13 | x << 19) ^ (x >> 22 | x << 10)
 
 
-def Sigma1(x):
+def Sigma1(x: int) -> int:
     return (x >> 6 | x << 26) ^ (x >> 11 | x << 21) ^ (x >> 25 | x << 7)
 
 
-def sigma0(x):
+def sigma0(x: int) -> int:
     return (x >> 7 | x << 25) ^ (x >> 18 | x << 14) ^ (x >> 3)
 
 
-def sigma1(x):
+def sigma1(x: int) -> int:
     return (x >> 17 | x << 15) ^ (x >> 19 | x << 13) ^ (x >> 10)
 
 
-def uint32(x):
+def uint32(x: int) -> int:
     return x & 0xFFFFFFFF
 
 
 # One round of SHA-256.
-def Round(a, b, c, d, e, f, g, h, k, w, x):
+def Round(a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int,
+          k: int, w: int, x: List[int]) -> None:
     t1 = uint32(x[h] + Sigma1(x[e]) + Ch(x[e], x[f], x[g]) + k + w)
     t2 = uint32(Sigma0(x[a]) + Maj(x[a], x[b], x[c]))
     x[d] = uint32(x[d] + t1)
     x[h] = uint32(t1 + t2)
 
 
-def ReadBE32(buf):
-    return struct.unpack(b">I", buf[:4])[0]
+def ReadBE32(buf: bytes) -> int:
+    return int(struct.unpack(b">I", buf[:4])[0])
 
 
 T_CSHA256 = TypeVar('T_CSHA256', bound='CSHA256')
@@ -266,7 +267,7 @@ class CSHA256():
     def Midstate(self) -> bytes:
         s = self.s
 
-        def ToBE32(x):
+        def ToBE32(x: int) -> bytes:
             return struct.pack(b">I", x)
 
         hash_chunks = []

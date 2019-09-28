@@ -24,7 +24,7 @@ import struct
 import ctypes
 import ctypes.util
 import hashlib
-from typing import TypeVar, Type, Union, Sequence, Tuple, Optional
+from typing import TypeVar, Type, Union, Tuple, List, Sequence, Optional, cast
 
 import bitcointx.core
 from bitcointx.util import no_bool_use_as_property, ensure_isinstance
@@ -43,6 +43,7 @@ T_CKeyBase = TypeVar('T_CKeyBase', bound='CKeyBase')
 T_CExtKeyCommonBase = TypeVar('T_CExtKeyCommonBase', bound='CExtKeyCommonBase')
 T_CExtKeyBase = TypeVar('T_CExtKeyBase', bound='CExtKeyBase')
 T_CExtPubKeyBase = TypeVar('T_CExtPubKeyBase', bound='CExtPubKeyBase')
+T_unbounded = TypeVar('T_unbounded')
 
 try:
     _ssl: Optional[ctypes.CDLL] = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
@@ -114,7 +115,7 @@ class CKeyBase:
 
     pub: 'CPubKey'
 
-    def __init__(self, s, compressed=True):
+    def __init__(self, b: Optional[bytes], compressed: bool = True) -> None:
         raw_pubkey = ctypes.create_string_buffer(64)
 
         if len(self.secret_bytes) != 32:
@@ -134,7 +135,7 @@ class CKeyBase:
             assert result == 0
             raise ValueError('Cannot construct public key from private key')
 
-        self.pub = CPubKey._from_raw(raw_pubkey, compressed=compressed)
+        self.pub = CPubKey._from_raw(raw_pubkey.raw, compressed=compressed)
 
     @no_bool_use_as_property
     def is_compressed(self) -> bool:
@@ -145,7 +146,7 @@ class CKeyBase:
         assert isinstance(self, bytes)
         return self[:32]
 
-    def sign(self, hash) -> bytes:
+    def sign(self, hash: Union[bytes, bytearray]) -> bytes:
         ensure_isinstance(hash, (bytes, bytearray), 'hash')
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
@@ -168,7 +169,7 @@ class CKeyBase:
         # conversion needed.
         return mb_sig.raw[:sig_size0.value]
 
-    def sign_compact(self, hash) -> Tuple[bytes, int]: # pylint: disable=redefined-builtin
+    def sign_compact(self, hash: Union[bytes, bytearray]) -> Tuple[bytes, int]: # pylint: disable=redefined-builtin
         ensure_isinstance(hash, (bytes, bytearray), 'hash')
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
@@ -196,15 +197,15 @@ class CKeyBase:
             assert(result == 0)
             raise RuntimeError('secp256k1_ecdsa_recoverable_signature_serialize_compact returned failure')
 
-        return bytes(output), recid.value
+        return output.raw, recid.value
 
-    def verify(self, hash, sig) -> bool:
+    def verify(self, hash: bytes, sig: bytes) -> bool:
         return self.pub.verify(hash, sig)
 
-    def verify_nonstrict(self, hash, sig) -> bool:
+    def verify_nonstrict(self, hash: bytes, sig: bytes) -> bool:
         return self.pub.verify_nonstrict(hash, sig)
 
-    def ECDH(self, pub=None) -> bytes:
+    def ECDH(self, pub: Optional['CPubKey'] = None) -> bytes:
         if not secp256k1_has_ecdh:
             raise RuntimeError(
                 'secp256k1 compiled without ECDH shared secret computation functions. '
@@ -222,10 +223,11 @@ class CKeyBase:
         if 1 != ret:
             assert(ret == 0)
             raise RuntimeError('secp256k1_ecdh returned failure')
-        return bytes(result_data)
+        return result_data.raw
 
     @classmethod
-    def combine(cls: Type[T_CKeyBase], *privkeys, compressed=True) -> T_CKeyBase:
+    def combine(cls: Type[T_CKeyBase], *privkeys: T_CKeyBase,
+                compressed: bool = True) -> T_CKeyBase:
         if len(privkeys) <= 1:
             raise ValueError(
                 'number of privkeys to combine must be more than one')
@@ -233,7 +235,7 @@ class CKeyBase:
             raise ValueError(
                 'each supplied privkey must be an instance of CKeyBase')
 
-        result_data = ctypes.create_string_buffer(privkeys[0].secret_bytes)
+        result_data = ctypes.create_string_buffer((privkeys[0]).secret_bytes)
         for p in privkeys[1:]:
             ret = _secp256k1.secp256k1_ec_privkey_tweak_add(
                 secp256k1_context_sign, result_data, p.secret_bytes)
@@ -243,14 +245,14 @@ class CKeyBase:
         return cls.from_secret_bytes(result_data.raw[:32], compressed=compressed)
 
     @classmethod
-    def add(cls: Type[T_CKeyBase], a, b) -> T_CKeyBase:
+    def add(cls: Type[T_CKeyBase], a: T_CKeyBase, b: T_CKeyBase) -> T_CKeyBase:
         if a.is_compressed() != b.is_compressed():
             raise ValueError("compressed attributes must match on "
                              "privkey addition/substraction")
         return cls.combine(a, b, compressed=a.is_compressed())
 
     @classmethod
-    def sub(cls: Type[T_CKeyBase], a, b) -> T_CKeyBase:
+    def sub(cls: Type[T_CKeyBase], a: T_CKeyBase, b: T_CKeyBase) -> T_CKeyBase:
         if a == b:
             raise ValueError('Values are equal, result would be zero, and '
                              'thus an invalid key.')
@@ -269,11 +271,12 @@ class CKeyBase:
         return self.__class__.from_secret_bytes(key_buf.raw[:32], compressed=self.is_compressed())
 
     @classmethod
-    def from_secret_bytes(cls, secret: bytes, compressed: bool = True):
+    def from_secret_bytes(cls: Type[T_CKeyBase],
+                          secret: bytes, compressed: bool = True) -> T_CKeyBase:
         return cls(secret, compressed=compressed)
 
     @classmethod
-    def from_bytes(cls: Type[T_CKeyBase], data: bytes) -> T_CKeyBase:
+    def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
         raise NotImplementedError('subclasses must override from_bytes()')
 
 
@@ -283,7 +286,10 @@ class CKey(bytes, CKeyBase):
     def __new__(cls, secret, compressed=True):
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
-        return super().__new__(cls, secret)
+        return super().__new__(cls, secret)  # type: ignore
+
+
+T_CPubKey = TypeVar('T_CPubKey', bound='CPubKey')
 
 
 class CPubKey(bytes):
@@ -303,8 +309,8 @@ class CPubKey(bytes):
     _fullyvalid: bool
     key_id: bytes
 
-    def __new__(cls, buf=b''):
-        self = super().__new__(cls, buf)
+    def __new__(cls: Type[T_CPubKey], buf: bytes = b'') -> T_CPubKey:
+        self = super().__new__(cls, buf)  # type: ignore
 
         self._fullyvalid = False
         if self.is_valid():
@@ -314,11 +320,11 @@ class CPubKey(bytes):
             self._fullyvalid = (result == 1)
 
         self.key_id = bitcointx.core.Hash160(self)
-
-        return self
+        return cast(T_CPubKey, self)
 
     @classmethod
-    def _from_raw(cls, raw_pubkey, compressed=True):
+    def _from_raw(cls: Type[T_CPubKey], raw_pubkey: bytes,
+                  compressed: bool = True) -> T_CPubKey:
         if len(raw_pubkey) != 64:
             raise ValueError('raw pubkey must be 64 bytes')
         pub_size0 = ctypes.c_size_t()
@@ -329,9 +335,9 @@ class CPubKey(bytes):
             secp256k1_context_verify, pub, ctypes.byref(pub_size0), raw_pubkey,
             SECP256K1_EC_COMPRESSED if compressed else SECP256K1_EC_UNCOMPRESSED)
 
-        return CPubKey(bytes(pub)[:pub_size0.value])
+        return cls(pub.raw[:pub_size0.value])
 
-    def _to_raw(self):
+    def _to_raw(self) -> bytes:
         assert self.is_fullyvalid()
         raw_pub = ctypes.create_string_buffer(64)
         result = _secp256k1.secp256k1_ec_pubkey_parse(
@@ -339,10 +345,11 @@ class CPubKey(bytes):
         if 1 != result:
             assert(result == 0)
             raise RuntimeError('secp256k1_ec_pubkey_parse returned failure')
-        return raw_pub
+        return raw_pub.raw
 
     @classmethod
-    def recover_compact(cls, hash, sig) -> Optional['CPubKey']: # pylint: disable=redefined-builtin
+    def recover_compact(cls: Type[T_CPubKey],
+                        hash: bytes, sig: bytes) -> Optional[T_CPubKey]:
         """Recover a public key from a compact signature."""
         if len(sig) != COMPACT_SIGNATURE_SIZE:
             raise ValueError("Signature should be %d characters, not [%d]" % (COMPACT_SIGNATURE_SIZE, len(sig)))
@@ -372,7 +379,7 @@ class CPubKey(bytes):
             assert result == 0
             return None
 
-        return cls._from_raw(raw_pubkey, compressed=compressed)
+        return cls._from_raw(raw_pubkey.raw, compressed=compressed)
 
     @no_bool_use_as_property
     def is_valid(self) -> bool:
@@ -392,7 +399,7 @@ class CPubKey(bytes):
     def __repr__(self):
         return '%s(%s)' % (self.__class__.__name__, super().__repr__())
 
-    def verify(self, hash, sig) -> bool: # pylint: disable=redefined-builtin
+    def verify(self, hash: bytes, sig: bytes) -> bool:
         """Verify a DER signature"""
 
         ensure_isinstance(sig, (bytes, bytearray), 'signature')
@@ -419,9 +426,13 @@ class CPubKey(bytes):
         result = _secp256k1.secp256k1_ecdsa_verify(
             secp256k1_context_verify, raw_sig, hash, raw_pub)
 
-        return result == 1
+        if result != 1:
+            assert result == 0
+            return False
 
-    def verify_nonstrict(self, hash, sig) -> bool: # pylint: disable=redefined-builtin
+        return True
+
+    def verify_nonstrict(self, hash: bytes, sig: bytes) -> bool:
         """Verify a non-strict DER signature"""
 
         if not _ssl:
@@ -469,7 +480,8 @@ class CPubKey(bytes):
         return self.verify(hash, norm_der.raw)
 
     @classmethod
-    def combine(cls, *pubkeys, compressed=True) -> 'CPubKey':
+    def combine(cls: Type[T_CPubKey], *pubkeys: T_CPubKey,
+                compressed: bool = True) -> T_CPubKey:
         if len(pubkeys) <= 1:
             raise ValueError(
                 'number of pubkeys to combine must be more than one')
@@ -488,9 +500,9 @@ class CPubKey(bytes):
             assert ret == 0
             raise ValueError('Combining the public keys failed')
 
-        return cls._from_raw(result_data, compressed=compressed)
+        return cls._from_raw(result_data.raw, compressed=compressed)
 
-    def negated(self) -> 'CPubKey':
+    def negated(self: T_CPubKey) -> T_CPubKey:
         if not secp256k1_has_pubkey_negate:
             raise RuntimeError(
                 'secp256k1 does not export pubkey negation function. '
@@ -503,7 +515,7 @@ class CPubKey(bytes):
         return self.__class__._from_raw(pubkey_buf, compressed=self.is_compressed())
 
     @classmethod
-    def add(cls, a, b) -> 'CPubKey':
+    def add(cls: Type[T_CPubKey], a: T_CPubKey, b: T_CPubKey) -> T_CPubKey:
         if a.is_compressed() != b.is_compressed():
             raise ValueError(
                 "compressed attributes must match on pubkey "
@@ -511,7 +523,7 @@ class CPubKey(bytes):
         return cls.combine(a, b, compressed=a.is_compressed())
 
     @classmethod
-    def sub(cls, a, b) -> 'CPubKey':
+    def sub(cls: Type[T_CPubKey], a: T_CPubKey, b: T_CPubKey) -> T_CPubKey:
         if a == b:
             raise ValueError('Values are equal, result would be zero, and '
                              'thus an invalid public key.')
@@ -520,7 +532,8 @@ class CPubKey(bytes):
 
 class CExtKeyCommonBase:
 
-    def _check_length(self):
+    def _check_length(self) -> None:
+        assert isinstance(self, bytes)
         if len(self) != 74:
             raise ValueError('Invalid length for extended key')
 
@@ -536,7 +549,7 @@ class CExtKeyCommonBase:
 
     @property
     def child_number(self) -> int:
-        return struct.unpack(">L", self.child_number_bytes)[0]
+        return int(struct.unpack(">L", self.child_number_bytes)[0])
 
     @property
     def child_number_bytes(self) -> bytes:
@@ -553,7 +566,8 @@ class CExtKeyCommonBase:
         assert isinstance(self, bytes)
         return self[41:74]
 
-    def derive_path(self: T_CExtKeyCommonBase, path) -> T_CExtKeyCommonBase:
+    def derive_path(self: T_CExtKeyCommonBase,
+                    path: Union[str, 'BIP32Path']) -> T_CExtKeyCommonBase:
         """Derive the key using the bip32 derivation path."""
 
         if not isinstance(path, BIP32Path):
@@ -579,8 +593,7 @@ class CExtKeyCommonBase:
         raise NotImplementedError('subclasses must override derive()')
 
     @classmethod
-    def from_bytes(cls: Type[T_CExtKeyCommonBase], data: bytes
-                   ) -> T_CExtKeyCommonBase:
+    def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
         raise NotImplementedError('subclasses must override from_bytes()')
 
 
@@ -593,6 +606,8 @@ class CExtKeyBase(CExtKeyCommonBase):
     pub           - shortcut property for priv.pub
     """
 
+    priv: 'CKeyBase'
+
     @property
     def _key_class(self) -> Type['CKeyBase']:
         raise NotImplementedError
@@ -601,7 +616,7 @@ class CExtKeyBase(CExtKeyCommonBase):
     def _xpub_class(self) -> Type['CExtPubKeyBase']:
         raise NotImplementedError
 
-    def __init__(self, _s):
+    def __init__(self, _b: Optional[bytes]) -> None:
 
         self._check_length()
 
@@ -632,7 +647,7 @@ class CExtKeyBase(CExtKeyCommonBase):
         chaincode = hmac_hash[32:]
         return cls.from_bytes(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + privkey)
 
-    def derive(self: T_CExtKeyBase, child_number) -> T_CExtKeyBase:
+    def derive(self: T_CExtKeyBase, child_number: int) -> T_CExtKeyBase:
         if self.depth >= 255:
             raise ValueError('Maximum derivation path length is reached')
 
@@ -664,7 +679,9 @@ class CExtKeyBase(CExtKeyCommonBase):
 
         parent_fp = self.pub.key_id[:4]
         cls = self.__class__
-        return cls.from_bytes(bytes([depth]) + parent_fp + child_number_packed + chaincode + bytes([0]) + child_privkey.raw)
+        return cls.from_bytes(bytes([depth]) + parent_fp
+                              + child_number_packed + chaincode
+                              + bytes([0]) + child_privkey.raw)
 
     def neuter(self) -> 'CExtPubKeyBase':
         return self._xpub_class.from_bytes(
@@ -680,7 +697,7 @@ class CExtPubKeyBase(CExtKeyCommonBase):
 
     """
 
-    def __init__(self, _s):
+    def __init__(self, _b: Optional[bytes]) -> None:
 
         self._check_length()
 
@@ -688,7 +705,7 @@ class CExtPubKeyBase(CExtKeyCommonBase):
         if not self.pub.is_fullyvalid():
             raise ValueError('pubkey part of xpubkey is not valid')
 
-    def derive(self: T_CExtPubKeyBase, child_number) -> T_CExtPubKeyBase:
+    def derive(self: T_CExtPubKeyBase, child_number: int) -> T_CExtPubKeyBase:
         if (child_number >> 31) != 0:
             if (child_number >> 32) != 0:
                 raise ValueError('Child number is too big')
@@ -730,7 +747,9 @@ class CExtPubKeyBase(CExtKeyCommonBase):
 
         parent_fp = self.pub.key_id[:4]
         cls = self.__class__
-        return cls.from_bytes(bytes([depth]) + parent_fp + child_number_packed + chaincode + child_pubkey)
+        return cls.from_bytes(bytes([depth]) + parent_fp
+                              + child_number_packed + chaincode
+                              + child_pubkey.raw)
 
 
 T_CExtPubKey = TypeVar('T_CExtPubKey', bound='CExtPubKey')
@@ -740,8 +759,12 @@ class CExtPubKey(bytes, CExtPubKeyBase):
     "Standalone extended pubkey class"
 
     @classmethod
-    def from_bytes(cls: Type[T_CExtPubKey], data: bytes) -> T_CExtPubKey:
-        return cls(data)
+    def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
+        # We cannot annotate cls with a bounded type here, because
+        # there would be conflicts with CBase58Data, etc.
+        # But with unbounded type, mypy cannot know if the classs
+        # creation can have arguments.
+        return cls(data)  # type: ignore
 
 
 T_CExtKey = TypeVar('T_CExtKey', bound='CExtKey')
@@ -751,8 +774,12 @@ class CExtKey(bytes, CExtKeyBase):
     "Standalone extended key class"
 
     @classmethod
-    def from_bytes(cls: Type[T_CExtKey], data: bytes) -> T_CExtKey:
-        return cls(data)
+    def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
+        # We cannot annotate cls with a bounded type here, because
+        # there would be conflicts with CBase58Data, etc.
+        # But with unbounded type, mypy cannot know if the classs
+        # creation can have arguments.
+        return cls(data)  # type: ignore
 
     @property
     def _key_class(self) -> Type[CKey]:
@@ -768,6 +795,9 @@ class BIP32Path:
     HARDENED_MARKERS = ("'", "h")
 
     __slots__ = ['_indexlist', '_hardened_marker']
+
+    _indexlist: Tuple[int, ...]
+    _hardened_marker: str
 
     def __init__(self, path: Union[str, 'BIP32Path', Sequence[int]],
                  hardened_marker: Optional[str] = None):
@@ -801,8 +831,8 @@ class BIP32Path:
         if hardened_marker is None:
             hardened_marker = self.__class__.HARDENED_MARKERS[0]
 
-        self._indexlist: Tuple[int, ...] = tuple(indexlist)
-        self._hardened_marker: str = hardened_marker
+        self._indexlist = tuple(indexlist)
+        self._hardened_marker = hardened_marker
 
     def __str__(self):
         if len(self._indexlist) == 0:
@@ -817,13 +847,14 @@ class BIP32Path:
     def __len__(self) -> int:
         return len(self._indexlist)
 
-    def __getitem__(self, key) -> int:
+    def __getitem__(self, key: int) -> int:
         return self._indexlist[key]
 
     def __iter__(self):
         return (n for n in self._indexlist)
 
-    def _check_bip32_index_bounds(self, n: int, allow_hardened: bool = False):
+    def _check_bip32_index_bounds(self, n: int, allow_hardened: bool = False
+                                  ) -> None:
         if n < 0:
             raise ValueError('derivation index cannot be negative')
 
@@ -833,8 +864,10 @@ class BIP32Path:
             raise ValueError(
                 'derivation index cannot be > {}' .format(limit))
 
-    def _parse_string(self, path: str, hardened_marker: Optional[str] = None):
-        """Parse bip32 derivation path. returns list of indexes.
+    def _parse_string(self, path: str, hardened_marker: Optional[str] = None
+                      ) -> Tuple[List[int], Optional[str]]:
+        """Parse bip32 derivation path.
+        returns a tuple (list_of_indexes, actual_hardened_marker).
         hardened indexes will have BIP32_HARDENED_KEY_OFFSET added to them."""
 
         assert isinstance(path, str)

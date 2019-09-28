@@ -13,20 +13,20 @@
 #
 # Internally used for script evaluation; not to be used externally.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import struct
+from typing import Optional
 
 
 # generic big endian MPI format
 
-def bn_bytes(v, have_ext=False):
+def bn_bytes(v: int, have_ext: bool = False) -> int:
     ext = 0
     if have_ext:
         ext = 1
     return ((v.bit_length() + 7) // 8) + ext
 
-def bn2bin(v):
+
+def bn2bin(v: int) -> bytearray:
     s = bytearray()
     i = bn_bytes(v)
     while i > 0:
@@ -34,13 +34,15 @@ def bn2bin(v):
         i -= 1
     return s
 
-def bin2bn(s):
-    l = 0
-    for ch in s:
-        l = (l << 8) | ch
-    return l
 
-def bn2mpi(v):
+def bin2bn(s: bytearray) -> int:
+    res = 0
+    for ch in s:
+        res = (res << 8) | ch
+    return res
+
+
+def bn2mpi(v: int) -> bytes:
     have_ext = False
     if v.bit_length() > 0:
         have_ext = (v.bit_length() & 0x07) == 0
@@ -62,7 +64,8 @@ def bn2mpi(v):
             v_bin[0] |= 0x80
     return s + ext + v_bin
 
-def mpi2bn(s):
+
+def mpi2bn(s: bytes) -> Optional[int]:
     if len(s) < 4:
         return None
     s_size = bytes(s[:4])
@@ -86,20 +89,23 @@ def mpi2bn(s):
         return -v
     return v
 
+
 # bitcoin-specific little endian format, with implicit size
-def mpi2vch(s):
+def mpi2vch(s: bytes) -> bytes:
     r = s[4:]           # strip size
     r = r[::-1]         # reverse string, converting BE->LE
     return r
 
-def bn2vch(v):
+
+def bn2vch(v: int) -> bytes:
     return bytes(mpi2vch(bn2mpi(v)))
 
-def vch2mpi(s):
+
+def vch2mpi(s: bytes) -> bytes:
     r = struct.pack(b">I", len(s))   # size
     r += s[::-1]            # reverse string, converting LE->BE
     return r
 
-def vch2bn(s):
-    return mpi2bn(vch2mpi(s))
 
+def vch2bn(s: bytes) -> Optional[int]:
+    return mpi2bn(vch2mpi(s))

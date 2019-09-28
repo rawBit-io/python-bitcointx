@@ -17,7 +17,7 @@ import threading
 from abc import ABCMeta
 from contextlib import contextmanager
 from collections import OrderedDict
-from typing import Dict, List, Tuple, Optional, Type
+from typing import Dict, List, Tuple, Union, Optional, Type, Any, cast
 
 import bitcointx.core
 import bitcointx.core.script
@@ -30,6 +30,7 @@ import bitcointx.util
 __version__ = '1.0.2.dev0'
 
 _thread_local = threading.local()
+_thread_local.params = None
 
 
 class ChainParamsMeta(ABCMeta):
@@ -48,7 +49,8 @@ class ChainParamsMeta(ABCMeta):
         if `name=` parameter is specified in the class declaration,
         set NAME attribute on a class, and register that class in
         a table for lookup by name."""
-        cls_instance = super().__new__(cls, cls_name, bases, dct)
+        cls_instance = cast('ChainParamsBase',
+                            super().__new__(cls, cls_name, bases, dct))
 
         if len(bases):
             if not any(issubclass(b, cls._common_base_cls) for b in bases):
@@ -70,8 +72,7 @@ class ChainParamsMeta(ABCMeta):
                     cls_instance.NAME = name
                     names = [name]
                 elif isinstance(name, (list, tuple)):
-                    names = name
-                    cls_instance.NAME = names[0]
+                    names = cast(List[str], list(name))
                 else:
                     raise TypeError(
                         'name argument must be string, list, or tuple')
@@ -94,7 +95,7 @@ class ChainParamsMeta(ABCMeta):
         return cls_instance
 
 
-def find_chain_params(*, name=None) -> Optional['ChainParamsBase']:
+def find_chain_params(*, name: str) -> Optional['ChainParamsBase']:
     return ChainParamsMeta._registered_classes.get(name)
 
 
@@ -113,6 +114,9 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
     NAME: str
     RPC_PORT: int
     WALLET_DISPATCHER: Type[bitcointx.wallet.WalletCoinClassDispatcher]
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__()
 
     def get_confdir_path(self) -> str:
         """Return default location for config directory"""
@@ -177,7 +181,7 @@ class BitcoinSignetParams(BitcoinMainnetParams, name='bitcoin/signet'):
 
 
 def get_current_chain_params() -> ChainParamsBase:
-    return _thread_local.params
+    return cast(ChainParamsBase, _thread_local.params)
 
 
 @contextmanager
@@ -191,13 +195,17 @@ def ChainParams(params, **kwargs):
         select_chain_params(prev)
 
 
-PrevAndNewParams = Tuple[Optional[ChainParamsBase], ChainParamsBase]
-
-
-def select_chain_params(params, **kwargs) -> PrevAndNewParams:
+def select_chain_params(params: Union[str, ChainParamsBase,
+                                      Type[ChainParamsBase]],
+                        **kwargs: Any
+                        ) -> Tuple[ChainParamsBase, ChainParamsBase]:
     """Select the chain parameters to use
 
-    name is one of 'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'
+    if params is a string, then it is expected to be a name of
+    is one of of the registered chain params, such as
+        'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'
+
+    params can be an instance of ChainParamsBase.
 
     Default chain is 'bitcoin'.
 
@@ -212,17 +220,24 @@ def select_chain_params(params, **kwargs) -> PrevAndNewParams:
         assert isinstance(params_cls, type)
         params = params_cls(**kwargs)
     elif isinstance(params, type):
+        if not issubclass(params, ChainParamsBase):
+            raise TypeError(
+                'supplied class is not a subclass of ChainParamsBase')
         params = params(**kwargs)
+    elif isinstance(params, ChainParamsBase):
+        if len(kwargs):
+            raise ValueError(
+                'if an instance of ChainParamsBase is supplied, keyword '
+                'arguments are not accepted (kwargs only make sense for '
+                'instance creation, and we already have existing instance)')
+    else:
+        raise ValueError('Supplied chain params is not a string, not a '
+                         'subclass of, nor an instance of ChainParamsBase')
 
-    if not isinstance(params, ChainParamsBase):
-        raise ValueError('Supplied chain params is not a subclass of '
-                         'ChainParamsBase')
-
-    prev_params = None
-    if hasattr(_thread_local, 'params'):
-        prev_params = _thread_local.params
-
+    # the params are expected to be initialized
+    prev_params = _thread_local.params
     _thread_local.params = params
+
     bitcointx.util.activate_class_dispatcher(params.WALLET_DISPATCHER)
 
     return prev_params, params

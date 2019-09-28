@@ -32,6 +32,8 @@ from bitcointx.wallet import CCoinAddress
 from bitcointx.core.script import CScript
 from bitcointx.rpc import RPCCaller
 
+from typing import Dict, Tuple
+
 from time import time
 
 # bitcointx.select_chain_params('bitcoin/regtest')
@@ -42,7 +44,7 @@ req_url_path = 'payment_request'
 ack_url_path = 'payment_ack'
 
 
-def payment_request():
+def payment_request() -> Tuple[str, Dict[str, str]]:
     """Generates a http PaymentRequest object"""
 
     bc = RPCCaller(allow_default_conf=True)
@@ -76,7 +78,8 @@ def payment_request():
     return sds_pr, headers
 
 
-def payment_ack(serialized_payment_message):
+def payment_ack(serialized_payment_message: bytes,
+                ) -> Tuple[str, Dict[str, str], CCoinAddress]:
     """Generates a PaymentACK object, captures client refund address
     and returns a tuple (message, refund_address)"""
 

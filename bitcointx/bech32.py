@@ -11,9 +11,15 @@
 
 """Bech32 encoding and decoding"""
 
-from bitcointx.segwit_addr import encode, decode
+from typing import TypeVar, Type, List, Optional, cast
+
 import bitcointx
 import bitcointx.core
+from bitcointx.segwit_addr import encode, decode
+
+
+T_CBech32Data = TypeVar('T_CBech32Data', bound='CBech32Data')
+T_unbounded = TypeVar('T_unbounded')
 
 
 class Bech32Error(bitcointx.core.AddressDataEncodingError):
@@ -40,7 +46,7 @@ class CBech32Data(bytes):
     bech32_witness_version: int = -1
     _data_length: int
 
-    def __new__(cls, s: str):
+    def __new__(cls: Type[T_CBech32Data], s: str) -> T_CBech32Data:
         """from bech32 addr to """
         if cls.bech32_hrp is None:
             raise TypeError(
@@ -52,7 +58,7 @@ class CBech32Data(bytes):
 
         return cls.bech32_match_progam_and_version(data, witver)
 
-    def __init__(self, s):
+    def __init__(self, s: str) -> None:
         """Initialize from bech32-encoded string
 
         Note: subclasses put your initialization routines here, but ignore the
@@ -61,13 +67,16 @@ class CBech32Data(bytes):
         """
 
     @classmethod
-    def bech32_get_match_candidates(cls):
+    def bech32_get_match_candidates(cls: Type[T_CBech32Data]
+                                    ) -> List[Type[T_CBech32Data]]:
         if cls.bech32_witness_version >= 0:
             return [cls]
         return []
 
     @classmethod
-    def bech32_match_progam_and_version(cls, data: bytes, witver: int):
+    def bech32_match_progam_and_version(cls: Type[T_CBech32Data],
+                                        data: bytes, witver: int
+                                        ) -> T_CBech32Data:
         """Instantiate from data and witver.
         if witver is not set for class, this is equivalent of from_bytes()"""
         candidates = cls.bech32_get_match_candidates()
@@ -96,8 +105,10 @@ class CBech32Data(bytes):
             'address class')
 
     @classmethod
-    def from_bytes(cls, witprog: bytes, witver: int = None):
+    def from_bytes(cls: Type[T_unbounded], witprog: bytes,
+                   witver: Optional[int] = None) -> T_unbounded:
         """Instantiate from witver and data"""
+        assert issubclass(cls, CBech32Data)
         cls_wv = cls.bech32_witness_version
         if witver is None:
             if cls_wv < 0:
@@ -123,7 +134,7 @@ class CBech32Data(bytes):
             self.bech32_witness_version = witver
         self.__init__(None)
 
-        return self
+        return cast(T_unbounded, self)
 
     def to_bytes(self) -> bytes:
         """Convert to bytes instance

@@ -19,7 +19,8 @@ import decimal
 from abc import abstractmethod
 from io import BytesIO
 from typing import (
-    Union, List, Sequence, Iterable, Optional, Set, TypeVar, Type, Any, cast
+    Union, List, Sequence, Iterable, Optional, Set, TypeVar, Type, Any,
+    Callable, cast
 )
 
 from . import script
@@ -28,7 +29,7 @@ from .serialize import (
     ImmutableSerializable, make_mutable,
     BytesSerializer, VectorSerializer,
     ser_read, uint256_to_bytes, uint256_from_bytes,
-    Hash, Hash160
+    Hash, Hash160, ByteStream_Type
 )
 
 from ..util import (
@@ -108,11 +109,14 @@ T_CoreCoinClass = TypeVar('T_CoreCoinClass', bound='CoreCoinClass')
 
 class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
 
-    def to_mutable(self):
-        return self._mutable_cls.from_instance(self)
+    _mutable_cls: Type['CoreCoinClass']
+    _immutable_cls: Type['CoreCoinClass']
 
-    def to_immutable(self):
-        return self._immutable_cls.from_instance(self)
+    def to_mutable(self) -> 'CoreCoinClass':
+        return cast('CoreCoinClass', self._mutable_cls.from_instance(self))
+
+    def to_immutable(self) -> 'CoreCoinClass':
+        return cast('CoreCoinClass', self._immutable_cls.from_instance(self))
 
     @no_bool_use_as_property
     @classmethod
@@ -253,7 +257,7 @@ def coins_to_satoshi(value: Union[int, float, decimal.Decimal],
     return result
 
 
-def satoshi_to_coins(value: int, check_range=True) -> float:
+def satoshi_to_coins(value: int, check_range: bool = True) -> float:
     """Simple utility function to convert from
     integer satoshi amonut to floating-point coins amount.
     does type checks and conversions, as well as bounds checking.
@@ -362,7 +366,7 @@ def calculate_transaction_virtual_size(*,
     return unscaled_size // WITNESS_SCALE_FACTOR
 
 
-def bytes_for_repr(buf: bytes, hexfun=x):
+def bytes_repr(buf: bytes, hexfun: Callable[[str], bytes] = x) -> str:
     if hexfun is x:
         bfun = b2x
     elif hexfun is lx:
@@ -428,11 +432,12 @@ class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
         return all(b == 0 for b in self.data)
 
     @classmethod
-    def stream_deserialize(cls, f):
+    def stream_deserialize(cls: Type[T__UintBitVector], f: ByteStream_Type,
+                           **kwargs: Any) -> T__UintBitVector:
         data = ser_read(f, cls._UINT_WIDTH_BYTES)
         return cls(data)
 
-    def stream_serialize(self, f):
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
         f.write(self.data)
 
     def to_hex(self) -> str:
@@ -443,7 +448,7 @@ class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
         return cls(lx(hexdata))
 
     def __repr__(self):
-        return bytes_for_repr(self.data, hexfun=lx)
+        return bytes_repr(self.data, hexfun=lx)
 
 
 class Uint256(_UintBitVector):
@@ -483,12 +488,13 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
         object.__setattr__(self, 'n', n)
 
     @classmethod
-    def stream_deserialize(cls, f):
+    def stream_deserialize(cls: Type[T_COutPoint], f: ByteStream_Type,
+                           **kwargs: Any) -> T_COutPoint:
         hash = ser_read(f, 32)
         n = struct.unpack(b"<I", ser_read(f, 4))[0]
         return cls(hash, n)
 
-    def stream_serialize(self, f):
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
         assert len(self.hash) == 32
         f.write(self.hash)
         f.write(struct.pack(b"<I", self.n))
@@ -580,15 +586,16 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
         object.__setattr__(self, 'scriptSig', scriptSig)
 
     @classmethod
-    def stream_deserialize(cls, f):
-        prevout = COutPoint.stream_deserialize(f)
-        scriptSig = BytesSerializer.stream_deserialize(f)
+    def stream_deserialize(cls: Type[T_CTxIn], f: ByteStream_Type,
+                           **kwargs: Any) -> T_CTxIn:
+        prevout = COutPoint.stream_deserialize(f, **kwargs)
+        scriptSig = BytesSerializer.stream_deserialize(f, **kwargs)
         nSequence = struct.unpack(b"<I", ser_read(f, 4))[0]
         return cls(prevout, scriptSig, nSequence)
 
-    def stream_serialize(self, f):
-        COutPoint.stream_serialize(self.prevout, f)
-        BytesSerializer.stream_serialize(self.scriptSig, f)
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
+        COutPoint.stream_serialize(self.prevout, f, **kwargs)
+        BytesSerializer.stream_serialize(self.scriptSig, f, **kwargs)
         f.write(struct.pack(b"<I", self.nSequence))
 
     @no_bool_use_as_property
@@ -662,14 +669,15 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
         object.__setattr__(self, 'scriptPubKey', scriptPubKey)
 
     @classmethod
-    def stream_deserialize(cls, f):
+    def stream_deserialize(cls: Type[T_CTxOut], f: ByteStream_Type,
+                           **kwargs: Any) -> T_CTxOut:
         nValue = struct.unpack(b"<q", ser_read(f, 8))[0]
-        scriptPubKey = BytesSerializer.stream_deserialize(f)
-        return cls(nValue, scriptPubKey)
+        scriptPubKey = BytesSerializer.stream_deserialize(f, **kwargs)
+        return cls(nValue, script.CScript(scriptPubKey))
 
-    def stream_serialize(self, f):
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
         f.write(struct.pack(b"<q", self.nValue))
-        BytesSerializer.stream_serialize(self.scriptPubKey, f)
+        BytesSerializer.stream_serialize(self.scriptPubKey, f, **kwargs)
 
     @no_bool_use_as_property
     def is_valid(self) -> bool:
@@ -726,12 +734,13 @@ class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
         return self.scriptWitness.is_null()
 
     @classmethod
-    def stream_deserialize(cls, f):
-        scriptWitness = script.CScriptWitness.stream_deserialize(f)
+    def stream_deserialize(cls: Type[T_CTxInWitness], f: ByteStream_Type,
+                           **kwargs: Any) -> T_CTxInWitness:
+        scriptWitness = script.CScriptWitness.stream_deserialize(f, **kwargs)
         return cls(scriptWitness)
 
-    def stream_serialize(self, f):
-        self.scriptWitness.stream_serialize(f)
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
+        self.scriptWitness.stream_serialize(f, **kwargs)
 
     @classmethod
     def from_instance(cls: Type[T_CTxInWitness],
@@ -794,7 +803,8 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
 
     vtxinwit: Sequence[CTxInWitness]
 
-    def __init__(self, vtxinwit: Iterable[CTxInWitness] = (), vtxoutwit=None):
+    def __init__(self, vtxinwit: Iterable[CTxInWitness] = (),
+                 vtxoutwit: Iterable[CTxOutWitness] = ()) -> None:
         # Note: vtxoutwit is ignored, does not exist for bitcon tx witness
         txinwit_list = [CTxInWitness.from_txin_witness(w) for w in vtxinwit]
 
@@ -816,14 +826,18 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
 
     # NOTE: this cannot be a @classmethod like the others because we need to
     # know how many items to deserialize, which comes from len(vin)
-    def stream_deserialize(self, f):
-        vtxinwit = tuple(CTxInWitness.stream_deserialize(f)
-                         for dummy in range(len(self.vtxinwit)))
-        return self.__class__(vtxinwit)
+    @classmethod
+    def stream_deserialize(cls: Type[T_CTxWitness], f: ByteStream_Type,
+                           num_inputs: int = -1, **kwargs: Any) -> T_CTxWitness:
+        if num_inputs < 0:
+            raise ValueError('num_inputs must be specified')
+        vtxinwit = tuple(CTxInWitness.stream_deserialize(f, **kwargs)
+                         for dummy in range(num_inputs))
+        return cls(vtxinwit)
 
-    def stream_serialize(self, f):
+    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
         for i in range(len(self.vtxinwit)):
-            self.vtxinwit[i].stream_serialize(f)
+            self.vtxinwit[i].stream_serialize(f, **kwargs)
 
     @classmethod
     def from_instance(cls: Type[T_CTxWitness], witness: 'CTxWitness'
@@ -921,10 +935,10 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
     # In addition, subclasses will need to cast the results to
     # the type they actually return.
     def to_mutable(self) -> 'CMutableTransaction':
-        return super().to_mutable()
+        return cast('CMutableTransaction', super().to_mutable())
 
     def to_immutable(self) -> 'CTransaction':
-        return super().to_immutable()
+        return cast('CTransaction', super().to_immutable())
 
     @no_bool_use_as_property
     def is_coinbase(self) -> bool:
@@ -968,7 +982,8 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         return cls.from_instance(tx)
 
     @classmethod
-    def stream_deserialize(cls, f):
+    def stream_deserialize(cls: Type[T_CTransaction], f: ByteStream_Type,
+                           **kwargs: Any) -> T_CTransaction:
         """Deserialize transaction
 
         This implementation corresponds to Bitcoin's SerializeTransaction() and
@@ -986,33 +1001,37 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         markerbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         flagbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         if markerbyte == 0 and flagbyte == 1:
-            vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn)
-            vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut)
-            wit = CTxWitness(
-                tuple(CTxInWitness() for dummy in range(len(vin))))
-            wit = wit.stream_deserialize(f)
+            vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn,
+                                                      **kwargs)
+            vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut,
+                                                       **kwargs)
+            wit = CTxWitness.stream_deserialize(f, num_inputs=len(vin),
+                                                **kwargs)
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion, wit)
         else:
             f.seek(pos)  # put marker byte back, since we don't have peek
-            vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn)
-            vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut)
+            vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn,
+                                                      **kwargs)
+            vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut,
+                                                       **kwargs)
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion)
 
     # NOTE: for_sighash is ignored, but may be used in other implementations
-    def stream_serialize(self, f, include_witness=True, for_sighash=False):
+    def stream_serialize(self, f: ByteStream_Type,
+                         include_witness: bool = True, **kwargs: Any) -> None:
         f.write(struct.pack(b"<i", self.nVersion))
         if include_witness and not self.wit.is_null():
             assert(len(self.wit.vtxinwit) == len(self.vin))
             f.write(b'\x00')  # Marker
             f.write(b'\x01')  # Flag
-            VectorSerializer.stream_serialize(self.vin, f)
-            VectorSerializer.stream_serialize(self.vout, f)
-            self.wit.stream_serialize(f)
+            VectorSerializer.stream_serialize(self.vin, f, **kwargs)
+            VectorSerializer.stream_serialize(self.vout, f, **kwargs)
+            self.wit.stream_serialize(f, **kwargs)
         else:
-            VectorSerializer.stream_serialize(self.vin, f)
-            VectorSerializer.stream_serialize(self.vout, f)
+            VectorSerializer.stream_serialize(self.vin, f, **kwargs)
+            VectorSerializer.stream_serialize(self.vout, f, **kwargs)
         f.write(struct.pack(b"<I", self.nLockTime))
 
     def get_virtual_size(self) -> int:
@@ -1181,7 +1200,6 @@ __all__ = (
     'CheckTransaction',
     'GetLegacySigOpCount',
     'Uint256',
-    'bytes_for_repr',
     'str_money_value_for_repr',
     'satoshi_to_coins',
     'coins_to_satoshi',

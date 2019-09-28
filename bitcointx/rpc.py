@@ -30,7 +30,7 @@ import decimal
 import json
 import os
 import urllib.parse
-from typing import Type, Dict, Tuple, Optional, Union, TYPE_CHECKING
+from typing import Type, Dict, Tuple, Optional, Union, TYPE_CHECKING, cast
 
 import bitcointx
 
@@ -89,8 +89,9 @@ class JSONRPCError(Exception):
         cls.SUBCLS_BY_CODE[subcls.RPC_ERROR_CODE] = subcls
         return subcls
 
-    def __new__(cls, rpc_error):
+    def __new__(cls, rpc_error: Dict[str, Union[int, str]]) -> 'JSONRPCError':
         assert cls is JSONRPCError
+        assert isinstance(rpc_error['code'], int)
         cls = JSONRPCError.SUBCLS_BY_CODE.get(rpc_error['code'], cls)
 
         self = Exception.__new__(cls)
@@ -101,7 +102,7 @@ class JSONRPCError(Exception):
 
         self.error = rpc_error
 
-        return self
+        return cast('JSONRPCError', self)
 
 
 @JSONRPCError._register_subcls
@@ -193,7 +194,7 @@ class RPCCaller:
                  conf_file: Optional[str] = None,
                  allow_default_conf: bool = False,
                  timeout: int = DEFAULT_HTTP_TIMEOUT,
-                 connection=None):
+                 connection: Optional[HTTPClient_Type] = None) -> None:
 
         # Create a dummy connection early on so if __init__() fails prior to
         # __conn being created __del__() can detect the condition and handle it

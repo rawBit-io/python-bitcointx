@@ -14,7 +14,8 @@ import functools
 from types import FunctionType
 from abc import ABCMeta, ABC
 from typing import (
-    Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable, Optional
+    Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable, Optional,
+    TypeVar, cast
 )
 
 # TODO: convert this to custom thread-local class to be able to apply typing
@@ -26,6 +27,12 @@ class_mapping_dispatch_data.script = None
 _attributes_of_ABC = dir(ABC)
 
 
+T_Callable = TypeVar('T_Callable', bound=Callable[..., Any])
+T_ClassMappingDispatcher = TypeVar('T_ClassMappingDispatcher',
+                                   bound='ClassMappingDispatcher')
+T_unbounded = TypeVar('T_unbounded')
+
+
 class _NoBoolCallable():
     __slots__ = ['method_name', 'method']
 
@@ -33,12 +40,12 @@ class _NoBoolCallable():
         self.method_name = name
         self.method = method
 
-    def __int__(self):
+    def __int__(self) -> int:
         raise TypeError(
             'Using this attribute as integer property is disabled. '
             'please use {}()'.format(self.method_name))
 
-    def __bool__(self):
+    def __bool__(self) -> int:
         raise TypeError(
             'Using this attribute as boolean property is disabled. '
             'please use {}()'.format(self.method_name))
@@ -51,16 +58,20 @@ class no_bool_use_as_property():
     """A decorator that disables use of an attribute
     as a property in a boolean context """
 
-    def __init__(self, method):
+    def __init__(self, method: Callable[[Any], bool]) -> None:
         self.method = method
 
     def __get__(self, instance: object, owner: type) -> _NoBoolCallable:
-        method = self.method.__get__(instance, owner)
+        # mypy currently does not know that Callable can be a descriptor.
+        # but we want to use Callable[[Any], bool] for the method so that
+        # the decorator would only be applied to methods with expected
+        # signature
+        method = self.method.__get__(instance, owner)  # type: ignore
 
         name = '{}{}.{}'.format(owner.__name__,
                                 '' if instance is None else '()',
                                 method.__name__)
-        return _NoBoolCallable(name, method)
+        return _NoBoolCallable(name, cast(Callable[[], bool], method))
 
 
 def get_class_dispatcher_depends(dclass: Type['ClassMappingDispatcher']
@@ -79,8 +90,8 @@ def get_class_dispatcher_depends(dclass: Type['ClassMappingDispatcher']
     return dset
 
 
-def activate_class_dispatcher(dclass: Type['ClassMappingDispatcher']
-                              ) -> Type['ClassMappingDispatcher']:
+def activate_class_dispatcher(dclass: Type[T_ClassMappingDispatcher]
+                              ) -> Type[T_ClassMappingDispatcher]:
     """Activate particular class dispatcher - so that the mapping it contains
     will be active. Activates its dependent dispatchers, recursively, too."""
     if ClassMappingDispatcher not in dclass.__mro__:
@@ -103,11 +114,11 @@ def activate_class_dispatcher(dclass: Type['ClassMappingDispatcher']
                 dclass._class_dispatcher__identity,
                 dclass)
 
-    return prev
+    return prev  # type: ignore
 
 
-def dispatcher_mapped_list(cls: 'ClassMappingDispatcher'
-                           ) -> List['ClassMappingDispatcher']:
+def dispatcher_mapped_list(cls: T_ClassMappingDispatcher,
+                           ) -> List[T_ClassMappingDispatcher]:
     """Get a list of the classes that particular class is to be
     dispatched to. Returns empty list when class is not in a dispatch map"""
     mcs = type(cls)
@@ -119,22 +130,29 @@ def dispatcher_mapped_list(cls: 'ClassMappingDispatcher'
     dclass_list = dispatcher._class_dispatcher__clsmap.get(cls, [])
     # We do not have type-annotead thread-local data at the moment,
     # - it requires custom thread-local class, which is in TODO.
-    return dclass_list
+    return cast(List[T_ClassMappingDispatcher], dclass_list)
 
 
 class DispatcherMethodWrapper():
     """A helper class that allows to wrap both classmethods and staticmethods,
     in addition to normal instance methods"""
-    def __init__(self, method, wrapper: Callable) -> None:
+    def __init__(self, method: Union[FunctionType, classmethod, staticmethod,
+                                     'DispatcherMethodWrapper'],
+                 wrapper: Callable[[Callable[..., Any], type],
+                                   Callable[..., Any]]) -> None:
         self.method = method
-        self.wrapper: Callable = wrapper
+        self.wrapper = wrapper
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance: object, owner: type) -> Callable[..., Any]:
         bound_method = self.method.__get__(instance, owner)
         return self.wrapper(bound_method, type(owner))
 
 
-def dispatcher_wrap_methods(cls, wrap_fn, *, dct=None):
+def dispatcher_wrap_methods(cls: 'ClassMappingDispatcher',
+                            wrap_fn: Callable[[Callable[..., Any], type],
+                                              Callable[..., Any]],
+                            *,
+                            dct: Optional[Dict[str, Any]] = None) -> None:
     """Wrap all methods of a class with a function, that would
     establish the dispatching context for that method"""
     if dct is None:
@@ -162,12 +180,12 @@ class ClassMappingDispatcher(ABCMeta):
     _class_dispatcher__pre_final_dispatch: Set['ClassMappingDispatcher']
     _class_dispatcher__no_direct_use: bool
     _class_dispatcher__clsmap: Dict['ClassMappingDispatcher',
-                                    'ClassMappingDispatcher']
+                                    List['ClassMappingDispatcher']]
     _class_dispatcher__identity: str
     _class_dispatcher__depends: Iterable[Type['ClassMappingDispatcher']]
 
     def __init_subclass__(
-        mcs, identity: Optional[str] = None,
+        mcs: Type['ClassMappingDispatcher'], identity: Optional[str] = None,
         depends: Iterable[Type['ClassMappingDispatcher']] = ()
     ) -> None:
         """Initialize the dispatcher metaclass.
@@ -246,12 +264,15 @@ class ClassMappingDispatcher(ABCMeta):
 
             mcs._class_dispatcher__depends = tuple(combined_depends)
 
-    def __new__(mcs, name, bases, dct, next_dispatch_final=False,
-                variant_of=None):
-        return super().__new__(mcs, name, bases, dct)
+    def __new__(mcs: Type[type], name: str, bases: Tuple[type, ...],
+                namespace: Dict[str, Any], next_dispatch_final: bool = False,
+                variant_of: Optional[type] = None) -> type:
+        return super().__new__(mcs, name, bases, namespace)
 
-    def __init__(cls, name, bases, dct, next_dispatch_final=False,
-                 variant_of=None):
+    def __init__(cls: 'ClassMappingDispatcher', name: str,
+                 bases: Tuple[type, ...], namespace: Dict[str, Any],
+                 next_dispatch_final: bool = False,
+                 variant_of: Optional[type] = None) -> None:
         """Build the dispatching map out of the superclass-subclass
         relationships, and wrap the methods of the classes so that appropriate
         dispatcher is active inside the methods.
@@ -267,7 +288,7 @@ class ClassMappingDispatcher(ABCMeta):
                     when cls is not the default mapping for the superclass
                     that was marked with next_dispatch_final=True"""
 
-        super().__init__(name, bases, dct)
+        super().__init__(name, bases, namespace)
 
         # get the dispatcher class
         mcs = type(cls)
@@ -319,7 +340,7 @@ class ClassMappingDispatcher(ABCMeta):
                 # skip the current class
                 continue
 
-            if ClassMappingDispatcher not in type(bcs).__mro__:
+            if not isinstance(bcs, ClassMappingDispatcher):
                 # skip if the base does not belong to our dispatch scheme
                 continue
 
@@ -365,7 +386,7 @@ class ClassMappingDispatcher(ABCMeta):
             # assign to the map in case this is first time
             mcs._class_dispatcher__clsmap[bcs] = target_list
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         """Perform class mapping in accordance to the currently active
         dispatcher class"""
         mcs = type(cls)
@@ -383,7 +404,7 @@ class ClassMappingDispatcher(ABCMeta):
         # Unambigous target - do the substitution.
         return type.__call__(class_list[0], *args, **kwargs)
 
-    def __getattribute__(cls, name):
+    def __getattribute__(cls, name: str) -> Any:
         """Perform class attribute mapping in accordance to the currently
         active dispatcher class (except python-specific attributes)"""
         if name.startswith('__') and name.endswith('__') \
@@ -411,10 +432,10 @@ class classgetter:
     """simple decorator to create a read-only class property
     from class method"""
 
-    def __init__(self, f):
+    def __init__(self, f: Callable[..., T_unbounded]):
         self.f = f
 
-    def __get__(self, obj, owner):
+    def __get__(self, obj: object, owner: type) -> T_unbounded:
         return self.f(owner)
 
 
