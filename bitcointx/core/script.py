@@ -22,7 +22,7 @@ import struct
 import hashlib
 from io import BytesIO
 from typing import (
-    List, Tuple, Dict, Union, Iterable, Optional, TypeVar, Type, cast
+    List, Tuple, Dict, Union, Iterable, Sequence, Optional, TypeVar, Type, cast
 )
 
 import bitcointx.core
@@ -172,7 +172,7 @@ class CScriptOp(int):
         else:
             return 'CScriptOp(0x%x)' % self
 
-    def __new__(cls, n: int):
+    def __new__(cls, n: int) -> 'CScriptOp':
         try:
             return _opcode_instances[n]
         except IndexError:
@@ -588,7 +588,7 @@ class DATA(bytes):
     with CScript([DATA(var)]), this is communicated clearly, and will
     raise TypeError if var is not bytes or bytearray instance."""
 
-    def __new__(cls, data: Union[bytes, bytearray]):
+    def __new__(cls, data: Union[bytes, bytearray]) -> bytes:
         if not isinstance(data, (bytes, bytearray)):
             raise TypeError(
                 'DATA can only accept bytes or bytearray instance')
@@ -608,7 +608,7 @@ class NUMBER(int):
     and instance of CScriptOp (special case needed because CScriptOp is
     a subclas of int, but there are special OPCODE guard for it"""
 
-    def __new__(cls, num: int):
+    def __new__(cls, num: int) -> int:
         if not isinstance(num, int):
             raise TypeError(
                 'NUMBER can only accept values that are instance of '
@@ -623,7 +623,7 @@ class NUMBER(int):
         return super().__new__(cls, num)  # type: ignore
 
 
-def OPCODE(op: CScriptOp):
+def OPCODE(op: CScriptOp) -> CScriptOp:
     """A function that can be used to prevent accidental use of non-opcode
     elements in the script where opcode elemets were expected. For example,
     the code `CScript([var])` does not communicate to the reader if `var`
@@ -1150,7 +1150,7 @@ def IsLowDERSignature(sig: bytes) -> bool:
         CompareBigEndian(s_val, max_mod_half_order) <= 0
 
 
-def CompareBigEndian(c1, c2):
+def CompareBigEndian(c1: List[int], c2: List[int]) -> int:
     """
     Loosely matches CompareBigEndian() from eccryptoverify.cpp
     Compares two arrays of bytes, and returns a negative value if the first is
@@ -1322,7 +1322,30 @@ class CBitcoinScript(CScript, ScriptBitcoinClass):
     ...
 
 
-def parse_standard_multisig_redeem_script(script: CScript) -> dict:
+class StandardMultisigScriptInfo:
+    __slots__: List[str] = ['required', 'pubkeys']
+
+    required: int
+    pubkeys: Tuple['bitcointx.core.key.CPubKey', ...]
+
+    def __init__(self, *, total: int, required:
+                 int, pubkeys: Sequence['bitcointx.core.key.CPubKey']):
+        if len(pubkeys) != total:
+            raise ValueError('total must be equal to number of pubkeys')
+
+        if required > total:
+            raise ValueError('required must not be greater than total')
+
+        self.required = required
+        self.pubkeys = tuple(pubkeys)
+
+    @property
+    def total(self) -> int:
+        return len(self.pubkeys)
+
+
+def parse_standard_multisig_redeem_script(script: CScript
+                                          ) -> StandardMultisigScriptInfo:
     """parse multisig script, raise ValueError if it does not match the
     format of the script produced by construct_multisig_redeem_script"""
     si = iter(script)
@@ -1380,11 +1403,13 @@ def parse_standard_multisig_redeem_script(script: CScript) -> dict:
         raise ValueError('script is not a p2sh script, last opcode '
                          'is not OP_CHECKMULTISIG')
 
-    return {'total': total, 'required': required, 'pubkeys': pubkeys}
+    return StandardMultisigScriptInfo(total=total, required=required,
+                                      pubkeys=pubkeys)
 
 
 def standard_multisig_witness_stack(sigs: List[Union[bytes, bytearray]],
-                                    redeem_script: CScript) -> list:
+                                    redeem_script: CScript
+                                    ) -> List[ScriptElement_Type]:
 
     # check valid p2sh script
     info = parse_standard_multisig_redeem_script(redeem_script)
@@ -1392,16 +1417,16 @@ def standard_multisig_witness_stack(sigs: List[Union[bytes, bytearray]],
     if not all(isinstance(s, (bytes, bytearray)) for s in sigs):
         raise ValueError('sigs must be an array of bytes (or bytearrays)')
 
-    if len(sigs) > info['total']:
+    if len(sigs) > info.total:
         raise ValueError('number of signatures ({}) is greater than '
                          'total pubkeys ({}) in the redeem script'
-                         .format(len(sigs), info['total']))
+                         .format(len(sigs), info.total))
 
-    if len(sigs) != info['required']:
+    if len(sigs) != info.required:
         raise ValueError('number of signatures ({}) does not match '
                          'the number of required pubkeys ({}) '
                          'in the redeem script'
-                         .format(len(sigs), info['required']))
+                         .format(len(sigs), info.required))
 
     stack: List[ScriptElement_Type]
 

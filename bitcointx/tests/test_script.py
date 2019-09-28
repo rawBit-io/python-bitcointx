@@ -26,8 +26,9 @@ from bitcointx.core.script import (
     OP_CHECKSIG, OP_1NEGATE, OP_BOOLOR, OP_BOOLAND,
     OP_INVALIDOPCODE, OP_CHECKMULTISIG, OP_DROP,
     DATA, NUMBER, OPCODE,
+    SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
     IsLowDERSignature, parse_standard_multisig_redeem_script,
-    SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0
+    StandardMultisigScriptInfo
 )
 from bitcointx.wallet import P2PKHCoinAddress, P2WPKHCoinAddress
 
@@ -138,19 +139,23 @@ class Test_CScript(unittest.TestCase):
 
     def test_parse_standard_multisig_redeem_script(self):
         def T(script, result):
-            self.assertEqual(parse_standard_multisig_redeem_script(script),
-                             result)
+            info = parse_standard_multisig_redeem_script(script)
+            self.assertEqual(info.total, result.total)
+            self.assertEqual(info.required, result.required)
+            self.assertEqual(info.pubkeys, result.pubkeys)
 
         # NOTE: p2sh_multisig_parse_script does not check validity of pubkeys
         pubkeys = [CKey.from_secret_bytes(os.urandom(32)).pub
                    for _ in range(15)]
 
         T(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
-          {'total': 2, 'required': 1, 'pubkeys': pubkeys[:2]})
+          StandardMultisigScriptInfo(total=2, required=1,
+                                     pubkeys=pubkeys[:2]))
         T(CScript([11] + pubkeys[:12] + [12, OP_CHECKMULTISIG]),
-          {'total': 12, 'required': 11, 'pubkeys': pubkeys[:12]})
+          StandardMultisigScriptInfo(total=12, required=11,
+                                     pubkeys=pubkeys[:12]))
         T(CScript([15] + pubkeys + [15, OP_CHECKMULTISIG]),
-          {'total': 15, 'required': 15, 'pubkeys': pubkeys})
+          StandardMultisigScriptInfo(total=15, required=15, pubkeys=pubkeys))
 
         with self.assertRaises(ValueError):
             # invalid pubkey - extra data

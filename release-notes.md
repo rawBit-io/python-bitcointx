@@ -29,6 +29,12 @@
   in case of success, but in case of failure, it raised an exception. The result was
   never examined - so it was not correct to use bool as a return type.
 
+Breaking changes:
+
+* `parse_standard_multisig_redeem_script()` now returns an instance of
+  `StandardMultisigScriptInfo` instead of a dict (typecheking with dicts that
+  have heterogenous values is a pain)
+
 ## v1.0.1
 
 * fixed handling of flags in `VerifyScript()` and `ConsensusVerifyScript()`.
