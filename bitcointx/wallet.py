@@ -19,7 +19,7 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 # pylama:ignore=E501,E221
 
 from io import BytesIO
-from typing import Type, TypeVar, Union, Optional, cast
+from typing import Type, TypeVar, Union, Optional, List, cast
 
 import bitcointx
 import bitcointx.base58
@@ -215,15 +215,21 @@ class P2WPKHCoinAddressError(CBech32AddressError):
     """Raised when an invalid PW2PKH address is encountered"""
 
 
+T_CBase58DataDispatched = TypeVar('T_CBase58DataDispatched',
+                                  bound='CBase58DataDispatched')
+
+
 class CBase58DataDispatched(bitcointx.base58.CBase58Data):
 
-    def __init__(self, _s):
+    def __init__(self, _s: bytes) -> None:
         if not self.base58_prefix:
             raise TypeError(
                 f'{self.__class__.__name__} must not be instantiated directly')
 
     @classmethod
-    def base58_get_match_candidates(cls):
+    def base58_get_match_candidates(cls: Type[T_CBase58DataDispatched]
+                                    ) -> List[Type[T_CBase58DataDispatched]]:
+        assert isinstance(cls, ClassMappingDispatcher)
         candidates = dispatcher_mapped_list(cls)
         if not candidates:
             if not cls.base58_prefix:
@@ -234,9 +240,13 @@ class CBase58DataDispatched(bitcointx.base58.CBase58Data):
         return candidates
 
 
+T_CBech32DataDispatched = TypeVar('T_CBech32DataDispatched',
+                                  bound='CBech32DataDispatched')
+
+
 class CBech32DataDispatched(bitcointx.bech32.CBech32Data):
 
-    def __init__(self, _s):
+    def __init__(self, _s: bytes) -> None:
         if self.__class__.bech32_witness_version < 0:
             raise TypeError(
                 f'{self.__class__.__name__} must not be instantiated directly')
@@ -245,7 +255,9 @@ class CBech32DataDispatched(bitcointx.bech32.CBech32Data):
                 f'lengh of the data is not {self.__class__._data_length}')
 
     @classmethod
-    def bech32_get_match_candidates(cls):
+    def bech32_get_match_candidates(cls: Type[T_CBech32DataDispatched]
+                                    ) -> List[Type[T_CBech32DataDispatched]]:
+        assert isinstance(cls, ClassMappingDispatcher)
         candidates = dispatcher_mapped_list(cls)
         if not candidates:
             if cls.bech32_witness_version < 0:
@@ -298,7 +310,9 @@ class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
         """Convert an address to a scriptPubKey"""
         return CScript([OP_HASH160, self, OP_EQUAL])
 
-    def to_redeemScript(self):
+    # Return type deliberately incompatible with CCoinAddress,
+    # because this operation is not defined for p2sh address
+    def to_redeemScript(self) -> None:  # type: ignore
         raise NotImplementedError("not enough data in p2sh address to reconstruct redeem script")
 
 
@@ -391,7 +405,9 @@ class P2WSHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
         """Convert an address to a scriptPubKey"""
         return CScript([0, self])
 
-    def to_redeemScript(self):
+    # Return type deliberately incompatible with CCoinAddress,
+    # because this operation is not defined for p2wsh address
+    def to_redeemScript(self) -> None:  # type: ignore
         raise NotImplementedError(
             "not enough data in p2wsh address to reconstruct redeem script")
 
@@ -656,7 +672,7 @@ class CBitcoinSignetKey(CCoinKey, WalletBitcoinSignetClass):
 class CCoinExtPubKey(CBase58DataDispatched, CExtPubKeyBase,
                      WalletCoinClass, next_dispatch_final=True):
 
-    def __init__(self, _s):
+    def __init__(self, _s: str) -> None:
         assert isinstance(self, CExtPubKeyBase)
         CExtPubKeyBase.__init__(self, None)
 
@@ -664,7 +680,7 @@ class CCoinExtPubKey(CBase58DataDispatched, CExtPubKeyBase,
 class CCoinExtKey(CBase58DataDispatched, CExtKeyBase,
                   WalletCoinClass, next_dispatch_final=True):
 
-    def __init__(self, _s):
+    def __init__(self, _s: str) -> None:
         assert isinstance(self, CExtKeyBase)
         CExtKeyBase.__init__(self, None)
 

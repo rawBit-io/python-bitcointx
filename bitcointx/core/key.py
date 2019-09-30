@@ -24,7 +24,9 @@ import struct
 import ctypes
 import ctypes.util
 import hashlib
-from typing import TypeVar, Type, Union, Tuple, List, Sequence, Optional, cast
+from typing import (
+    TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast
+)
 
 import bitcointx.core
 from bitcointx.util import no_bool_use_as_property, ensure_isinstance
@@ -63,7 +65,7 @@ class KeyDerivationFailException(RuntimeError):
 
 # Thx to Sam Devlin for the ctypes magic 64-bit fix (FIXME: should this
 # be applied to every OpenSSL call whose return type is a pointer?)
-def _check_res_openssl_void_p(val, func, args): # pylint: disable=unused-argument
+def _check_res_openssl_void_p(val, func, args): # type: ignore
     if val == 0:
         assert _ssl is not None
         errno = _ssl.ERR_get_error()
@@ -283,7 +285,8 @@ class CKeyBase:
 class CKey(bytes, CKeyBase):
     "Standalone privkey class"
 
-    def __new__(cls, secret, compressed=True):
+    def __new__(cls: Type['CKey'], secret: bytes, compressed: bool = True
+                ) -> 'CKey':
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
         return super().__new__(cls, secret)  # type: ignore
@@ -393,10 +396,10 @@ class CPubKey(bytes):
     def is_compressed(self) -> bool:
         return len(self) == COMPRESSED_PUBLIC_KEY_SIZE
 
-    def __str__(self):
+    def __str__(self) -> str:
         return repr(self)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '%s(%s)' % (self.__class__.__name__, super().__repr__())
 
     def verify(self, hash: bytes, sig: bytes) -> bool:
@@ -834,7 +837,7 @@ class BIP32Path:
         self._indexlist = tuple(indexlist)
         self._hardened_marker = hardened_marker
 
-    def __str__(self):
+    def __str__(self) -> str:
         if len(self._indexlist) == 0:
             return 'm'
 
@@ -850,7 +853,7 @@ class BIP32Path:
     def __getitem__(self, key: int) -> int:
         return self._indexlist[key]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         return (n for n in self._indexlist)
 
     def _check_bip32_index_bounds(self, n: int, allow_hardened: bool = False

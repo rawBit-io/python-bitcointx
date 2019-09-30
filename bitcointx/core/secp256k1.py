@@ -27,7 +27,7 @@ import ctypes
 import ctypes.util
 import threading
 from types import FunctionType
-from typing import Any, cast
+from typing import Dict, Union, Any, cast
 
 
 PUBLIC_KEY_SIZE             = 65
@@ -61,17 +61,18 @@ _ctypes_functype = getattr(ctypes, 'WINFUNCTYPE', getattr(ctypes, 'CFUNCTYPE'))
 
 
 @_ctypes_functype(ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p)
-def _secp256k1_error_callback_fn(error_str, _data):
+def _secp256k1_error_callback_fn(error_str, _data):  # type: ignore
     _secp256k1_error_storage.last_error = {'code': -1, 'type': 'internal_error', 'message': str(error_str)}
 
 
 @_ctypes_functype(ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p)
-def _secp256k1_illegal_callback_fn(error_str, _data):
+def _secp256k1_illegal_callback_fn(error_str, _data):  # type: ignore
     _secp256k1_error_storage.last_error = {'code': -2, 'type': 'illegal_argument', 'message': str(error_str)}
 
 
-def secp256k1_get_last_error():
-    return getattr(_secp256k1_error_storage, 'last_error', None)
+def secp256k1_get_last_error() -> Dict[str, Union[int, str]]:
+    return cast(Dict[str, Union[int, str]],
+                getattr(_secp256k1_error_storage, 'last_error', None))
 
 
 def _check_ressecp256k1_void_p(val: int, _func: FunctionType,

@@ -298,9 +298,10 @@ class ClassMappingDispatcher(ABCMeta):
         # For example, inside CBitcoinTransaction.deserialize(), CTxOut()
         # should produce CBitcoinTxOut, regardless of the current globally
         # chosen chain parameters.
-        def wrap(fn, mcs):
+        def wrap(fn: Callable[..., Any], mcs: Type['ClassMappingDispatcher']
+                 ) -> Callable[..., Any]:
             @functools.wraps(fn)
-            def wrapper(*args, **kwargs):
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
                 if mcs._class_dispatcher__no_direct_use:
                     # The method of the class assigned to base dispatcher is
                     # called. Base dispatcher cannot be activated, so we

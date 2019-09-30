@@ -17,7 +17,9 @@ import threading
 from abc import ABCMeta
 from contextlib import contextmanager
 from collections import OrderedDict
-from typing import Dict, List, Tuple, Union, Optional, Type, Any, cast
+from typing import (
+    Dict, List, Tuple, Union, Optional, Type, Any, Generator, cast
+)
 
 import bitcointx.core
 import bitcointx.core.script
@@ -40,19 +42,22 @@ class ChainParamsMeta(ABCMeta):
         ('WALLET_DISPATCHER', issubclass,
          bitcointx.wallet.WalletCoinClassDispatcher),
     )
-    _registered_classes: Dict[str, 'ChainParamsBase'] = OrderedDict()
-    _common_base_cls: Optional['ChainParamsBase'] = None
+    _registered_classes: Dict[str, Type['ChainParamsBase']] = OrderedDict()
+    _common_base_cls: Optional[Type['ChainParamsBase']] = None
 
-    def __new__(cls, cls_name, bases, dct, name=None):
+    def __new__(cls, cls_name: str, bases: Tuple[type],
+                dct: Dict[str, Any], name: Optional[str] = None
+                ) -> Type['ChainParamsBase']:
         """check that the chainparams class uses unique base class
         (no two chain param classes can share a base class).
         if `name=` parameter is specified in the class declaration,
         set NAME attribute on a class, and register that class in
         a table for lookup by name."""
-        cls_instance = cast('ChainParamsBase',
+        cls_instance = cast(Type['ChainParamsBase'],
                             super().__new__(cls, cls_name, bases, dct))
 
         if len(bases):
+            assert cls._common_base_cls is not None
             if not any(issubclass(b, cls._common_base_cls) for b in bases):
                 raise TypeError(
                     '{} must be a subclass of {}'.format(
@@ -95,12 +100,12 @@ class ChainParamsMeta(ABCMeta):
         return cls_instance
 
 
-def find_chain_params(*, name: str) -> Optional['ChainParamsBase']:
+def find_chain_params(*, name: str) -> Optional[Type['ChainParamsBase']]:
     return ChainParamsMeta._registered_classes.get(name)
 
 
-def get_registered_chain_params() -> List['ChainParamsBase']:
-    result: List[ChainParamsBase] = []
+def get_registered_chain_params() -> List[Type['ChainParamsBase']]:
+    result: List[Type[ChainParamsBase]] = []
     for param_cls in ChainParamsMeta._registered_classes.values():
         if param_cls not in result:
             result.append(param_cls)
@@ -155,7 +160,7 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
         name_parts[0] = name_parts[0].capitalize()
         return ' '.join(name_parts)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__name__}: {self.name!r}>"
 
 
@@ -185,7 +190,9 @@ def get_current_chain_params() -> ChainParamsBase:
 
 
 @contextmanager
-def ChainParams(params, **kwargs):
+def ChainParams(params: Union[str, ChainParamsBase,
+                              Type[ChainParamsBase]],
+                **kwargs: Any) -> Generator[ChainParamsBase, None, None]:
     """Context manager to temporarily switch chain parameters.
     """
     prev, new = select_chain_params(params, **kwargs)

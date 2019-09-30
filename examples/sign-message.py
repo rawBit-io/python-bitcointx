@@ -14,6 +14,8 @@
 
 import argparse
 
+from typing import Optional
+
 from bitcointx import select_chain_params
 from bitcointx.wallet import CCoinKey, P2PKHCoinAddress
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
@@ -25,11 +27,13 @@ def sign_message(key: str, msg: str) -> bytes:
     return SignMessage(secret, message)
 
 
-def print_default(signature, key=None, msg=None):
+def print_default(signature: bytes,
+                  key: Optional[str] = None,
+                  msg: Optional[str] = None) -> None:
     print(signature.decode('ascii'))
 
 
-def print_verbose(signature, key, msg):
+def print_verbose(signature: bytes, key: str, msg: str) -> None:
     secret = CCoinKey(key)
     address = P2PKHCoinAddress.from_pubkey(secret.pub)
     message = BitcoinMessage(msg)

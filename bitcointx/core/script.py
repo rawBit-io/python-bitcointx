@@ -23,7 +23,7 @@ import hashlib
 from io import BytesIO
 from typing import (
     List, Tuple, Dict, Union, Iterable, Sequence, Optional, TypeVar, Type,
-    Generator, Any, cast
+    Generator, Iterator, Any, cast
 )
 
 import bitcointx.core
@@ -697,7 +697,9 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         except TypeError:
             raise TypeError('Can not add a %r instance to a CScript' % other.__class__)
 
-    def join(self, iterable):
+    # return type is deliberately None (incompatible with bytes),
+    # because join makes no sense for a CScript()
+    def join(self, iterable: Any) -> None:  # type: ignore
         # join makes no sense for a CScript()
         raise NotImplementedError
 
@@ -780,7 +782,10 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
                 yield (CScriptOp(opcode), data, sop_idx)
 
-    def __iter__(self):
+    # This 'cooked' iteration is not compatible with supertype 'bytes',
+    # thus we need this typing: ignore
+    def __iter__(self) -> Generator[Union[CScriptOp, int, bytes],  # type: ignore
+                                    None, None]:
         """'Cooked' iteration
 
         Returns either a CScriptOp instance, an integer, or bytes, as
@@ -1088,13 +1093,13 @@ class CScriptWitness(ImmutableSerializable):
                 coerced_stack.append(bytes([opcode]))
         object.__setattr__(self, 'stack', tuple(coerced_stack))
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.stack)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[bytes]:
         return iter(self.stack)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'CScriptWitness([' + ','.join("x('%s')" % bitcointx.core.b2x(s) for s in self.stack) + '])'
 
     @no_bool_use_as_property

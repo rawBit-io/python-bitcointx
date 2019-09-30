@@ -44,7 +44,7 @@ req_url_path = 'payment_request'
 ack_url_path = 'payment_ack'
 
 
-def payment_request() -> Tuple[str, Dict[str, str]]:
+def payment_request() -> Tuple[bytes, Dict[str, str]]:
     """Generates a http PaymentRequest object"""
 
     bc = RPCCaller(allow_default_conf=True)
@@ -79,7 +79,7 @@ def payment_request() -> Tuple[str, Dict[str, str]]:
 
 
 def payment_ack(serialized_payment_message: bytes,
-                ) -> Tuple[str, Dict[str, str], CCoinAddress]:
+                ) -> Tuple[bytes, Dict[str, str], CCoinAddress]:
     """Generates a PaymentACK object, captures client refund address
     and returns a tuple (message, refund_address)"""
 
@@ -100,22 +100,23 @@ def payment_ack(serialized_payment_message: bytes,
 
 class ReqHandler(BaseHTTPRequestHandler):
 
-    def _common_resp(self, data, headers):
+    def _common_resp(self, data: bytes, headers: Dict[str, str]) -> None:
         self.send_response(200)
         for k, v in headers.items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         if self.path == '/' + req_url_path:
             data, headers = payment_request()
             self._common_resp(data, headers)
         else:
             self.send_error(404, 'wrong url')
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         if self.path == '/' + ack_url_path:
+            assert isinstance(self.headers['Content-Length'], str)
             content_length = int(self.headers['Content-Length'])
             payment_message = self.rfile.read(content_length)
             data, headers, refund_address = payment_ack(payment_message)

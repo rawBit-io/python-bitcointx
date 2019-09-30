@@ -150,7 +150,7 @@ class Serializable(object):
     def __ne__(self, other: Any) -> bool:
         return not (self == other)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.serialize())
 
 
@@ -160,12 +160,12 @@ class ImmutableSerializable(Serializable):
     __slots__: List[str] = ['_cached_GetHash', '_cached__hash__']
 
     _cached_GetHash: bytes
-    _cached__hash__: bytes
+    _cached__hash__: int
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         raise AttributeError('Object is immutable')
 
-    def __delattr__(self, name):
+    def __delattr__(self, name: str) -> None:
         raise AttributeError('Object is immutable')
 
     def GetHash(self) -> bytes:
@@ -177,7 +177,7 @@ class ImmutableSerializable(Serializable):
             object.__setattr__(self, '_cached_GetHash', _cached_GetHash)
             return _cached_GetHash
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         try:
             return self._cached__hash__
         except AttributeError:
@@ -185,10 +185,10 @@ class ImmutableSerializable(Serializable):
             object.__setattr__(self, '_cached__hash__', _cached__hash__)
             return _cached__hash__
 
-
 class Serializer(Generic[T_unbounded]):
     """Base class for object serializers"""
-    def __new__(cls):
+    def __new__(cls: Type['Serializer[T_unbounded]']
+                ) -> 'Serializer[T_unbounded]':
         raise NotImplementedError
 
     @classmethod

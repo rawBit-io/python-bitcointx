@@ -20,7 +20,7 @@ from abc import abstractmethod
 from io import BytesIO
 from typing import (
     Union, List, Sequence, Iterable, Optional, Set, TypeVar, Type, Any,
-    Callable, cast
+    Dict, Tuple, Callable, cast
 )
 
 from . import script
@@ -44,17 +44,26 @@ _thread_local.mutable_context_enabled = False
 T__UintBitVector = TypeVar('T__UintBitVector', bound='_UintBitVector')
 
 
+T_CoreCoinClass = TypeVar('T_CoreCoinClass', bound='CoreCoinClass')
+
+
 class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
                               depends=[script.ScriptCoinClassDispatcher]):
 
-    def __init_subclass__(mcs, **kwargs):
-        return super().__init_subclass__(**kwargs)
+    def __init_subclass__(mcs: Type[type], **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
 
-    def __new__(mcs, name, bases, dct, mutable_of=None, **kwargs):
-        return super().__new__(mcs, name, bases, dct, **kwargs)
+    def __new__(mcs: Type[type], name: str, bases: Tuple[type],
+                namespace: Dict[str, Any],
+                mutable_of: Optional['CoreCoinClassDispatcher'] = None,
+                **kwargs: Any) -> type:
+        return super().__new__(mcs, name, bases, namespace, **kwargs)
 
-    def __init__(cls, name, bases, dct, mutable_of=None, **kwargs):
-        super().__init__(name, bases, dct, **kwargs)
+    def __init__(cls: 'CoreCoinClassDispatcher', name: str,
+                 bases: Tuple[type, ...], namespace: Dict[str, Any],
+                 mutable_of: Optional[Type['CoreCoinClass']] = None,
+                 **kwargs: Any) -> None:
+        super().__init__(name, bases, namespace, **kwargs)
         if mutable_of is None:
             cls._immutable_cls = cls
             cls._mutable_cls = None
@@ -62,7 +71,7 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
             if not issubclass(mutable_of, CoreCoinClass):
                 raise TypeError('mutable_if must be subclass of CoreCoinClass')
 
-            make_mutable(cls)
+            make_mutable(cast(Type[CoreCoinClass], cls))
 
             cls._immutable_cls = mutable_of
             cls._mutable_cls = cls
@@ -93,18 +102,15 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
 
             dispatcher_wrap_methods(cls, wrap, dct=combined_dict)
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         if _thread_local.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super().__call__(*args, **kwargs)
 
-    def __getattribute__(cls, name):
+    def __getattribute__(cls, name: str) -> Any:
         if _thread_local.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super().__getattribute__(name)
-
-
-T_CoreCoinClass = TypeVar('T_CoreCoinClass', bound='CoreCoinClass')
 
 
 class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
@@ -174,7 +180,7 @@ class CoreCoinParams(CoreCoinClass):
     WITNESS_SCALE_FACTOR = 4
 
     @classgetter
-    def MAX_MONEY(cls):
+    def MAX_MONEY(cls) -> int:
         return 21000000 * cls.COIN
 
 
@@ -393,18 +399,21 @@ class AddressDataEncodingError(Exception):
 class ReprOrStrMixin():
 
     @abstractmethod
-    def _repr_or_str(self, strfn):
+    def _repr_or_str(self, strfn: Callable[[Any], str]) -> str:
         ...
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._repr_or_str(str)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self._repr_or_str(repr)
 
 
 class _UintBitVectorMeta(type):
-    def __init__(self, name, bases, dct):
+    _UINT_WIDTH_BITS: int
+
+    def __init__(self, name: str, bases: Tuple[type], dct: Dict[str, Any]
+                 ) -> None:
         if getattr(self, '_UINT_WIDTH_BITS', None) is not None:
             self._UINT_WIDTH_BYTES = self._UINT_WIDTH_BITS // 8
             assert self._UINT_WIDTH_BITS == self._UINT_WIDTH_BYTES * 8
@@ -447,7 +456,7 @@ class _UintBitVector(ImmutableSerializable, metaclass=_UintBitVectorMeta):
     def from_hex(cls: Type[T__UintBitVector], hexdata: str) -> T__UintBitVector:
         return cls(lx(hexdata))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return bytes_repr(self.data, hexfun=lx)
 
 
@@ -503,7 +512,7 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
     def is_null(self) -> bool:
         return ((self.hash == b'\x00'*32) and (self.n == 0xffffffff))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.is_null():
             return '%s()' % (
                 self.__class__.__name__
@@ -513,7 +522,7 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
                 self.__class__.__name__,
                 b2lx(self.hash), self.n)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s:%i' % (b2lx(self.hash), self.n)
 
     @classmethod
@@ -617,7 +626,7 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
         """
         return cls.from_instance(txin)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%s, %s, 0x%x)" % (
             self.__class__.__name__,
             repr(self.prevout), repr(self.scriptSig), self.nSequence)
@@ -687,7 +696,7 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
             return False
         return True
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%s, %r)" % (
             self.__class__.__name__,
             str_money_value_for_repr(self.nValue), self.scriptPubKey)
@@ -754,7 +763,7 @@ class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
                           ) -> T_CTxInWitness:
         return cls.from_instance(txin_witness)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%s)" % (self.__class__.__name__, repr(self.scriptWitness))
 
 
@@ -851,7 +860,7 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
                      ) -> T_CTxWitness:
         return cls.from_instance(witness)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s([%s])" % (self.__class__.__name__,
                              ','.join(repr(w) for w in self.vtxinwit))
 
@@ -948,7 +957,7 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         """True if witness"""
         return not self.wit.is_null()
 
-    def _repr_or_str(self, strfn):
+    def _repr_or_str(self, strfn: Callable[[Any], str]) -> str:
         return "%s(%s, %s, %i, %i, %s)" % (
             self.__class__.__name__,
             ', '.join(strfn(v) for v in self.vin), ', '.join(strfn(v) for v in self.vout),
@@ -1146,14 +1155,6 @@ def GetLegacySigOpCount(tx: CTransaction) -> int:
     for txout in tx.vout:
         nSigOps += txout.scriptPubKey.GetSigOpCount(False)
     return nSigOps
-
-
-def _SetChainParams(params):
-    _thread_local.chain_params = params
-
-
-def _get_current_chain_params():
-    return _thread_local.chain_params
 
 
 # default dispatcher for the module

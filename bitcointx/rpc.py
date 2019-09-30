@@ -30,7 +30,10 @@ import decimal
 import json
 import os
 import urllib.parse
-from typing import Type, Dict, Tuple, Optional, Union, TYPE_CHECKING, cast
+from typing import (
+    Type, Dict, Tuple, Optional, Union, Any, Callable, Iterable,
+    TYPE_CHECKING, cast
+)
 
 import bitcointx
 
@@ -48,6 +51,7 @@ except ImportError:
 class HTTPClient_Response_Protocol(Protocol):
     status: int
     response: str
+    reason: str
 
     def read(self) -> bytes:
         ...
@@ -264,10 +268,11 @@ class RPCCaller:
         self.__id_count = 0
 
         if authpair is None:
-            self.__auth_header: Optional[bytes] = None
+            self.__auth_header: Optional[str] = None
         else:
-            self.__auth_header: Optional[bytes] = (
-                b"Basic " + base64.b64encode(authpair.encode('utf8'))
+            self.__auth_header: Optional[str] = (
+                "Basic " + base64.b64encode(
+                    authpair.encode('utf8')).decode('utf8')
             )
 
         self.connect(connection=connection)
@@ -279,7 +284,11 @@ class RPCCaller:
             self.__conn = http.client.HTTPConnection(
                 self.__url.hostname, port=self.__port, timeout=self.__timeout)
 
-    def _call(self, service_name, *args):
+    def _call(self, service_name: str, *args: Any) -> Any:
+
+        if self.__conn is None:
+            raise RuntimeError('connection is not configured')
+
         self.__id_count += 1
 
         postdata = json.dumps({'version': '1.1',
@@ -313,7 +322,10 @@ class RPCCaller:
         else:
             return response['result']
 
-    def _batch(self, rpc_call_list):
+    def _batch(self, rpc_call_list: Iterable[Any]) -> Any:
+        if self.__conn is None:
+            raise RuntimeError('connection is not configured')
+
         postdata = json.dumps(list(rpc_call_list))
 
         headers = {
@@ -328,7 +340,10 @@ class RPCCaller:
         self.__conn.request('POST', self.__url.path, postdata, headers)
         return self._get_response()
 
-    def _get_response(self):
+    def _get_response(self) -> Any:
+        if self.__conn is None:
+            raise RuntimeError('connection is not configured')
+
         http_response = self.__conn.getresponse()
         if http_response is None:
             raise JSONRPCError({
@@ -345,15 +360,15 @@ class RPCCaller:
                             % (http_response.status, http_response.reason,
                                rdata, '...' if len(rdata) > 20 else ''))})
 
-    def close(self):
+    def close(self) -> None:
         if self.__conn is not None:
             self.__conn.close()
 
-    def __del__(self):
+    def __del__(self) -> None:
         if self.__conn is not None:
             self.__conn.close()
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Callable[..., Any]:
         if name.startswith('__') and name.endswith('__'):
             # Prevent RPC calls for non-existing python internal attribute
             # access. If someone tries to get an internal attribute
@@ -362,7 +377,7 @@ class RPCCaller:
             raise AttributeError
 
         # Create a callable to do the actual call
-        def f(*args): return self._call(name, *args)
+        def f(*args: Any) -> Any: return self._call(name, *args)
 
         # Make debuggers show <function bitcointx.rpc.name>
         # rather than <function bitcointx.rpc.<lambda>>

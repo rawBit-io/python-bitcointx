@@ -71,7 +71,7 @@ class CSHA256():
     __slots__ = ['s', 'buf', 'bytes_count']
 
     # Initialize SHA-256 state.
-    def __init__(self):
+    def __init__(self) -> None:
         self.Reset()
 
     # Perform a number of SHA-256 transformations, processing 64-byte chunks.
