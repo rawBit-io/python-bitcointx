@@ -3,25 +3,28 @@
 ## v1.0.2.dev0
 
 * Added signet support `bitcoin/signet`.
+* Library is now fully type-annotated and statically checked using
+  [mypy](https://github.com/python/mypy). The main code of the library and the examples
+  are checked with --strict option, while the tests are checked with default settings.
 * Return current chain params in ChainParams context manager.
 * `select_chain_params` returns tuple of previous chain params and new chain params. 
-* some asserts in the library are conveted to the checks that raise
+* Some asserts in the library are conveted to the checks that raise
   `ValueError` or `TypeError` depending on the check.
-* fix class attribute dispatching code - ignore attributes of `abc.ABC` class
+* Fix class attribute dispatching code - ignore attributes of `abc.ABC` class
   when dispatching attribute access - otherwise isinstance/issubclass might
   give incorrect results due to `ABC._abc_cache` confusion
-* add type declarations for the functions, and checks for function or method
-  argument types at runtime. `coins_to_satoshi()` will raise `TypeError`
+* Added checks for function or method argument types at runtime.
+  `coins_to_satoshi()` will raise `TypeError`
   if the value is not an instance of int, float, or Decimal, for example.
-* fixes for minor bugs revealed by mypy after type declarations was added
+* Fixes for minor bugs revealed by mypy after type declarations was added
 * `CPubKey.recover_compact()` now returns None on failure to recover
   (it previously returned False, which is not consistent with the fact
   that it returns CPubKey on success)
 * CBech32Data now has `bech32_witness_version` field instead of `witver`
-* bitcointx.core.serialize module: `uint256_from_str` renamed to `uint256_from_bytes`,
+* `bitcointx.core.serialize module`: `uint256_from_str` renamed to `uint256_from_bytes`,
   `uint256_to_str` renamed to `uint256_to_bytes`, for the name to reflect the
   actual returning type (`_str` suffix is likely a remnant of python2)
-* result types for `to_mutable()` / `to_immutable` methods are only provided
+* Result types for `to_mutable()` / `to_immutable` methods are only provided
   for `CTransaction` and its subclasses. Classes for transaction components,
   such as `CTxOut` etc. still have `to_mutable()`/`to_immutable()` methods,
   but their return types will be Any.
