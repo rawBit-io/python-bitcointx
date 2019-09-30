@@ -12,10 +12,10 @@
 import threading
 import functools
 from types import FunctionType
-from abc import ABCMeta, ABC
+from abc import ABCMeta, ABC, abstractmethod
 from typing import (
     Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable, Optional,
-    TypeVar, cast
+    TypeVar, Generic, cast
 )
 
 # TODO: convert this to custom thread-local class to be able to apply typing
@@ -456,3 +456,42 @@ def ensure_isinstance(var: object,
                    f"{var.__class__.__name__} was supplied")
 
         raise TypeError(msg)
+
+
+class ReadOnlyFieldGuard(ABC):
+    """A unique class that is used as a guard type for ReadOnlyField.
+    It cannot be instantiated at runtime, and the static check will also
+    catch the attempts to instantiate it, because it has __new__()
+    defined as abstractmethod."""
+
+    @abstractmethod
+    def __new__(cls) -> None:
+        raise NotImplementedError
+
+
+class ReadOnlyField(Generic[T_unbounded]):
+    """A class to annotate read-only fields.
+    Only used for statically checking the code, and is not intended
+    to be used at runtime.
+    """
+    def __get__(self: T_unbounded, instance: object, owner: type
+                ) -> T_unbounded:
+        raise NotImplementedError
+
+    def __set__(self: T_unbounded, instance: object, value: ReadOnlyFieldGuard
+                ) -> None:
+        raise NotImplementedError
+
+
+class WriteableField(ReadOnlyField[T_unbounded]):
+    """A class to annotate the fields in the mutable subclasses of ths
+    classes that use ReadOnlyField.
+    Only used for statically checking the code, and is not intended
+    to be used at runtime.
+    """
+    def __get__(self: T_unbounded, instance: object, owner: type
+                ) -> T_unbounded:
+        raise NotImplementedError
+
+    def __set__(self: T_unbounded, instance: object, value: Any) -> None:
+        raise NotImplementedError
