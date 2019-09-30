@@ -34,6 +34,10 @@ Breaking changes:
 * `parse_standard_multisig_redeem_script()` now returns an instance of
   `StandardMultisigScriptInfo` instead of a dict (typecheking with dicts that
   have heterogenous values is a pain)
+* `bitcointx.core.scripteval.EvalScriptError` now does not directly store various
+  script eval state variables. There is now `ScriptEvalState` class that stores those,
+  and `EvalScriptError` has `state` attribute that stores the state as the instance
+  of that class
 
 ## v1.0.1
 
