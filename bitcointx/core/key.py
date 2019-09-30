@@ -137,7 +137,8 @@ class CKeyBase:
             assert result == 0
             raise ValueError('Cannot construct public key from private key')
 
-        self.pub = CPubKey._from_raw(raw_pubkey.raw, compressed=compressed)
+        self.pub = CPubKey._from_ctypes_char_array(
+            raw_pubkey, compressed=compressed)
 
     @no_bool_use_as_property
     def is_compressed(self) -> bool:
@@ -220,7 +221,8 @@ class CKeyBase:
             raise ValueError('supplied pubkey is not valid')
 
         result_data = ctypes.create_string_buffer(32)
-        ret = _secp256k1.secp256k1_ecdh(secp256k1_context_sign, result_data, pub._to_raw(), self,
+        ret = _secp256k1.secp256k1_ecdh(secp256k1_context_sign, result_data,
+                                        pub._to_ctypes_char_array(), self,
                                         None, None)
         if 1 != ret:
             assert(ret == 0)
@@ -326,8 +328,9 @@ class CPubKey(bytes):
         return cast(T_CPubKey, self)
 
     @classmethod
-    def _from_raw(cls: Type[T_CPubKey], raw_pubkey: bytes,
-                  compressed: bool = True) -> T_CPubKey:
+    def _from_ctypes_char_array(cls: Type[T_CPubKey],
+                                raw_pubkey: 'ctypes.Array[ctypes.c_char]',
+                                compressed: bool = True) -> T_CPubKey:
         if len(raw_pubkey) != 64:
             raise ValueError('raw pubkey must be 64 bytes')
         pub_size0 = ctypes.c_size_t()
@@ -340,7 +343,7 @@ class CPubKey(bytes):
 
         return cls(pub.raw[:pub_size0.value])
 
-    def _to_raw(self) -> bytes:
+    def _to_ctypes_char_array(self) -> 'ctypes.Array[ctypes.c_char]':
         assert self.is_fullyvalid()
         raw_pub = ctypes.create_string_buffer(64)
         result = _secp256k1.secp256k1_ec_pubkey_parse(
@@ -348,7 +351,7 @@ class CPubKey(bytes):
         if 1 != result:
             assert(result == 0)
             raise RuntimeError('secp256k1_ec_pubkey_parse returned failure')
-        return raw_pub.raw
+        return raw_pub
 
     @classmethod
     def recover_compact(cls: Type[T_CPubKey],
@@ -382,7 +385,7 @@ class CPubKey(bytes):
             assert result == 0
             return None
 
-        return cls._from_raw(raw_pubkey.raw, compressed=compressed)
+        return cls._from_ctypes_char_array(raw_pubkey, compressed=compressed)
 
     @no_bool_use_as_property
     def is_valid(self) -> bool:
@@ -425,7 +428,7 @@ class CPubKey(bytes):
         _secp256k1.secp256k1_ecdsa_signature_normalize(
             secp256k1_context_verify, raw_sig, raw_sig)
 
-        raw_pub = self._to_raw()
+        raw_pub = self._to_ctypes_char_array()
         result = _secp256k1.secp256k1_ecdsa_verify(
             secp256k1_context_verify, raw_sig, hash, raw_pub)
 
@@ -494,7 +497,7 @@ class CPubKey(bytes):
 
         pubkey_arr = (ctypes.c_char_p*len(pubkeys))()
         for i, p in enumerate(pubkeys):
-            pubkey_arr[i] = bytes(p._to_raw())
+            pubkey_arr[i] = bytes(p._to_ctypes_char_array())
 
         result_data = ctypes.create_string_buffer(64)
         ret = _secp256k1.secp256k1_ec_pubkey_combine(
@@ -503,19 +506,20 @@ class CPubKey(bytes):
             assert ret == 0
             raise ValueError('Combining the public keys failed')
 
-        return cls._from_raw(result_data.raw, compressed=compressed)
+        return cls._from_ctypes_char_array(result_data, compressed=compressed)
 
     def negated(self: T_CPubKey) -> T_CPubKey:
         if not secp256k1_has_pubkey_negate:
             raise RuntimeError(
                 'secp256k1 does not export pubkey negation function. '
                 'You should use newer version of secp256k1 library')
-        pubkey_buf = self._to_raw()
+        pubkey_buf = self._to_ctypes_char_array()
         ret = _secp256k1.secp256k1_ec_pubkey_negate(secp256k1_context_verify, pubkey_buf)
         if 1 != ret:
             assert(ret == 0)
             raise RuntimeError('secp256k1_ec_pubkey_negate returned failure')
-        return self.__class__._from_raw(pubkey_buf, compressed=self.is_compressed())
+        return self.__class__._from_ctypes_char_array(
+            pubkey_buf, compressed=self.is_compressed())
 
     @classmethod
     def add(cls: Type[T_CPubKey], a: T_CPubKey, b: T_CPubKey) -> T_CPubKey:
@@ -727,7 +731,7 @@ class CExtPubKeyBase(CExtKeyCommonBase):
                               hashlib.sha512).digest()
         chaincode = bip32_hash[32:]
 
-        raw_pub = self.pub._to_raw()
+        raw_pub = self.pub._to_ctypes_char_array()
 
         result = _secp256k1.secp256k1_ec_pubkey_tweak_add(
             secp256k1_context_verify, raw_pub, bip32_hash)
