@@ -78,7 +78,11 @@ def secp256k1_get_last_error() -> Dict[str, Union[int, str]]:
 def _check_ressecp256k1_void_p(val: int, _func: FunctionType,
                                _args: Any) -> ctypes.c_void_p:
     if val == 0:
-        err = _secp256k1_error_storage.last_error
+        err = getattr(_secp256k1_error_storage, 'last_error', None)
+        if err is None:
+            raise Libsecp256k1Exception(
+                -3, ('error handling callback function was not called, '
+                     'error is not known'))
         raise Libsecp256k1Exception(err['code'], err['message'])
     return ctypes.c_void_p(val)
 

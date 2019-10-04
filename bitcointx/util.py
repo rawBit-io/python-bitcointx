@@ -18,12 +18,6 @@ from typing import (
     TypeVar, Generic, cast
 )
 
-# TODO: convert this to custom thread-local class to be able to apply typing
-class_mapping_dispatch_data = threading.local()
-class_mapping_dispatch_data.core = None
-class_mapping_dispatch_data.wallet = None
-class_mapping_dispatch_data.script = None
-
 _attributes_of_ABC = dir(ABC)
 
 
@@ -103,16 +97,16 @@ def activate_class_dispatcher(dclass: Type[T_ClassMappingDispatcher]
         raise ValueError("{} must not be used directly"
                          .format(dclass.__name__))
 
-    prev = getattr(class_mapping_dispatch_data,
-                   dclass._class_dispatcher__identity)
+    prev = class_mapping_dispatch_data.get_dispatcher_class(
+        dclass._class_dispatcher__identity)
 
     if dclass is not prev:
         for ddep in get_class_dispatcher_depends(dclass):
             activate_class_dispatcher(ddep)
 
-        setattr(class_mapping_dispatch_data,
-                dclass._class_dispatcher__identity,
-                dclass)
+        class_mapping_dispatch_data.set_dispatcher_class(
+            dclass._class_dispatcher__identity,
+            dclass)
 
     return prev  # type: ignore
 
@@ -125,8 +119,12 @@ def dispatcher_mapped_list(cls: T_ClassMappingDispatcher,
     if ClassMappingDispatcher not in mcs.__mro__:
         raise ValueError('{} is not a dispatcher class'.format(cls.__name__))
 
-    dispatcher = getattr(class_mapping_dispatch_data,
-                         mcs._class_dispatcher__identity)
+    dispatcher = class_mapping_dispatch_data.get_dispatcher_class(
+        mcs._class_dispatcher__identity)
+
+    if dispatcher is None:
+        return []
+
     dclass_list = dispatcher._class_dispatcher__clsmap.get(cls, [])
     # We do not have type-annotead thread-local data at the moment,
     # - it requires custom thread-local class, which is in TODO.
@@ -210,7 +208,7 @@ class ClassMappingDispatcher(ABCMeta):
             """
 
         if identity is not None:
-            if not hasattr(class_mapping_dispatch_data, identity):
+            if not class_mapping_dispatch_data.is_valid_identity(identity):
                 raise ValueError('identity {} is not recognized'
                                  .format(identity))
             if hasattr(mcs, '_class_dispatcher__identity'):
@@ -391,8 +389,8 @@ class ClassMappingDispatcher(ABCMeta):
         """Perform class mapping in accordance to the currently active
         dispatcher class"""
         mcs = type(cls)
-        cur_dispatcher = getattr(class_mapping_dispatch_data,
-                                 mcs._class_dispatcher__identity)
+        cur_dispatcher = class_mapping_dispatch_data.get_dispatcher_class(
+            mcs._class_dispatcher__identity)
         if cur_dispatcher is None:
             return type.__call__(cls, *args, **kwargs)
 
@@ -412,8 +410,8 @@ class ClassMappingDispatcher(ABCMeta):
                 or name in _attributes_of_ABC:
             return type.__getattribute__(cls, name)
         mcs = type(cls)
-        cur_dispatcher = getattr(class_mapping_dispatch_data,
-                                 mcs._class_dispatcher__identity)
+        cur_dispatcher = class_mapping_dispatch_data.get_dispatcher_class(
+            mcs._class_dispatcher__identity)
         if cur_dispatcher is None:
             return type.__getattribute__(cls, name)
 
@@ -496,6 +494,60 @@ class WriteableField(ReadOnlyField[T_unbounded]):
     def __set__(self: T_unbounded, instance: object, value: Any) -> None:
         raise NotImplementedError
 
+
+class ThreadLocalClassDispatchers(threading.local):
+    __slots__: List[str] = [
+        'default_core', 'default_wallet', 'default_script']
+
+    core: Type[ClassMappingDispatcher]
+    wallet: Type[ClassMappingDispatcher]
+    script: Type[ClassMappingDispatcher]
+
+    default_core: Type[ClassMappingDispatcher]
+    default_wallet: Type[ClassMappingDispatcher]
+    default_script: Type[ClassMappingDispatcher]
+
+    def __init__(self) -> None:
+        for def_name in self.__slots__:
+            identity = def_name.replace('default_', '', 1)
+            assert identity != def_name
+            setattr(self, identity,
+                    getattr(self, def_name, None))
+
+    def is_valid_identity(self, identity: str) -> bool:
+        # cannot use the default identity
+        if identity.startswith('default_'):
+            return False
+
+        # if we have corresponding default identity,
+        # then the specified identity is valid
+        return ('default_' + identity) in self.__slots__
+
+    def get_dispatcher_class(
+        self, identity: str
+    ) -> Optional[Type[ClassMappingDispatcher]]:
+        assert self.is_valid_identity(identity)
+        dclass = getattr(self, identity)
+        if dclass is None:
+            return None
+        assert issubclass(dclass, ClassMappingDispatcher)
+        return cast(Type[ClassMappingDispatcher], dclass)
+
+    def set_dispatcher_class(self, identity: str,
+                             value: Type[ClassMappingDispatcher]) -> None:
+        if identity.startswith('default_'):
+            raise ValueError(
+                'cannot set dispatcher class for default identity directly')
+        cur = getattr(self, identity)
+        if cur is None:
+            def_attr = 'default_' + identity
+            assert not hasattr(self, def_attr)
+            setattr(self, def_attr, value)
+
+        setattr(self, identity, value)
+
+
+class_mapping_dispatch_data = ThreadLocalClassDispatchers()
 
 __all__ = (
     'no_bool_use_as_property',

@@ -50,13 +50,20 @@ from ..util import (
 from ..util import ReadOnlyField, WriteableField
 
 
-_thread_local = threading.local()
-_thread_local.mutable_context_enabled = False
-
 T__UintBitVector = TypeVar('T__UintBitVector', bound='_UintBitVector')
 
 
 T_CoreCoinClass = TypeVar('T_CoreCoinClass', bound='CoreCoinClass')
+
+
+class ThreadLocalMutableContext(threading.local):
+    mutable_context_enabled: bool
+
+    def __init__(self) -> None:
+        self.mutable_context_enabled = False
+
+
+_thread_local = ThreadLocalMutableContext()
 
 
 class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',

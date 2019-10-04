@@ -31,8 +31,10 @@ import bitcointx.util
 # case __version__ could be moved to a separate version.py and imported here.
 __version__ = '1.0.2.dev0'
 
-_thread_local = threading.local()
-_thread_local.params = None
+
+# initialized at the end of the module, because it
+# references BitcoinMainnetParams, which is not yet defined here.
+_thread_local:  'ThreadLocalChainParams'
 
 
 class ChainParamsMeta(ABCMeta):
@@ -186,7 +188,7 @@ class BitcoinSignetParams(BitcoinMainnetParams, name='bitcoin/signet'):
 
 
 def get_current_chain_params() -> ChainParamsBase:
-    return cast(ChainParamsBase, _thread_local.params)
+    return _thread_local.params
 
 
 @contextmanager
@@ -250,7 +252,15 @@ def select_chain_params(params: Union[str, ChainParamsBase,
     return prev_params, params
 
 
-select_chain_params(BitcoinMainnetParams)
+class ThreadLocalChainParams(threading.local):
+    params: ChainParamsBase
+
+    def __init__(self) -> None:
+        self.params = BitcoinMainnetParams()
+
+
+_thread_local = ThreadLocalChainParams()
+
 
 __all__ = (
     'ChainParamsBase',
