@@ -31,6 +31,7 @@
 * `scripteval.VerifyWitnessProgram()` returns None. It was returning True previously,
   in case of success, but in case of failure, it raised an exception. The result was
   never examined - so it was not correct to use bool as a return type.
+* Threading is actually supported now, threading-related tests added
 
 Breaking changes:
 
