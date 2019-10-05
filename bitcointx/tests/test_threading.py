@@ -25,7 +25,8 @@ from bitcointx.core.secp256k1 import (
     _secp256k1, secp256k1_get_last_error, secp256k1_context_verify
 )
 from bitcointx.wallet import (
-    P2PKHCoinAddress, P2SHCoinAddress, P2WPKHCoinAddress
+    P2PKHCoinAddress, P2SHCoinAddress, P2WPKHCoinAddress,
+    P2WPKHBitcoinRegtestAddress
 )
 import bitcointx.bech32
 from bitcointx.base58 import CBase58Data
@@ -92,7 +93,7 @@ class Test_Threading(unittest.TestCase):
             select_chain_params('bitcoin/regtest')
             a = P2WPKHCoinAddress.from_pubkey(pub)
             witver, data = bitcointx.bech32.decode(
-                P2WPKHCoinAddress.bech32_hrp, str(a))
+                P2WPKHBitcoinRegtestAddress.bech32_hrp, str(a))
             assert witver == 0
             assert data == Hash160(pub)
             check_core_modules()
