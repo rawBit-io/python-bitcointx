@@ -1047,7 +1047,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         return n
 
     def sighash(self, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                hashtype: SIGHASH_Type, amount: int = 0,
+                hashtype: SIGHASH_Type, amount: Optional[int] = None,
                 sigversion: SIGVERSION_Type = SIGVERSION_BASE) -> bytes:
         """Calculate a signature hash
 
@@ -1061,7 +1061,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         return h
 
     def raw_sighash(self, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                    hashtype: SIGHASH_Type, amount: int = 0,
+                    hashtype: SIGHASH_Type, amount: Optional[int] = None,
                     sigversion: SIGVERSION_Type = SIGVERSION_BASE
                     ) -> Tuple[bytes, Optional[str]]:
         """Consensus-correct SignatureHash
@@ -1189,7 +1189,7 @@ def CompareBigEndian(c1: List[int], c2: List[int]) -> int:
 
 
 def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                            hashtype: SIGHASH_Type, amount: int = 0,
+                            hashtype: SIGHASH_Type, amount: Optional[int] = None,
                             sigversion: SIGVERSION_Type = SIGVERSION_BASE
                             ) -> Tuple[bytes, Optional[str]]:
     """Consensus-correct SignatureHash
@@ -1206,6 +1206,7 @@ def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction'
     HASH_ONE = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
 
     if sigversion == SIGVERSION_WITNESS_V0:
+        ensure_isinstance(amount, int, 'amount')
         hashPrevouts = b'\x00'*32
         hashSequence = b'\x00'*32
         hashOutputs  = b'\x00'*32
@@ -1301,7 +1302,7 @@ def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction'
 
 
 def RawSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                     hashtype: SIGHASH_Type, amount: int = 0,
+                     hashtype: SIGHASH_Type, amount: Optional[int] = None,
                      sigversion: SIGVERSION_Type = SIGVERSION_BASE
                      ) -> Tuple[bytes, Optional[str]]:
     """Consensus-correct SignatureHash
@@ -1316,7 +1317,7 @@ def RawSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx
 
 
 def SignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                  hashtype: SIGHASH_Type, amount: int = 0,
+                  hashtype: SIGHASH_Type, amount: Optional[int] = None,
                   sigversion: SIGVERSION_Type = SIGVERSION_BASE) -> bytes:
     """Calculate a signature hash
 

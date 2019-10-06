@@ -32,6 +32,9 @@
   in case of success, but in case of failure, it raised an exception. The result was
   never examined - so it was not correct to use bool as a return type.
 * Threading is actually supported now, threading-related tests added
+* sighash-calculation functions now has their `amount` argument None by default
+  (before it was 0). With `SIGVERSION_BASE`, amount is not used, and for
+  `SIGVERSION_WITNESS_V0`, amount must be specified.
 
 Breaking changes:
 
