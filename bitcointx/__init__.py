@@ -76,7 +76,6 @@ class ChainParamsMeta(ABCMeta):
 
             if name is not None:
                 if isinstance(name, str):
-                    cls_instance.NAME = name
                     names = [name]
                 elif isinstance(name, (list, tuple)):
                     names = cast(List[str], list(name))
@@ -91,6 +90,8 @@ class ChainParamsMeta(ABCMeta):
                             .format(
                                 name, cls._registered_classes[name].__name__))
                     cls._registered_classes[name] = cls_instance
+
+                cls_instance.NAME = names[0]
         else:
             if cls._common_base_cls:
                 raise TypeError(
