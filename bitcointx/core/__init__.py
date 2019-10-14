@@ -869,8 +869,6 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
                 return False
         return True
 
-    # NOTE: this cannot be a @classmethod like the others because we need to
-    # know how many items to deserialize, which comes from len(vin)
     @classmethod
     def stream_deserialize(cls: Type[T_CTxWitness], f: ByteStream_Type,
                            num_inputs: int = -1, **kwargs: Any) -> T_CTxWitness:
