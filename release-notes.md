@@ -35,6 +35,9 @@
 * sighash-calculation functions now has their `amount` argument None by default
   (before it was 0). With `SIGVERSION_BASE`, amount is not used, and for
   `SIGVERSION_WITNESS_V0`, amount must be specified.
+* `CTxWitness.stream_deserialize()` is now a classmethod, same as
+  `stream_deserialize()` methods of all other classes. It expects to be
+  supplied with `num_inputs=` keyword argument.
 
 Breaking changes:
 

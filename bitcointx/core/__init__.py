@@ -873,7 +873,8 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
     def stream_deserialize(cls: Type[T_CTxWitness], f: ByteStream_Type,
                            num_inputs: int = -1, **kwargs: Any) -> T_CTxWitness:
         if num_inputs < 0:
-            raise ValueError('num_inputs must be specified')
+            raise ValueError(
+                'num_inputs must be specified (and must be non-negative)')
         vtxinwit = tuple(CTxInWitness.stream_deserialize(f, **kwargs)
                          for dummy in range(num_inputs))
         return cls(vtxinwit)
