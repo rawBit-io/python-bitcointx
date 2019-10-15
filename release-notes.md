@@ -38,6 +38,10 @@
 * `CTxWitness.stream_deserialize()` is now a classmethod, same as
   `stream_deserialize()` methods of all other classes. It expects to be
   supplied with `num_inputs=` keyword argument.
+* fix `CScript.to_p2wsh_scriptPubKey()` -- check for 3600 bytes standardness
+  limit instead of 520 byte limit that is applicable for p2sh, not for p2wsh
+* fix `CScript.to_p2wpkh_scriptPubKey()` -- check that redeemScript
+  is a p2pkh script
 
 Breaking changes:
 

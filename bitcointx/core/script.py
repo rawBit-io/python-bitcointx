@@ -41,6 +41,7 @@ from ..util import (
 
 MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
+MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600
 MAX_SCRIPT_OPCODES = 201
 
 # CScriptOp is a subclass of int, and CPubKey is a subclass of bytes,
@@ -994,36 +995,37 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
     def to_p2wsh_scriptPubKey(self: T_CScript, checksize: bool = True
                               ) -> T_CScript:
-        """Create P2WSH scriptPubKey from this redeemScript
+        """Create P2WSH scriptPubKey from this witnessScript
 
         That is, create the P2WSH scriptPubKey that requires this script as a
-        redeemScript to spend.
+        witnessScript to spend.
 
-        checksize - Check if the redeemScript is larger than the 520-byte max
-        pushdata limit; raise ValueError if limit exceeded.
+        checksize - Check if the witnessScript is larger than the 3600-byte max
+        script standardness limit; raise ValueError if limit exceeded.
 
-        Since a >520-byte PUSHDATA makes EvalScript() fail, it's not actually
-        possible to redeem P2WSH outputs with redeem scripts >520 bytes.
+        It is possible to have witnessScript up to 10000 bytes in size, if
+        you are able to bypass transaction standardness checks (for example
+        if you can supply your transaction directly to the miner and the miner
+        would accept it), but generally you would not want to create
+        non-standard transaction witnesses, as the nodes will not relay
+        non-standard transactions.
+
         """
-        if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
-            raise ValueError("redeemScript exceeds max allowed size; P2SH output would be unspendable")
+        if checksize and len(self) > MAX_STANDARD_P2WSH_SCRIPT_SIZE:
+            raise ValueError(
+                "witnessScript exceeds max size allowes for standard witness scripts; "
+                "nodes will deny relaying the transaction containing this witnessScript in the txin witness")
         return self.__class__([0, hashlib.sha256(self).digest()])
 
-    def to_p2wpkh_scriptPubKey(self: T_CScript, checksize: bool = True
-                               ) -> T_CScript:
+    def to_p2wpkh_scriptPubKey(self: T_CScript) -> T_CScript:
         """Create P2WPKH scriptPubKey from this redeemScript
 
         That is, create the P2WPKH scriptPubKey that requires this script as a
         redeemScript to spend.
 
-        checksize - Check if the redeemScript is larger than the 520-byte max
-        pushdata limit; raise ValueError if limit exceeded.
-
-        Since a >520-byte PUSHDATA makes EvalScript() fail, it's not actually
-        possible to redeem P2WSH outputs with redeem scripts >520 bytes.
         """
-        if checksize and len(self) > MAX_SCRIPT_ELEMENT_SIZE:
-            raise ValueError("redeemScript exceeds max allowed size; P2WPKH output would be unspendable")
+        if not self.is_p2pkh():
+            raise ValueError("redeemScript is not a p2pkh script")
         return self.__class__([0, bitcointx.core.Hash160(self)])
 
     def GetSigOpCount(self, fAccurate: bool) -> int:
