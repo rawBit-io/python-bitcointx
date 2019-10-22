@@ -451,6 +451,7 @@ __all__ = (
     'SerializationError',
     'SerializationTruncationError',
     'DeserializationExtraDataError',
+    'DeserializationValueBoundsError',
     'ser_read',
     'Serializable',
     'ImmutableSerializable',
