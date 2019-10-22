@@ -42,6 +42,9 @@
   limit instead of 520 byte limit that is applicable for p2sh, not for p2wsh
 * fix `CScript.to_p2wpkh_scriptPubKey()` -- check that redeemScript
   is a p2pkh script
+* `core.serialize.VarIntSerializer` now checks for value bounds of deserialized
+  compact size integer. If it enconters non-canonical encoding, or the size
+  bigger than `MAX_SIZE` (0x02000000) it throws DeserializationValueBoundsError
 
 Breaking changes:
 
