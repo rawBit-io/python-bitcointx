@@ -872,11 +872,10 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         if size < 4 or size > 42:
             return False
 
-        head = struct.unpack('<bb', self[:2])
-        if not CScriptOp(head[0]).is_small_int():
+        if not CScriptOp(self[0]).is_small_int():
             return False
 
-        if head[1] + 2 != size:
+        if self[1] + 2 != size:
             return False
 
         return True
