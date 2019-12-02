@@ -69,7 +69,7 @@ SIGVERSION_WITNESS_V0: SIGVERSION_Type = SIGVERSION_Type(1)
 class SIGHASH_Type(int):
     # The type of 'other' is intentionally incompatible wit supertype 'int'
     # because we do not want that or-ing with anything but bitflag type
-    # produced SIGHAS_Type result.
+    # to produce SIGHASH_Type result.
     def __or__(self,  # type: ignore
                other: 'SIGHASH_Bitflag_Type'
                ) -> 'SIGHASH_Type':
@@ -92,7 +92,11 @@ SIGHASH_ALL: SIGHASH_Type = SIGHASH_Type(1)
 SIGHASH_NONE: SIGHASH_Type = SIGHASH_Type(2)
 SIGHASH_SINGLE: SIGHASH_Type = SIGHASH_Type(3)
 
+KNOWN_SIGHASH_TYPES = {SIGHASH_ALL, SIGHASH_NONE, SIGHASH_SINGLE}
+
 SIGHASH_ANYONECANPAY: SIGHASH_Bitflag_Type = SIGHASH_Bitflag_Type(0x80)
+
+KNOWN_SIGHASH_BITFLAGS = SIGHASH_ANYONECANPAY
 
 # (partial) comment from Bitcoin Core IsStandardTx() function:
 # Biggest 'standard' txin is a 15-of-15 P2SH multisig with compressed
@@ -1655,6 +1659,8 @@ __all__ = (
     'SIGHASH_NONE',
     'SIGHASH_SINGLE',
     'SIGHASH_ANYONECANPAY',
+    'KNOWN_SIGHASH_TYPES',
+    'KNOWN_SIGHASH_BITFLAGS',
     'FindAndDelete',
     'RawSignatureHash',
     'RawBitcoinSignatureHash',

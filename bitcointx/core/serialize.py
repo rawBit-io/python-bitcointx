@@ -233,6 +233,7 @@ class Serializer(Generic[T_unbounded]):
 
     @classmethod
     def deserialize(cls, buf: bytes, **kwargs: Any) -> T_unbounded:
+        inst: T_unbounded
         inst, tail = cls.deserialize_partial(buf, **kwargs)
         if tail:
             raise ValueError(
