@@ -20,7 +20,7 @@ You probabably don't need to use these directly.
 import hashlib
 import struct
 from typing import (
-    List, Sequence, Union, TypeVar, Type, Generic, Any, Optional, cast
+    List, Tuple, Sequence, Union, TypeVar, Type, Generic, Any, Optional, cast
 )
 from ..util import ensure_isinstance
 
@@ -225,9 +225,20 @@ class Serializer(Generic[T_unbounded]):
         return f.getvalue()
 
     @classmethod
-    def deserialize(cls, buf: bytes, **kwargs: Any) -> T_unbounded:
+    def deserialize_partial(cls, buf: bytes, **kwargs: Any
+                            ) -> Tuple[T_unbounded, bytes]:
         ensure_isinstance(buf, (bytes, bytearray), 'data to deserialize')
-        return cls.stream_deserialize(BytesIO(buf), **kwargs)
+        f = BytesIO(buf)
+        return cls.stream_deserialize(f, **kwargs), f.read(-1)
+
+    @classmethod
+    def deserialize(cls, buf: bytes, **kwargs: Any) -> T_unbounded:
+        inst, tail = cls.deserialize_partial(buf, **kwargs)
+        if tail:
+            raise ValueError(
+                f'stray data after deserialization: '
+                f'{len(buf)} byte(s) unaccounted for')
+        return inst
 
 
 class VarIntSerializer(Serializer[int]):
