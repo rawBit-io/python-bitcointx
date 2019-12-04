@@ -64,6 +64,13 @@
 * `core.serialize.VarIntSerializer` now checks for value bounds of deserialized
   compact size integer. If it enconters non-canonical encoding, or the size
   bigger than `MAX_SIZE` (0x02000000) it throws DeserializationValueBoundsError
+* `CPubKey.is_valid()` is deprecated due to possibility of confusion 
+  with `CPubKey.is_fullyvalid()`. `CPubKey.is_valid()` will be removed
+  in the future. Please use `CPubKey.is_nonempty()` instead.
+  CPubKey's `is_valid()`/`is_fullyvalid()` was modelled after BitcoinCore's
+  CPubKey's `IsValid()`/`IsFullyValid()`, but the possible confusion and
+  subsequent incorrect checks is dangerous, and it is better to not maintain
+  the correspondense with Core in this case.
 
 Breaking changes:
 

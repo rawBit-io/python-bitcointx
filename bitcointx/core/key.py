@@ -24,6 +24,7 @@ import struct
 import ctypes
 import ctypes.util
 import hashlib
+import warnings
 from typing import (
     TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast
 )
@@ -302,7 +303,7 @@ class CPubKey(bytes):
 
     Attributes:
 
-    is_valid()      - Corresponds to CPubKey.IsValid()
+    is_nonempty()      - Corresponds to CPubKey.IsValid()
 
     is_fullyvalid() - Corresponds to CPubKey.IsFullyValid()
 
@@ -318,7 +319,7 @@ class CPubKey(bytes):
         self = super().__new__(cls, buf)  # type: ignore
 
         self._fullyvalid = False
-        if self.is_valid():
+        if self.is_nonempty():
             tmp_pub = ctypes.create_string_buffer(64)
             result = _secp256k1.secp256k1_ec_pubkey_parse(
                 secp256k1_context_verify, tmp_pub, self, len(self))
@@ -389,6 +390,22 @@ class CPubKey(bytes):
 
     @no_bool_use_as_property
     def is_valid(self) -> bool:
+        """Bitcoin Core has IsValid() and IsFullyValid() for CPubKey,
+        but there is a danger that a developer would use is_valid() where
+        they really meant is_fullyvalid(), and thus could pass invalid pubkeys
+        potentially breaking some important checks. Better be safe and do not
+        use confusing names - thus is_valid is deprecated and will be removed
+        in the future."""
+        warnings.warn(
+            "CPubKey.is_valid() is deprecated due to possibility of confusion "
+            "with CPubKey.is_fullyvalid(). CPubKey.is_valid() will be removed "
+            "in the future. Please use CPubKey.is_nonempty() instead.",
+            DeprecationWarning
+        )
+        return self.is_nonempty()
+
+    @no_bool_use_as_property
+    def is_nonempty(self) -> bool:
         return len(self) > 0
 
     @no_bool_use_as_property

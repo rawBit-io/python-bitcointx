@@ -21,9 +21,9 @@ from bitcointx.core.secp256k1 import secp256k1_has_pubkey_negate
 
 class Test_CPubKey(unittest.TestCase):
     def test(self):
-        def T(hex_pubkey, is_valid, is_fullyvalid, is_compressed):
+        def T(hex_pubkey, is_nonempty, is_fullyvalid, is_compressed):
             key = CPubKey(x(hex_pubkey))
-            self.assertEqual(key.is_valid(), is_valid)
+            self.assertEqual(key.is_nonempty(), is_nonempty)
             self.assertEqual(key.is_fullyvalid(), is_fullyvalid)
             self.assertEqual(key.is_compressed(), is_compressed)
 
