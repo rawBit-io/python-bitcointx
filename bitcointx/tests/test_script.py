@@ -158,6 +158,9 @@ class Test_CScript(unittest.TestCase):
           StandardMultisigScriptInfo(total=15, required=15, pubkeys=pubkeys))
 
         with self.assertRaises(ValueError):
+            # invalid script - extra opcode
+            T(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG, OP_DROP]), {})
+        with self.assertRaises(ValueError):
             # invalid pubkey - extra data
             T(CScript([1, pubkeys[0]+b'abc', pubkeys[1], 2, OP_CHECKMULTISIG]), {})
         with self.assertRaises(ValueError):

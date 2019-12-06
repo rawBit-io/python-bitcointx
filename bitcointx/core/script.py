@@ -1416,9 +1416,14 @@ def parse_standard_multisig_redeem_script(script: CScript
     if last_op != OP_CHECKMULTISIG:
         raise ValueError('script is not a p2sh script, last opcode '
                          'is not OP_CHECKMULTISIG')
+    try:
+        next(si)
+    except StopIteration:
+        # check that this is actually the last opcode
+        return StandardMultisigScriptInfo(total=total, required=required,
+                                          pubkeys=pubkeys)
 
-    return StandardMultisigScriptInfo(total=total, required=required,
-                                      pubkeys=pubkeys)
+    raise ValueError('script has opcodes past OP_CHECKMULTISIG')
 
 
 def standard_multisig_witness_stack(sigs: List[Union[bytes, bytearray]],
