@@ -168,7 +168,7 @@ class CBase58Data(bytes):
             raise UnexpectedBase58PrefixError(
                 'Incorrect prefix bytes for {}: {}, expected {}'
                 .format(cls.__name__,
-                        bitcointx.core.b2x(pfx),
+                        bitcointx.core.b2x(data[:len(pfx)]),
                         bitcointx.core.b2x(cls.base58_prefix)))
 
         raise UnexpectedBase58PrefixError(
