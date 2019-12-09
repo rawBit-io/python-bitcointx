@@ -998,9 +998,10 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         return not self.wit.is_null()
 
     def _repr_or_str(self, strfn: Callable[[Any], str]) -> str:
-        return "%s(%s, %s, %i, %i, %s)" % (
+        return "%s([%s], [%s], %i, %i, %s)" % (
             self.__class__.__name__,
-            ', '.join(strfn(v) for v in self.vin), ', '.join(strfn(v) for v in self.vout),
+            ', '.join(strfn(v) for v in self.vin),
+            ', '.join(strfn(v) for v in self.vout),
             self.nLockTime, self.nVersion, strfn(self.wit))
 
     def GetTxid(self) -> bytes:
