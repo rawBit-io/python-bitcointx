@@ -1052,10 +1052,15 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 sigversion: SIGVERSION_Type = SIGVERSION_BASE) -> bytes:
         """Calculate a signature hash
 
-        'Cooked' version that checks if inIdx is out of bounds - this is *not*
+        'Cooked' version that checks if inIdx is out of bounds, and always
+        checks that hashtype is a known hashtype value - this is *not*
         consensus-correct behavior, but is what you probably want for general
         wallet use.
         """
+
+        if (hashtype & ~KNOWN_SIGHASH_BITFLAGS) not in KNOWN_SIGHASH_TYPES:
+            raise ValueError(f'unknown sighash type {hashtype:x}')
+
         (h, err) = self.raw_sighash(txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
         if err is not None:
             raise ValueError(err)
