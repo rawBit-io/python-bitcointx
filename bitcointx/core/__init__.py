@@ -993,6 +993,10 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
     def is_coinbase(self) -> bool:
         return len(self.vin) == 1 and self.vin[0].prevout.is_null()
 
+    @no_bool_use_as_property
+    def is_null(self) -> bool:
+        return not(self.vin) and not(self.vout)
+
     def has_witness(self) -> bool:
         """True if witness"""
         return not self.wit.is_null()
