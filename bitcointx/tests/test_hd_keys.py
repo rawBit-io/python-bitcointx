@@ -125,12 +125,15 @@ class Test_CBitcoinExtKey(unittest.TestCase):
         for vector in BIP32_TEST_VECTORS:
             _, seed = vector[0]
             base_key = CBitcoinExtKey.from_seed(x(seed))
+            self.assertEqual(base_key.parent_fp, b'\x00\x00\x00\x00')
             key = base_key
             path = []
             for xpub, xpriv, child_num in vector[1:]:
                 self.assertEqual(xpub, str(key.neuter()))
                 self.assertEqual(xpriv, str(key))
+                parent_fp = key.fingerprint
                 key = key.derive(child_num)
+                self.assertEqual(key.parent_fp, parent_fp)
                 path.append(child_num)
 
             key_from_path = base_key.derive_path(str(BIP32Path(path)))
@@ -153,8 +156,11 @@ class Test_CBitcoinExtPubKey(unittest.TestCase):
     def test_derive(self):
         def T(base_xpub, expected_child, path):
             xpub = CBitcoinExtPubKey(base_xpub)
+            self.assertEqual(xpub.parent_fp, b'\x00\x00\x00\x00')
             for child_num in path:
+                parent_fp = xpub.fingerprint
                 xpub = xpub.derive(child_num)
+                self.assertEqual(xpub.parent_fp, parent_fp)
 
             self.assertEqual(str(CBitcoinExtPubKey.from_bytes(xpub)), expected_child)
 

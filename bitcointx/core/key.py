@@ -613,6 +613,10 @@ class CExtKeyCommonBase:
 
         return xkey
 
+    @property
+    def fingerprint(self):
+        return self.pub.key_id[:4]
+
     def derive(self: T_CExtKeyCommonBase, child_number: int) -> T_CExtKeyCommonBase:
         raise NotImplementedError('subclasses must override derive()')
 
@@ -701,9 +705,8 @@ class CExtKeyBase(CExtKeyCommonBase):
             assert result == 0
             raise KeyDerivationFailException('extended privkey derivation failed')
 
-        parent_fp = self.pub.key_id[:4]
         cls = self.__class__
-        return cls.from_bytes(bytes([depth]) + parent_fp
+        return cls.from_bytes(bytes([depth]) + self.fingerprint
                               + child_number_packed + chaincode
                               + bytes([0]) + child_privkey.raw)
 
@@ -769,9 +772,8 @@ class CExtPubKeyBase(CExtKeyCommonBase):
             assert(result == 0)
             raise RuntimeError('secp256k1_ec_pubkey_serialize returned failure')
 
-        parent_fp = self.pub.key_id[:4]
         cls = self.__class__
-        return cls.from_bytes(bytes([depth]) + parent_fp
+        return cls.from_bytes(bytes([depth]) + self.fingerprint
                               + child_number_packed + chaincode
                               + child_pubkey.raw)
 
