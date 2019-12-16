@@ -10,7 +10,7 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-# pylama:ignore=E501
+# pylama:ignore=E501,C901
 
 """Script evaluation
 
@@ -483,7 +483,7 @@ def _CheckSig(sig: bytes, pubkey: bytes, script: CScript,
     # that should cause other validation machinery to fail long before we ever
     # got here.
     (h, err) = script.raw_sighash(
-        txTo, inIdx, SIGHASH_Type(hashtype), amount=amount, sigversion=sigversion)
+        txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
 
     return verify_fn(h, sig[:-1])
 

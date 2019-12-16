@@ -2,24 +2,25 @@
 
 ## v1.0.2.dev0
 
-* Fix `parse_standard_multisig_redeem_script()` - add check that there's no extra
-  opcodes after `OP_CHECKMULTISIG`.
+* IMPORTANT FIX: `parse_standard_multisig_redeem_script()` - add check that there's
+  no extra opcodes after `OP_CHECKMULTISIG`. Before the fix, this function could
+  incorrectly report certain non-standatd multisig scripts as 'standard' and return
+  pubkeys that might not be the pubkeys of the keys that control the actual spending.
 
-  IMPORTANT: Before the fix, this function could incorrectly detect certain
-  non-standatd multisig scripts as 'standard' and report pubkeys that would
-  be not the pubkeys that would control the actual spending.
-
-  If you need to compare that some untrusted multisig redeem script matches some
-  known keys, the best and least error-prone approach is to construct the new redeem
+  If you need to compare that some untrusted redeem script matches some known keys,
+  the best and least error-prone approach is to construct the new redeem
   script using those known keys and then compare the final script with the untrusted one.
 
   If you instead chosen to use this function to parse untrusted data and then compare
-  the extracted pubkeys with known ones, the function before the fix would allow
-  to bypass such checks (because CHECKMULTISIG does not stop the script execution on
-  signature check failure). It was not initially considered that this function would be
-  used for parse-untrusted-data-then-compare-components tasks, but nothing stopping
+  the extracted pubkeys with known ones, the function before the fix could allow
+  to bypass such checks. It was not initially considered that this function would be
+  used for parse-untrusted-data-then-compare-components tasks, but nothing is stopping
   anyone from using this function in this way, and therefore not checking that there is
-  no extra opcodes after CHECKMULTISIG can be considered a serious flaw.
+  no extra opcodes after CHECKMULTISIG can be considered a serious flaw, which was fixed
+  in this release.
+
+  Also, `parse_standard_multisig_redeem_script()` now raises ValueError if there are
+  duplicate pubkeys found in the script.
 
 * Added signet support `bitcoin/signet`.
 * Library is now fully type-annotated and statically checked using

@@ -10,7 +10,7 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-# pylama:ignore=E501,E261,E231,E221
+# pylama:ignore=E501,E261,E231,E221,C901
 
 """Scripts
 
@@ -21,9 +21,10 @@ is in bitcointx.core.scripteval
 import struct
 import hashlib
 from io import BytesIO
+from abc import abstractmethod
 from typing import (
     List, Tuple, Dict, Union, Iterable, Sequence, Optional, TypeVar, Type,
-    Generator, Iterator, Any, cast
+    Generator, Iterator, Any, Callable, cast
 )
 
 import bitcointx.core
@@ -66,7 +67,39 @@ SIGVERSION_BASE: SIGVERSION_Type = SIGVERSION_Type(0)
 SIGVERSION_WITNESS_V0: SIGVERSION_Type = SIGVERSION_Type(1)
 
 
+T_int = TypeVar('T_int', bound=int)
+
+
+class SIGHASH_Bitflag_Type(int):
+    def __or__(self, other: T_int) -> T_int:
+        return cast(T_int, super().__or__(other))
+
+
+SIGHASH_ANYONECANPAY: SIGHASH_Bitflag_Type = SIGHASH_Bitflag_Type(0x80)
+
+T_SIGHASH_Type = TypeVar('T_SIGHASH_Type', bound='SIGHASH_Type')
+
+
 class SIGHASH_Type(int):
+
+    _known_values: Tuple[int, ...] = ()
+    _known_bitflags: SIGHASH_Bitflag_Type = SIGHASH_ANYONECANPAY
+
+    def __init__(self, _value: int) -> None:
+        super().__init__()
+        if not (self & ~self._known_bitflags) in self._known_values:
+            raise ValueError(
+                f'a supported SIGHASH type value must be supplied, but '
+                f'{self} is not a supported SIGHASH type')
+
+    @classmethod
+    def register_type(cls: Type[T_SIGHASH_Type], value: int) -> T_SIGHASH_Type:
+        ensure_isinstance(value, int, 'sighash type to register')
+        if value in cls._known_values:
+            raise ValueError(f'value {value} is already registered')
+        cls._known_values = tuple(list(cls._known_values) + [value])
+        return cls(value)
+
     # The type of 'other' is intentionally incompatible wit supertype 'int'
     # because we do not want that or-ing with anything but bitflag type
     # to produce SIGHASH_Type result.
@@ -80,23 +113,9 @@ class SIGHASH_Type(int):
         return SIGHASH_Type(super().__or__(other))
 
 
-T_int = TypeVar('T_int', bound=int)
-
-
-class SIGHASH_Bitflag_Type(int):
-    def __or__(self, other: T_int) -> T_int:
-        return cast(T_int, super().__or__(other))
-
-
-SIGHASH_ALL: SIGHASH_Type = SIGHASH_Type(1)
-SIGHASH_NONE: SIGHASH_Type = SIGHASH_Type(2)
-SIGHASH_SINGLE: SIGHASH_Type = SIGHASH_Type(3)
-
-KNOWN_SIGHASH_TYPES = {SIGHASH_ALL, SIGHASH_NONE, SIGHASH_SINGLE}
-
-SIGHASH_ANYONECANPAY: SIGHASH_Bitflag_Type = SIGHASH_Bitflag_Type(0x80)
-
-KNOWN_SIGHASH_BITFLAGS = SIGHASH_ANYONECANPAY
+SIGHASH_ALL: SIGHASH_Type = SIGHASH_Type.register_type(1)
+SIGHASH_NONE: SIGHASH_Type = SIGHASH_Type.register_type(2)
+SIGHASH_SINGLE: SIGHASH_Type = SIGHASH_Type.register_type(3)
 
 # (partial) comment from Bitcoin Core IsStandardTx() function:
 # Biggest 'standard' txin is a 15-of-15 P2SH multisig with compressed
@@ -865,6 +884,17 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 and self[23] == OP_EQUALVERIFY
                 and self[24] == OP_CHECKSIG)
 
+    def pubkey_hash(self) -> bytes:
+        """get pubkey hash from p2pkh/p2wpkh scriptPubKey"""
+
+        if self.is_witness_v0_keyhash():
+            return self.witness_program()
+
+        if self.is_p2pkh():
+            return self[3:23]
+
+        raise ValueError('not a p2pkh/p2wpkh scriptPubKey')
+
     @no_bool_use_as_property
     def is_witness_scriptpubkey(self) -> bool:
         """Returns true if this is a scriptpubkey signaling segregated witness data.
@@ -886,10 +916,14 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
     def witness_version(self) -> int:
         """Returns the witness version on [0,16]. """
+        if not self.is_witness_scriptpubkey():
+            raise ValueError('not a witness scriptPubKey')
         return next(iter(self))
 
     def witness_program(self) -> bytes:
         """Returns the witness program"""
+        if not self.is_witness_scriptpubkey():
+            raise ValueError('not a witness scriptPubKey')
         return self[2:]
 
     @no_bool_use_as_property
@@ -1062,8 +1096,9 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         wallet use.
         """
 
-        if (hashtype & ~KNOWN_SIGHASH_BITFLAGS) not in KNOWN_SIGHASH_TYPES:
-            raise ValueError(f'unknown sighash type {hashtype:x}')
+        # ensure this is supported type in case we got a simple int supplied
+        # (when the caller do not check optional types)
+        hashtype = SIGHASH_Type(hashtype)
 
         (h, err) = self.raw_sighash(txTo, inIdx, hashtype, amount=amount, sigversion=sigversion)
         if err is not None:
@@ -1071,7 +1106,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         return h
 
     def raw_sighash(self, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                    hashtype: SIGHASH_Type, amount: Optional[int] = None,
+                    hashtype: int, amount: Optional[int] = None,
                     sigversion: SIGVERSION_Type = SIGVERSION_BASE
                     ) -> Tuple[bytes, Optional[str]]:
         """Consensus-correct SignatureHash
@@ -1094,7 +1129,7 @@ class CScriptWitness(ImmutableSerializable):
 
     stack: Tuple[bytes, ...]
 
-    def __init__(self, stack: Iterable[bytes] = ()):
+    def __init__(self, stack: Iterable[ScriptElement_Type] = ()):
         coerced_stack = []
         for (opcode, data, sop_idx) in CScript(stack).raw_iter():
             if data is not None:
@@ -1115,6 +1150,9 @@ class CScriptWitness(ImmutableSerializable):
     @no_bool_use_as_property
     def is_null(self) -> bool:
         return len(self.stack) == 0
+
+    def __bool__(self) -> bool:
+        return not self.is_null()
 
     @classmethod
     def stream_deserialize(cls: Type[T_CScriptWitness], f: ByteStream_Type,
@@ -1199,7 +1237,7 @@ def CompareBigEndian(c1: List[int], c2: List[int]) -> int:
 
 
 def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                            hashtype: SIGHASH_Type, amount: Optional[int] = None,
+                            hashtype: int, amount: Optional[int] = None,
                             sigversion: SIGVERSION_Type = SIGVERSION_BASE
                             ) -> Tuple[bytes, Optional[str]]:
     """Consensus-correct SignatureHash
@@ -1312,7 +1350,7 @@ def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction'
 
 
 def RawSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: int,
-                     hashtype: SIGHASH_Type, amount: Optional[int] = None,
+                     hashtype: int, amount: Optional[int] = None,
                      sigversion: SIGVERSION_Type = SIGVERSION_BASE
                      ) -> Tuple[bytes, Optional[str]]:
     """Consensus-correct SignatureHash
@@ -1369,7 +1407,7 @@ class StandardMultisigScriptInfo:
 
 def parse_standard_multisig_redeem_script(script: CScript
                                           ) -> StandardMultisigScriptInfo:
-    """parse multisig script, raise ValueError if it does not match the
+    """parse multisig script, raises ValueError if it does not match the
     format of the script produced by construct_multisig_redeem_script"""
     si = iter(script)
     try:
@@ -1427,19 +1465,23 @@ def parse_standard_multisig_redeem_script(script: CScript
                          'is not OP_CHECKMULTISIG')
     try:
         next(si)
+        raise ValueError('script has opcodes past OP_CHECKMULTISIG')
     except StopIteration:
-        # check that this is actually the last opcode
-        return StandardMultisigScriptInfo(total=total, required=required,
-                                          pubkeys=pubkeys)
+        pass
 
-    raise ValueError('script has opcodes past OP_CHECKMULTISIG')
+    if len(set(pubkeys)) != len(pubkeys):
+        raise ValueError('duplicate pubkeys in a script')
+
+    # check that this is actually the last opcode
+    return StandardMultisigScriptInfo(total=total, required=required,
+                                      pubkeys=tuple(pubkeys))
 
 
 def standard_multisig_witness_stack(sigs: List[Union[bytes, bytearray]],
                                     redeem_script: CScript
                                     ) -> List[ScriptElement_Type]:
 
-    # check valid p2sh script
+    # check that standard multisig script is valid
     info = parse_standard_multisig_redeem_script(redeem_script)
 
     if not all(isinstance(s, (bytes, bytearray)) for s in sigs):
@@ -1514,6 +1556,140 @@ def standard_multisig_redeem_script(
     result.append(OP_CHECKMULTISIG)
 
     return CScript(result)
+
+
+def standard_keyhash_scriptpubkey(keyhash: bytes) -> CScript:
+    ensure_isinstance(keyhash, bytes, 'keyhash')
+    if len(keyhash) != 20:
+        raise ValueError('keyhash len is not 20')
+    return CScript([OP_DUP, OP_HASH160, keyhash, OP_EQUALVERIFY, OP_CHECKSIG])
+
+
+def standard_scripthash_scriptpubkey(scripthash: bytes) -> CScript:
+    ensure_isinstance(scripthash, bytes, 'scripthash')
+    if len(scripthash) != 20:
+        raise ValueError('scripthash len is not 20')
+    return CScript([OP_HASH160, scripthash, OP_EQUAL])
+
+
+class ComplexScriptSignatureHelper:
+
+    @abstractmethod
+    def num_sigs_missing(self) -> int:
+        """Return the minimum number of signatures that needs to be added
+        for the script spending conditions to be satisfied"""
+
+    @no_bool_use_as_property
+    def is_enough_signatures(self) -> bool:
+        return self.num_sigs_missing() == 0
+
+    @abstractmethod
+    def get_pubkeys_without_sig(self) -> Iterable['bitcointx.core.key.CPubKey']:
+        """Return an iterable of pubkeys involved in the script spending
+        condition, that have no signatures collected for them yet.
+        The `sign()` method will use this iterable to try to get
+        the signatures required."""
+
+    @abstractmethod
+    def construct_witness_stack(self) -> List[ScriptElement_Type]:
+        """Construct a witness stack from spending script and
+        the available signatures"""
+
+    @abstractmethod
+    def collect_sig(self, pub: 'bitcointx.core.key.CPubKey',
+                    sig: Union[bytes, bytearray]) -> bool:
+        """Collect a signature for the pubkey.
+        return True if there is enough signatures to satisfy the script."""
+
+    def sign(self, signer: Callable[['bitcointx.core.key.CPubKey'],
+                                    Optional[bytes]],
+             partial_sigs: Optional[
+                 Dict['bitcointx.core.key.CPubKey', bytes]
+             ] = None
+             ) -> Tuple[Dict['bitcointx.core.key.CPubKey', bytes], bool]:
+        """Create signatures for the pubkeys involved in spending conditions
+        of the script, bu using provided `signer` callback. This callback
+        should have access to all the information required to produce the
+        signature, such as the transaction, input index, the private keys,
+        etc. The only argument to the callback is the public key. It should
+        return the signature, or None if it cannot produce the signature.
+
+        If some of the signatures are already known, a doct of
+        pubkey -> signature can be supplied via `partial_sigs` argument"""
+
+        if partial_sigs:
+            for pub, sig in partial_sigs.items():
+                if self.collect_sig(pub, sig):
+                    break
+
+        new_sigs: Dict['bitcointx.core.key.CPubKey', bytes] = {}
+        if self.is_enough_signatures():
+            return new_sigs, True
+
+        for pub in self.get_pubkeys_without_sig():
+            maybe_sig = signer(pub)
+            if maybe_sig is not None:
+                new_sigs[pub] = maybe_sig
+                if self.collect_sig(pub, maybe_sig):
+                    break  # 'enough signatures' threshold reached
+
+        return new_sigs, self.is_enough_signatures()
+
+
+class StandardMultisigSignatureHelper(ComplexScriptSignatureHelper):
+
+    _script: CScript
+    _script_info: StandardMultisigScriptInfo
+    _signatures: List[Optional[bytes]]
+
+    def __init__(self, script: CScript) -> None:
+        self._script_info = parse_standard_multisig_redeem_script(script)
+        self._script = script
+        self._signatures = [None for _ in self._script_info.pubkeys]
+
+    def num_sigs_missing(self) -> int:
+        num_sigs = len(list(s for s in self._signatures if s is not None))
+
+        if num_sigs == self._script_info.required:
+            return 0
+
+        if num_sigs > self._script_info.required:
+            raise AssertionError('cannot have more signatures than required')
+
+        return self._script_info.required - num_sigs
+
+    def get_pubkeys_without_sig(self) -> Iterable['bitcointx.core.key.CPubKey']:
+        return (p for i, p in enumerate(self._script_info.pubkeys)
+                if not self._signatures[i])
+
+    def construct_witness_stack(self) -> List[ScriptElement_Type]:
+        if not self.is_enough_signatures():
+            raise ValueError('not enough signatures')
+
+        sigs = [s for s in self._signatures if s is not None]
+        return standard_multisig_witness_stack(sigs, self._script)
+
+    def collect_sig(self, pub: 'bitcointx.core.key.CPubKey',
+                    sig: Union[bytes, bytearray]) -> bool:
+
+        for index, s_pub in enumerate(self._script_info.pubkeys):
+            if pub == s_pub:
+                break
+        else:
+            raise ValueError('pubkey is not in redeem script')
+
+        if self.is_enough_signatures():
+            return True
+
+        if self._signatures[index] is not None:
+            return False  # signature is already present
+
+        self._signatures[index] = bytes(sig)
+
+        if self.is_enough_signatures():
+            return True
+
+        return False
 
 
 # default dispatcher for the module
@@ -1659,8 +1835,7 @@ __all__ = (
     'SIGHASH_NONE',
     'SIGHASH_SINGLE',
     'SIGHASH_ANYONECANPAY',
-    'KNOWN_SIGHASH_TYPES',
-    'KNOWN_SIGHASH_BITFLAGS',
+    'SIGHASH_Type',
     'FindAndDelete',
     'RawSignatureHash',
     'RawBitcoinSignatureHash',
@@ -1669,10 +1844,15 @@ __all__ = (
 
     'SIGVERSION_BASE',
     'SIGVERSION_WITNESS_V0',
+    'SIGVERSION_Type',
 
     'ScriptCoinClassDispatcher',
     'ScriptCoinClass',
     'parse_standard_multisig_redeem_script',
     'standard_multisig_redeem_script',
     'standard_multisig_witness_stack',
+    'standard_scripthash_scriptpubkey',
+    'standard_keyhash_scriptpubkey',
+    'ComplexScriptSignatureHelper',
+    'StandardMultisigSignatureHelper',
 )

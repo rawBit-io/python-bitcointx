@@ -25,8 +25,10 @@ import ctypes
 import ctypes.util
 import hashlib
 import warnings
+from abc import abstractmethod
 from typing import (
-    TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast
+    TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast,
+    Dict
 )
 
 import bitcointx.core
@@ -562,6 +564,11 @@ class CExtKeyCommonBase:
             raise ValueError('Invalid length for extended key')
 
     @property
+    @abstractmethod
+    def pub(self) -> 'CPubKey':
+        ...
+
+    @property
     def depth(self) -> int:
         assert isinstance(self, bytes)
         return self[0]
@@ -591,7 +598,8 @@ class CExtKeyCommonBase:
         return self[41:74]
 
     def derive_path(self: T_CExtKeyCommonBase,
-                    path: Union[str, 'BIP32Path']) -> T_CExtKeyCommonBase:
+                    path: Union[str, 'BIP32Path', Sequence[int]]
+                    ) -> T_CExtKeyCommonBase:
         """Derive the key using the bip32 derivation path."""
 
         if not isinstance(path, BIP32Path):
@@ -614,7 +622,7 @@ class CExtKeyCommonBase:
         return xkey
 
     @property
-    def fingerprint(self):
+    def fingerprint(self) -> bytes:
         return self.pub.key_id[:4]
 
     def derive(self: T_CExtKeyCommonBase, child_number: int) -> T_CExtKeyCommonBase:
@@ -720,17 +728,26 @@ class CExtPubKeyBase(CExtKeyCommonBase):
 
     Attributes:
 
-    pub           - The corresponding CPubKey for extended pubkey
-
+    pub              - The corresponding CPubKey for extended pubkey
+    derivation_info  - The information about derivation of this extended pubkey
+                       from the master (Optional, has to be set explicitly)
     """
+
+    derivation_info: Optional['KeyDerivationInfo']
 
     def __init__(self, _b: Optional[bytes]) -> None:
 
         self._check_length()
 
-        self.pub = CPubKey(self.key_bytes)
+        self._pub = CPubKey(self.key_bytes)
         if not self.pub.is_fullyvalid():
             raise ValueError('pubkey part of xpubkey is not valid')
+
+        self.derivation_info = None
+
+    @property
+    def pub(self) -> CPubKey:
+        return self._pub
 
     def derive(self: T_CExtPubKeyBase, child_number: int) -> T_CExtPubKeyBase:
         if (child_number >> 31) != 0:
@@ -820,9 +837,9 @@ class BIP32Path:
 
     HARDENED_MARKERS = ("'", "h")
 
-    __slots__ = ['_indexlist', '_hardened_marker']
+    __slots__ = ['_indexes', '_hardened_marker']
 
-    _indexlist: Tuple[int, ...]
+    _indexes: Tuple[int, ...]
     _hardened_marker: str
 
     def __init__(self, path: Union[str, 'BIP32Path', Sequence[int]],
@@ -831,53 +848,53 @@ class BIP32Path:
             if hardened_marker not in self.__class__.HARDENED_MARKERS:
                 raise ValueError('unsupported hardened_marker')
 
-        indexlist: Sequence[int]
+        indexes: Sequence[int]
 
         if isinstance(path, str):
-            indexlist, hardened_marker = self._parse_string(
+            indexes, hardened_marker = self._parse_string(
                 path, hardened_marker=hardened_marker)
         elif isinstance(path, BIP32Path):
             if hardened_marker is None:
                 hardened_marker = path._hardened_marker
-            indexlist = path._indexlist
-            # we cannot just use _indexlist if it is mutalbe,
-            # assert that it is a tuple, so if the _indexlist attr will
+            indexes = path._indexes
+            # we cannot just use _indexes if it is mutalbe,
+            # assert that it is a tuple, so if the _indexes attr will
             # ever become mutable, this would be cathed by tests
-            assert isinstance(indexlist, tuple)
+            assert isinstance(indexes, tuple)
         else:
-            indexlist = path
+            indexes = path
 
-        if len(indexlist) > 255:
+        if len(indexes) > 255:
             raise ValueError('derivation path longer than 255 elements')
 
-        for i, n in enumerate(indexlist):
+        for i, n in enumerate(indexes):
             ensure_isinstance(n, int, f'element at position {i} in the path')
             self._check_bip32_index_bounds(n, allow_hardened=True)
 
         if hardened_marker is None:
             hardened_marker = self.__class__.HARDENED_MARKERS[0]
 
-        self._indexlist = tuple(indexlist)
+        self._indexes = tuple(indexes)
         self._hardened_marker = hardened_marker
 
     def __str__(self) -> str:
-        if len(self._indexlist) == 0:
+        if len(self._indexes) == 0:
             return 'm'
 
         return 'm/%s' % '/'.join('%u' % n if n < BIP32_HARDENED_KEY_OFFSET
                                  else
                                  '%u%s' % (n - BIP32_HARDENED_KEY_OFFSET,
                                            self._hardened_marker)
-                                 for n in self._indexlist)
+                                 for n in self._indexes)
 
     def __len__(self) -> int:
-        return len(self._indexlist)
+        return len(self._indexes)
 
     def __getitem__(self, key: int) -> int:
-        return self._indexlist[key]
+        return self._indexes[key]
 
     def __iter__(self) -> Iterator[int]:
-        return (n for n in self._indexlist)
+        return (n for n in self._indexes)
 
     def _check_bip32_index_bounds(self, n: int, allow_hardened: bool = False
                                   ) -> None:
@@ -907,7 +924,7 @@ class BIP32Path:
         if path.endswith('/'):
             raise ValueError('derivation path must not end with "/"')
 
-        indexlist = []
+        indexes = []
 
         expected_marker = hardened_marker
 
@@ -938,9 +955,188 @@ class BIP32Path:
 
             self._check_bip32_index_bounds(n, allow_hardened=False)
 
-            indexlist.append(n + hardened)
+            indexes.append(n + hardened)
 
-        return indexlist, expected_marker
+        return indexes, expected_marker
+
+
+T_KeyDerivationInfo = TypeVar('T_KeyDerivationInfo', bound='KeyDerivationInfo')
+
+
+class KeyDerivationInfo:
+    master_fingerprint: bytes
+    path: BIP32Path
+    pubkey: Optional[CPubKey]
+
+    def __init__(self,
+                 master_fingerprint: bytes,
+                 path: BIP32Path,
+                 pubkey: Optional[CPubKey] = None
+                 ) -> None:
+        ensure_isinstance(master_fingerprint, bytes, 'master key fingerprint')
+        ensure_isinstance(path, BIP32Path, 'bip32 path')
+        if pubkey:
+            ensure_isinstance(pubkey, CPubKey, 'pubkey')
+        if len(master_fingerprint) != 4:
+            raise ValueError('Fingerprint should be 4 bytes in length')
+        self.master_fingerprint = master_fingerprint
+        self.path = path
+        self.pubkey = pubkey
+
+
+T_KeyStoreKeyArg = Union[CKeyBase, CPubKey, CExtKeyBase, CExtPubKeyBase]
+
+
+class KeyStore:
+    # KeyStore can store pubkeys and xpubkeys. This can be used, for example,
+    # for output checks to determine the change output when you do not
+    # have the privkeys
+    _xprivkeys: Dict[bytes, CExtKeyBase]
+    _xpubkeys: Dict[bytes, Dict[Tuple[int, ...], CExtPubKeyBase]]
+    _privkeys: Dict[bytes, CKeyBase]
+    _pubkeys: Dict[bytes, CPubKey]
+
+    def __init__(self, *args: T_KeyStoreKeyArg) -> None:
+        self._privkeys = {}
+        self._pubkeys = {}
+        self._xpubkeys = {}
+        self._xprivkeys = {}
+
+        for k in args:
+            self.add_key(k)
+
+    def add_key(self, k: T_KeyStoreKeyArg) -> None:
+        if isinstance(k, CKeyBase):
+            self._privkeys[k.pub.key_id] = k
+        elif isinstance(k, CPubKey):
+            self._pubkeys[k.key_id] = k
+        elif isinstance(k, CExtKeyBase):
+            self._xprivkeys[k.fingerprint] = k
+        elif isinstance(k, CExtPubKeyBase):
+            if not k.derivation_info:
+                raise ValueError('xpub must have derivation_info assigned')
+            derinfo = k.derivation_info
+            ensure_isinstance(derinfo, KeyDerivationInfo,
+                              'derivation_info of xpub')
+            if derinfo.master_fingerprint not in self._xpubkeys:
+                self._xpubkeys[derinfo.master_fingerprint] = {}
+            self._xpubkeys[
+                derinfo.master_fingerprint
+            ][derinfo.path._indexes] = k
+        else:
+            raise ValueError('unrecognized argument type')
+
+    def remove_key(self, k: T_KeyStoreKeyArg) -> None:
+        if isinstance(k, CKeyBase):
+            if k.pub.key_id in self._privkeys:
+                self._privkeys.pop(k.pub.key_id)
+        elif isinstance(k, CPubKey):
+            if k.key_id in self._pubkeys:
+                self._pubkeys.pop(k.key_id)
+        elif isinstance(k, CExtKeyBase):
+            if k.fingerprint in self._privkeys:
+                self._xprivkeys.pop(k.fingerprint)
+        elif isinstance(k, tuple):
+            if len(k) != 2:
+                raise ValueError(
+                    'invalid tuple supplied, expected length 2')
+            orig_xpub, derinfo = k
+            ensure_isinstance(derinfo, KeyDerivationInfo,
+                              'derivation info for xpub')
+            if derinfo.master_fingerprint not in self._xpubkeys:
+                return
+            xpub_dict = self._xpubkeys[derinfo.master_fingerprint]
+            indexes = derinfo.path._indexes
+            if indexes in xpub_dict:
+                if orig_xpub is not None \
+                        and orig_xpub != xpub_dict[indexes]:
+                    raise ValueError(
+                        'xpub does not match the one stored for specified '
+                        'derivation info')
+                xpub_dict.pop(indexes)
+        else:
+            raise ValueError('unrecognized argument type')
+
+    def get_privkey(self, key_id: bytes,
+                    derivation: Optional[
+                        Dict[bytes, T_KeyDerivationInfo]
+                    ] = None
+                    ) -> Optional[CKeyBase]:
+        ensure_isinstance(key_id, bytes, 'key_id')
+        ensure_isinstance(derivation, dict, 'key_id to derivation dict')
+        if len(key_id) != 20:
+            raise ValueError('invalid length for key_id, expected to be 20')
+
+        if key_id in self._privkeys:
+            return self._privkeys[key_id]
+
+        if not derivation:
+            return None
+
+        derinfo = derivation.get(key_id)
+
+        if not derinfo:
+            return None
+
+        ensure_isinstance(derinfo, KeyDerivationInfo, 'derivation info')
+
+        if derinfo.pubkey is not None and derinfo.pubkey.key_id != key_id:
+            raise AssertionError(
+                'key_id for pubkey found in supplied derivation dict '
+                'must match supplied key_id')
+
+        if derinfo.master_fingerprint not in self._xprivkeys:
+            return None
+
+        xpriv = self._xprivkeys[derinfo.master_fingerprint]
+        xpriv = xpriv.derive_path(derinfo.path)
+        if xpriv.priv.pub.key_id != key_id:
+            raise ValueError(
+                'supplied key_id does not match the key derived using '
+                'supplied derivation')
+        return xpriv.priv
+
+    def get_pubkey(self, key_id: bytes,
+                   derivation: Optional[
+                       Dict[bytes, T_KeyDerivationInfo]
+                   ] = None
+                   ) -> Optional[CPubKey]:
+        ensure_isinstance(key_id, bytes, 'key_id')
+        ensure_isinstance(derivation, dict, 'key_id to derivation dict')
+        if len(key_id) != 20:
+            raise ValueError('invalid length for key_id, expected to be 20')
+
+        if key_id in self._pubkeys:
+            return self._pubkeys[key_id]
+
+        if not derivation:
+            return None
+
+        derinfo = derivation.get(key_id)
+
+        if not derinfo:
+            return None
+
+        ensure_isinstance(derinfo, KeyDerivationInfo, 'derivation info')
+
+        if derinfo.master_fingerprint in self._xpubkeys:
+            xpub_dict = self._xpubkeys[derinfo.master_fingerprint]
+            for indexes, xpub in xpub_dict.items():
+                if derinfo.path._indexes[:len(indexes)] == indexes:
+                    tail = derinfo.path._indexes[len(indexes):]
+                    if all(idx < BIP32_HARDENED_KEY_OFFSET for idx in tail):
+                        xpub = xpub.derive_path(tail)
+                        if xpub.pub.key_id != key_id:
+                            raise ValueError(
+                                'supplied key_id does not match the '
+                                'pubkey derived using supplied derivation')
+                        return xpub.pub
+
+        priv = self.get_privkey(key_id, derivation)
+        if priv:
+            return priv.pub
+
+        return None
 
 
 __all__ = (
@@ -951,5 +1147,7 @@ __all__ = (
     'CKeyBase',
     'CExtKeyBase',
     'CExtPubKeyBase',
-    'BIP32Path'
+    'BIP32Path',
+    'KeyDerivationInfo',
+    'KeyStore'
 )

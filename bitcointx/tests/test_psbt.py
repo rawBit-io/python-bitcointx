@@ -9,19 +9,26 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-# pylama:ignore=E501
+# pylama:ignore=E501,C901
 
 import unittest
 
 from bitcointx import ChainParams
-from bitcointx.wallet import CCoinExtPubKey
-from bitcointx.core import x, CTransaction, CTxOut
-from bitcointx.core.key import CPubKey
-from bitcointx.core.script import SIGHASH_ALL, CScript, OP_CHECKMULTISIG
+from bitcointx.wallet import CCoinExtKey, CCoinExtPubKey
+from bitcointx.core import (
+    x, lx, b2x, CTransaction, CTxOut, CTxIn, COutPoint, coins_to_satoshi
+)
+from bitcointx.core.key import CPubKey, KeyStore, BIP32Path
+from bitcointx.core.script import (
+    SIGHASH_ALL, CScript, OP_CHECKMULTISIG,
+    parse_standard_multisig_redeem_script, standard_witness_v0_scriptpubkey
+)
 from bitcointx.core.serialize import (
     SerializationError, SerializationTruncationError
 )
-from bitcointx.core.psbt import PartiallySignedTransaction
+from bitcointx.core.psbt import (
+    PartiallySignedTransaction, PSBT_KeyDerivationInfo
+)
 
 
 class Test_PSBT(unittest.TestCase):
@@ -180,6 +187,8 @@ class Test_PSBT(unittest.TestCase):
 
         tx_data = x('0200000001268171371edff285e937adeea4b37b78000c0566cbb3ad64641713ca42171bf6000000006a473044022070b2245123e6bf474d60c5b50c043d4c691a5d2435f09a34a7662a9dc251790a022001329ca9dacf280bdf30740ec0390422422c81cb45839457aeb76fc12edd95b3012102657d118d3357b8e0f4c2cd46db7b39f6d9c38d9a70abcb9b2de5dc8dbfe4ce31feffffff02d3dff505000000001976a914d0c59903c5bac2868760e90fd521a4665aa7652088ac00e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787b32e1300')
         txout_data = x('00e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787')
+        pub1 = CPubKey(x('02ead596687ca806043edc3de116cdf29d5e9257c196cd055cf698c8d02bf24e99'))
+        pub2 = CPubKey(x('0394f62be9df19952c5587768aeb7698061ad2c4a25c894f47d8c162b4d7213d05'))
 
         self.assertEqual(len(psbt.inputs), 2)
         self.assertEqual(len(psbt.outputs), 2)
@@ -187,21 +196,15 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(psbt.inputs[0].utxo.serialize(), tx_data)
         self.assertEqual(psbt.inputs[1].utxo.serialize(), txout_data)
         self.assertEqual(
-            psbt.outputs[0].derivation[
-                x('02ead596687ca806043edc3de116cdf29d5e9257c196cd055cf698c8d02bf24e99')
-            ].fingerprint, x('b4a6ba67'))
+            psbt.outputs[0].derivation_map[pub1.key_id].master_fingerprint,
+            x('b4a6ba67'))
         self.assertEqual(
-            str(psbt.outputs[0].derivation[
-                x('02ead596687ca806043edc3de116cdf29d5e9257c196cd055cf698c8d02bf24e99')
-            ].path), "m/0'/0'/2'")
+            str(psbt.outputs[0].derivation_map[pub1.key_id].path), "m/0'/0'/2'")
         self.assertEqual(
-            psbt.outputs[1].derivation[
-                x('0394f62be9df19952c5587768aeb7698061ad2c4a25c894f47d8c162b4d7213d05')
-            ].fingerprint, x('b4a6ba67'))
+            psbt.outputs[1].derivation_map[pub2.key_id].master_fingerprint,
+            x('b4a6ba67'))
         self.assertEqual(
-            str(psbt.outputs[1].derivation[
-                x('0394f62be9df19952c5587768aeb7698061ad2c4a25c894f47d8c162b4d7213d05')
-            ].path), "m/0'/1'/2'")
+            str(psbt.outputs[1].derivation_map[pub2.key_id].path), "m/0'/1'/2'")
         self.assertEqual(psbt.inputs[1].utxo.serialize(), txout_data)
 
         # PSBT with one P2SH-P2WSH input of a 2-of-2 multisig, redeemScript,
@@ -249,25 +252,31 @@ class Test_PSBT(unittest.TestCase):
                              witness_script.to_p2wsh_scriptPubKey())
             self.assertEqual(psbt.inputs[0].witness_script, witness_script)
             self.assertEqual(psbt.inputs[0].redeem_script, CScript([]))
-            self.assertEqual(psbt.inputs[0].derivation[pubkey1].fingerprint,
-                             x('d90c6a4f'))
-            self.assertEqual(str(psbt.inputs[0].derivation[pubkey1].path),
-                             "m/174'/0'/0")
-            self.assertEqual(psbt.inputs[0].derivation[pubkey2].fingerprint,
-                             x('d90c6a4f'))
-            self.assertEqual(str(psbt.inputs[0].derivation[pubkey2].path),
-                             "m/174'/1'/0")
+            self.assertEqual(
+                psbt.inputs[0].derivation_map[pubkey1.key_id].master_fingerprint,
+                x('d90c6a4f'))
+            self.assertEqual(
+                str(psbt.inputs[0].derivation_map[pubkey1.key_id].path),
+                "m/174'/0'/0")
+            self.assertEqual(
+                psbt.inputs[0].derivation_map[pubkey2.key_id].master_fingerprint,
+                x('d90c6a4f'))
+            self.assertEqual(
+                str(psbt.inputs[0].derivation_map[pubkey2.key_id].path),
+                "m/174'/1'/0")
             self.assertFalse(psbt.outputs[0].is_null())
-            self.assertEqual(psbt.outputs[0].derivation[pubkey3].fingerprint,
-                             x('ede45cc5'))
-            self.assertEqual(str(psbt.outputs[0].derivation[pubkey3].path),
-                             "m/0'/0'/1'")
+            self.assertEqual(
+                psbt.outputs[0].derivation_map[pubkey3.key_id].master_fingerprint,
+                x('ede45cc5'))
+            self.assertEqual(
+                str(psbt.outputs[0].derivation_map[pubkey3.key_id].path),
+                "m/0'/0'/1'")
             self.assertEqual(len(psbt.xpubs), 2)
             self.assertTrue(xpub1 in psbt.xpubs)
             self.assertTrue(xpub2 in psbt.xpubs)
-            self.assertEqual(psbt.xpubs[xpub1].fingerprint, x('d90c6a4f'))
+            self.assertEqual(psbt.xpubs[xpub1].master_fingerprint, x('d90c6a4f'))
             self.assertEqual(str(psbt.xpubs[xpub1].path), "m/174'/0'")
-            self.assertEqual(psbt.xpubs[xpub2].fingerprint, x('d90c6a4f'))
+            self.assertEqual(psbt.xpubs[xpub2].master_fingerprint, x('d90c6a4f'))
             self.assertEqual(str(psbt.xpubs[xpub2].path), "m/174'/1'")
 
         # PSBT with unknown types in the inputs
@@ -284,7 +293,7 @@ class Test_PSBT(unittest.TestCase):
         xpub = CCoinExtPubKey('xpub6CpGH79LXVkeiux2ZPWMpEubBrRfgcGCgy2HiagyN6NW3qdioJaqFYyD1fG6LDfxWEhMXJqcDuU5VneKt5UQYUGPa5Mfxdw2D2NArwX5TBm')
         self.assertEqual(len(psbt.inputs), 2)
         self.assertEqual(len(psbt.outputs), 2)
-        self.assertEqual(psbt.xpubs[xpub].fingerprint, x('27569c50'))
+        self.assertEqual(psbt.xpubs[xpub].master_fingerprint, x('27569c50'))
         self.assertEqual(str(psbt.xpubs[xpub].path), "m/49'/0'/0'")
 
         # PSBT with proprietary values
@@ -313,3 +322,103 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].subtype, 0x2000000)
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].key_data, b'puppy')
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].value, b'drive')
+
+    def test_signer_checks(self):
+        def T(hex_data, expected_regex):
+            data = x(hex_data)
+
+            with self.assertRaises(ValueError):
+                # should fail without relaxed_sanity_checks
+                psbt = PartiallySignedTransaction.deserialize(data)
+
+            psbt = PartiallySignedTransaction.deserialize(
+                data, relaxed_sanity_checks=True)
+
+            with self.assertRaisesRegex(ValueError, expected_regex):
+                psbt.sign_inputs(KeyStore())
+
+        T('70736274ff0100a00200000002ab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40000000000feffffffab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40100000000feffffff02603bea0b000000001976a914768a40bbd740cbe81d988e71de2a4d5c71396b1d88ac8e240000000000001976a9146f4620b553fa095e721b9ee0efe9fa039cca459788ac0000000000010122d3dff505000000001976a914d48ed3110b94014cb114bd32d6f4d066dc74256b88ac0001012000e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787010416001485d13537f2e265405a34dbafa9e3dda01fb8230800220202ead596687ca806043edc3de116cdf29d5e9257c196cd055cf698c8d02bf24e9910b4a6ba670000008000000080020000800022020394f62be9df19952c5587768aeb7698061ad2c4a25c894f47d8c162b4d7213d0510b4a6ba6700000080010000800200008000',
+          'input at index 0 specified as witness UTXO, but has non-witness scriptPubKey')
+
+        T('70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f00000000000100bb0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f618765000000220202dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d7483045022100f61038b308dc1da865a34852746f015772934208c6d24454393cd99bdf2217770220056e675a675a6d0a02b85b14e5e29074d8a25a9b5760bea2816f661910a006ea01010304010000000104475221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752af2206029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f10d90c6a4f000000800000008000000080220602dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d710d90c6a4f0000008000000080010000800001012000c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e8872202023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e73473044022065f45ba5998b59a27ffe1a7bed016af1f1f90d54b3aa8f7450aa5f56a25103bd02207f724703ad1edb96680b284b56d4ffcb88f7fb759eabbe08aa30f29b851383d2010103040100000001042200208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028903010547522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ae2206023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7310d90c6a4f000000800000008003000080220603089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc10d90c6a4f00000080000000800200008000220203a9a4c37f5996d3aa25dbac6b570af0650394492942460b354753ed9eeca5877110d90c6a4f000000800000008004000080002202027f6399757d2eff55a136ad02c684b1838b6556e5f1b6b34282a94b6b5005109610d90c6a4f00000080000000800500008000',
+          'redeem script for input at index 0 does not match scriptPubKey in UTXO')
+
+        T('70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f00000000000100bb0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f618765000000220202dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d7483045022100f61038b308dc1da865a34852746f015772934208c6d24454393cd99bdf2217770220056e675a675a6d0a02b85b14e5e29074d8a25a9b5760bea2816f661910a006ea01010304010000000104475221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752ae2206029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f10d90c6a4f000000800000008000000080220602dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d710d90c6a4f0000008000000080010000800001012000c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e8872202023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e73473044022065f45ba5998b59a27ffe1a7bed016af1f1f90d54b3aa8f7450aa5f56a25103bd02207f724703ad1edb96680b284b56d4ffcb88f7fb759eabbe08aa30f29b851383d2010103040100000001042200208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028900010547522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ae2206023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7310d90c6a4f000000800000008003000080220603089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc10d90c6a4f00000080000000800200008000220203a9a4c37f5996d3aa25dbac6b570af0650394492942460b354753ed9eeca5877110d90c6a4f000000800000008004000080002202027f6399757d2eff55a136ad02c684b1838b6556e5f1b6b34282a94b6b5005109610d90c6a4f00000080000000800500008000',
+          'redeem script for p2sh-wrapped segwit input at index 1 does not match the scriptPubKey')
+
+        T('70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f00000000000100bb0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f618765000000220202dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d7483045022100f61038b308dc1da865a34852746f015772934208c6d24454393cd99bdf2217770220056e675a675a6d0a02b85b14e5e29074d8a25a9b5760bea2816f661910a006ea01010304010000000104475221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752ae2206029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f10d90c6a4f000000800000008000000080220602dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d710d90c6a4f0000008000000080010000800001012000c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e8872202023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e73473044022065f45ba5998b59a27ffe1a7bed016af1f1f90d54b3aa8f7450aa5f56a25103bd02207f724703ad1edb96680b284b56d4ffcb88f7fb759eabbe08aa30f29b851383d2010103040100000001042200208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028903010547522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ad2206023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7310d90c6a4f000000800000008003000080220603089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc10d90c6a4f00000080000000800200008000220203a9a4c37f5996d3aa25dbac6b570af0650394492942460b354753ed9eeca5877110d90c6a4f000000800000008004000080002202027f6399757d2eff55a136ad02c684b1838b6556e5f1b6b34282a94b6b5005109610d90c6a4f00000080000000800500008000',
+          'witness script for p2sh-wrapped segwit p2wpkh input at index 1 does not match the redeem script')
+
+    def test_flow(self):
+        # Create
+
+        tx = CTransaction(
+            vin=[
+                CTxIn(COutPoint(lx('75ddabb27b8845f5247975c8a5ba7c6f336c4570708ebe230caf6db5217ae858'),
+                                0)),
+                CTxIn(COutPoint(lx('1dea7cd05979072a3578cab271c02244ea8a090bbb46aa680a65ecd027048d83'),
+                                1))
+            ],
+            vout=[
+                CTxOut(coins_to_satoshi(1.49990000),
+                       CScript(x('0014d85c2b71d0060b09c9886aeb815e50991dda124d'))),
+                CTxOut(coins_to_satoshi(1.00000000),
+                       CScript(x('001400aea9a2e5f0f876a588df5546e8742d1d87008f')))
+            ]
+        )
+        psbt = PartiallySignedTransaction(unsigned_tx=tx)
+        self.assertEqual(b2x(psbt.serialize()),
+                         '70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000')
+
+        # Update
+        with ChainParams('bitcoin/testnet'):
+            xpriv = CCoinExtKey('tprv8ZgxMBicQKsPd9TeAdPADNnSyH9SSUUbTVeFszDE23Ki6TBB5nCefAdHkK8Fm3qMQR6sHwA56zqRmKmxnHk37JkiFzvncDqoKmPWubu7hDF')
+            psbt.inputs[0].redeem_script = CScript(x('5221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752ae'))
+            msig0 = parse_standard_multisig_redeem_script(
+                psbt.inputs[0].redeem_script)
+            psbt.inputs[1].redeem_script = CScript(x('00208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028903'))
+            psbt.inputs[1].witness_script = CScript(x('522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ae'))
+            msig1 = parse_standard_multisig_redeem_script(
+                psbt.inputs[1].witness_script)
+            prev_tx0 = CTransaction.deserialize(x('0200000000010158e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd7501000000171600145f275f436b09a8cc9a2eb2a2f528485c68a56323feffffff02d8231f1b0100000017a914aed962d6654f9a2b36608eb9d64d2b260db4f1118700c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e88702483045022100a22edcc6e5bc511af4cc4ae0de0fcd75c7e04d8c1c3a8aa9d820ed4b967384ec02200642963597b9b1bc22c75e9f3e117284a962188bf5e8a74c895089046a20ad770121035509a48eb623e10aace8bfd0212fdb8a8e5af3c94b0b133b95e114cab89e4f7965000000'))
+            prev_tx1 = CTransaction.deserialize(x('0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f618765000000'))
+            psbt.inputs[0].utxo = prev_tx1
+            psbt.inputs[1].utxo = prev_tx0.vout[tx.vin[1].prevout.n]
+
+            self.assertEqual(msig0.pubkeys[0], xpriv.derive_path("m/0'/0'/0'").pub)
+            self.assertEqual(msig0.pubkeys[1], xpriv.derive_path("m/0'/0'/1'").pub)
+            psbt.inputs[0].derivation_map[msig0.pubkeys[0].key_id] = \
+                PSBT_KeyDerivationInfo(xpriv.fingerprint,
+                                       BIP32Path("m/0'/0'/0'"),
+                                       msig0.pubkeys[0])
+            psbt.inputs[0].derivation_map[msig0.pubkeys[1].key_id] = \
+                PSBT_KeyDerivationInfo(xpriv.fingerprint,
+                                       BIP32Path("m/0'/0'/1'"),
+                                       msig0.pubkeys[1])
+
+            self.assertEqual(msig1.pubkeys[0], xpriv.derive_path("m/0'/0'/2'").pub)
+            self.assertEqual(msig1.pubkeys[1], xpriv.derive_path("m/0'/0'/3'").pub)
+            psbt.inputs[1].derivation_map[msig1.pubkeys[1].key_id] = \
+                PSBT_KeyDerivationInfo(xpriv.fingerprint,
+                                       BIP32Path("m/0'/0'/3'"),
+                                       msig1.pubkeys[1])
+            psbt.inputs[1].derivation_map[msig1.pubkeys[0].key_id] = \
+                PSBT_KeyDerivationInfo(xpriv.fingerprint,
+                                       BIP32Path("m/0'/0'/2'"),
+                                       msig1.pubkeys[0])
+
+            outpub0 = xpriv.derive_path("m/0'/0'/4'").pub
+            outpub1 = xpriv.derive_path("m/0'/0'/5'").pub
+            self.assertEqual(psbt.unsigned_tx.vout[0].scriptPubKey,
+                             standard_witness_v0_scriptpubkey(outpub0.key_id))
+            self.assertEqual(psbt.unsigned_tx.vout[1].scriptPubKey,
+                             standard_witness_v0_scriptpubkey(outpub1.key_id))
+            psbt.outputs[0].derivation_map[outpub0.key_id] = \
+                PSBT_KeyDerivationInfo(xpriv.fingerprint,
+                                       BIP32Path("m/0'/0'/4'"), outpub0)
+            psbt.outputs[1].derivation_map[outpub1.key_id] = \
+                PSBT_KeyDerivationInfo(xpriv.fingerprint,
+                                       BIP32Path("m/0'/0'/5'"), outpub1)
+
+            self.assertEqual(b2x(psbt.serialize()),
+                             '70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f00000000000100bb0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f6187650000000104475221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752ae2206029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f10d90c6a4f000000800000008000000080220602dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d710d90c6a4f0000008000000080010000800001012000c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e88701042200208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028903010547522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ae2206023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7310d90c6a4f000000800000008003000080220603089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc10d90c6a4f00000080000000800200008000220203a9a4c37f5996d3aa25dbac6b570af0650394492942460b354753ed9eeca5877110d90c6a4f000000800000008004000080002202027f6399757d2eff55a136ad02c684b1838b6556e5f1b6b34282a94b6b5005109610d90c6a4f00000080000000800500008000')

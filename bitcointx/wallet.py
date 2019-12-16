@@ -34,7 +34,7 @@ from bitcointx.core.key import (
     CPubKey, CKeyBase, CExtKeyBase, CExtPubKeyBase
 )
 from bitcointx.core.script import (
-    CScript, OP_HASH160, OP_DUP, OP_EQUALVERIFY, OP_CHECKSIG, OP_EQUAL
+    CScript, standard_keyhash_scriptpubkey, standard_scripthash_scriptpubkey
 )
 
 
@@ -308,7 +308,7 @@ class P2SHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
 
     def to_scriptPubKey(self) -> CScript:
         """Convert an address to a scriptPubKey"""
-        return CScript([OP_HASH160, self, OP_EQUAL])
+        return standard_scripthash_scriptpubkey(self)
 
     # Return type deliberately incompatible with CCoinAddress,
     # because this operation is not defined for p2sh address
@@ -359,7 +359,7 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
 
     def to_scriptPubKey(self) -> CScript:
         """Convert an address to a scriptPubKey"""
-        return CScript([OP_DUP, OP_HASH160, self, OP_EQUALVERIFY, OP_CHECKSIG])
+        return standard_keyhash_scriptpubkey(self)
 
     def to_redeemScript(self) -> CScript:
         return self.to_scriptPubKey()
@@ -460,8 +460,7 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
         return CScript([0, self])
 
     def to_redeemScript(self) -> CScript:
-        return CScript([OP_DUP, OP_HASH160, self,
-                        OP_EQUALVERIFY, OP_CHECKSIG])
+        return standard_keyhash_scriptpubkey(self)
 
     @classmethod
     def from_redeemScript(cls: Type[T_P2WPKHCoinAddress],

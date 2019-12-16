@@ -138,8 +138,11 @@ class Test_CScript(unittest.TestCase):
                                sigversion=SIGVERSION_BASE)
 
     def test_parse_standard_multisig_redeem_script(self):
-        def T(script, result):
-            info = parse_standard_multisig_redeem_script(script)
+        def T(script):
+            return parse_standard_multisig_redeem_script(script)
+
+        def T2(script, result):
+            info = T(script)
             self.assertEqual(info.total, result.total)
             self.assertEqual(info.required, result.required)
             self.assertEqual(info.pubkeys, result.pubkeys)
@@ -148,54 +151,46 @@ class Test_CScript(unittest.TestCase):
         pubkeys = [CKey.from_secret_bytes(os.urandom(32)).pub
                    for _ in range(15)]
 
-        T(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
-          StandardMultisigScriptInfo(total=2, required=1,
-                                     pubkeys=pubkeys[:2]))
-        T(CScript([11] + pubkeys[:12] + [12, OP_CHECKMULTISIG]),
-          StandardMultisigScriptInfo(total=12, required=11,
-                                     pubkeys=pubkeys[:12]))
-        T(CScript([15] + pubkeys + [15, OP_CHECKMULTISIG]),
-          StandardMultisigScriptInfo(total=15, required=15, pubkeys=pubkeys))
+        T2(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
+           StandardMultisigScriptInfo(total=2, required=1,
+                                      pubkeys=pubkeys[:2]))
+        T2(CScript([11] + pubkeys[:12] + [12, OP_CHECKMULTISIG]),
+           StandardMultisigScriptInfo(total=12, required=11,
+                                      pubkeys=pubkeys[:12]))
+        T2(CScript([15] + pubkeys + [15, OP_CHECKMULTISIG]),
+           StandardMultisigScriptInfo(total=15, required=15, pubkeys=pubkeys))
 
         with self.assertRaises(ValueError):
             # invalid script - extra opcode
-            T(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG, OP_DROP]), {})
+            T(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG, OP_DROP]))
         with self.assertRaises(ValueError):
             # invalid pubkey - extra data
-            T(CScript([1, pubkeys[0]+b'abc', pubkeys[1], 2, OP_CHECKMULTISIG]), {})
+            T(CScript([1, pubkeys[0]+b'abc', pubkeys[1], 2, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
             # invalid pubkey - truncated
-            T(CScript([1, pubkeys[0], pubkeys[1][:-1], 2, OP_CHECKMULTISIG]), {})
+            T(CScript([1, pubkeys[0], pubkeys[1][:-1], 2, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([]), {})
+            T(CScript([]))
         with self.assertRaises(ValueError):
-            T(CScript([b'\x01', pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
-              {})
+            T(CScript([b'\x01', pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([16, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
-              {})
+            T(CScript([16, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [b'\x0c', OP_CHECKMULTISIG]),
-              {})
+            T(CScript([11] + pubkeys[:12] + [b'\x0c', OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys + [14, OP_CHECKMULTISIG]), {})
+            T(CScript([11] + pubkeys + [14, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys + pubkeys + [15, OP_CHECKMULTISIG]), {})
+            T(CScript([11] + pubkeys + pubkeys + [15, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([1, pubkeys[0], pubkeys[1], 1, OP_CHECKMULTISIG]),
-              {})
+            T(CScript([1, pubkeys[0], pubkeys[1], 1, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKMULTISIG]),
-              {})
+            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKSIG]),
-              {})
+            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKSIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12]),  # short script 1
-              {})
+            T(CScript([11] + pubkeys[:12]))  # short script 1
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [11]),  # short script 2
-              {})
+            T(CScript([11] + pubkeys[:12] + [11]))  # short script 2
 
     def test_tokenize_roundtrip(self):
         def T(serialized_script, expected_tokens, test_roundtrip=True):
