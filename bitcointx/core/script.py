@@ -1054,17 +1054,6 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 "nodes will deny relaying the transaction containing this witnessScript in the txin witness")
         return self.__class__([0, hashlib.sha256(self).digest()])
 
-    def to_p2wpkh_scriptPubKey(self: T_CScript) -> T_CScript:
-        """Create P2WPKH scriptPubKey from this redeemScript
-
-        That is, create the P2WPKH scriptPubKey that requires this script as a
-        redeemScript to spend.
-
-        """
-        if not self.is_p2pkh():
-            raise ValueError("redeemScript is not a p2pkh script")
-        return self.__class__([0, bitcointx.core.Hash160(self)])
-
     def GetSigOpCount(self, fAccurate: bool) -> int:
         """Get the SigOp count.
 
@@ -1565,6 +1554,13 @@ def standard_keyhash_scriptpubkey(keyhash: bytes) -> CScript:
     return CScript([OP_DUP, OP_HASH160, keyhash, OP_EQUALVERIFY, OP_CHECKSIG])
 
 
+def standard_witness_v0_scriptpubkey(keyhash_or_scripthash: bytes) -> CScript:
+    ensure_isinstance(keyhash_or_scripthash, bytes, 'keyhash or scripthash')
+    if len(keyhash_or_scripthash) not in (20, 32):
+        raise ValueError('keyhash_or_scripthash len is not 20 nor 32')
+    return CScript([0, keyhash_or_scripthash])
+
+
 def standard_scripthash_scriptpubkey(scripthash: bytes) -> CScript:
     ensure_isinstance(scripthash, bytes, 'scripthash')
     if len(scripthash) != 20:
@@ -1853,6 +1849,7 @@ __all__ = (
     'standard_multisig_witness_stack',
     'standard_scripthash_scriptpubkey',
     'standard_keyhash_scriptpubkey',
+    'standard_witness_v0_scriptpubkey',
     'ComplexScriptSignatureHelper',
     'StandardMultisigSignatureHelper',
 )

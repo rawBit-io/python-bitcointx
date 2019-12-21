@@ -465,12 +465,7 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     @classmethod
     def from_redeemScript(cls: Type[T_P2WPKHCoinAddress],
                           redeemScript: CScript) -> T_P2WPKHCoinAddress:
-        """Convert a redeemScript to a P2WPKH address
-
-        Convenience function: equivalent to
-        P2WPKHHCoinAddress.from_scriptPubKey(redeemScript.to_p2wpkh_scriptPubKey())
-        """
-        return cls.from_scriptPubKey(redeemScript.to_p2wpkh_scriptPubKey())
+        raise NotImplementedError
 
 
 class CBitcoinAddress(CCoinAddress, WalletBitcoinClass):

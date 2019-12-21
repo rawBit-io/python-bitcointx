@@ -22,6 +22,12 @@
   Also, `parse_standard_multisig_redeem_script()` now raises ValueError if there are
   duplicate pubkeys found in the script.
 
+* add `standard_witness_v0_scriptpubkey()` -- a helper function that checks the length
+  of supplied keyhash or scripthash, and then returns `CScript([0, keyhash_or_scripthash])`
+* remove `CScript.to_p2wpkh_scriptPubKey()` - it was incorrect, and the only thing that
+  it can be used for, if implemented correctly, is to convert P2PKH to P2WPKH address,
+  which is not very interesting thing to do, and can be done easily with
+  `standard_witness_v0_scriptpubkey()`
 * Added signet support `bitcoin/signet`.
 * Library is now fully type-annotated and statically checked using
   [mypy](https://github.com/python/mypy). The main code of the library and the examples
