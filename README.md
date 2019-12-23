@@ -16,6 +16,7 @@ bitcoin transactions, and related data structures.
 * Some API have changed and may be not compatible with old code (see below)
 * libsecp256k1 is used for signing and verifying.
   Signing by libsecp256k1 is deterministic, per RFC6979.
+* Support for PSBT (BIP174 Partially-signed transactions)
 * HD keys support
 * Easier to build code that supports and interacts with other bitcoin-based blockchains
   (see https://github.com/Simplexum/python-litecointx and https://github.com/Simplexum/python-elementstx)
@@ -70,6 +71,7 @@ consensus critical and non-consensus-critical.
     bitcointx.core.key        - ECC pubkeys
     bitcointx.core.script     - Scripts and opcodes
     bitcointx.core.scripteval - Script evaluation/verification
+    bitcointx.core.psbt       - BIP174 Partially-signed transactions
     bitcointx.core.serialize  - Serialization
     bitcointx.core.secp256k1  - functions to interface with secp256k1 C library
                                 (Note: to safely use it, experience with C

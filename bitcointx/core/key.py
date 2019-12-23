@@ -983,6 +983,12 @@ class KeyDerivationInfo:
         self.path = path
         self.pubkey = pubkey
 
+    def clone(self: T_KeyDerivationInfo) -> T_KeyDerivationInfo:
+        return self.__class__(
+            master_fingerprint=self.master_fingerprint,
+            path=BIP32Path(path=self.path),
+            pubkey=(None if self.pubkey is None else CPubKey(self.pubkey)))
+
 
 T_KeyStoreKeyArg = Union[CKeyBase, CPubKey, CExtKeyBase, CExtPubKeyBase]
 

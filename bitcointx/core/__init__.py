@@ -862,7 +862,7 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
     """Witness data for all inputs to a transaction"""
     __slots_: List[str] = ['vtxinwit']
 
-    vtxinwit: ReadOnlyField[Tuple[CTxInWitness]]
+    vtxinwit: ReadOnlyField[Tuple[CTxInWitness, ...]]
 
     def __init__(self, vtxinwit: Iterable[CTxInWitness] = (),
                  vtxoutwit: Iterable[CTxOutWitness] = ()) -> None:

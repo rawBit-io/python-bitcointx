@@ -24,12 +24,16 @@ from .serialize import (
     BytesSerializer, VarIntSerializer, ByteStream_Type, SerializationError,
     SerializationTruncationError, ser_read, Serializable
 )
-from . import CTransaction, CTxOut, b2x
+from . import (
+    CTransaction, CTxIn, CTxOut, CTxInWitness, CTxWitness, b2x,
+    CMutableTxIn, CMutableTxOut
+)
 from .key import CPubKey, BIP32Path, KeyDerivationInfo, KeyStore
 from .script import (
     CScript, CScriptWitness, SIGHASH_ALL, SIGHASH_Type,
     SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
-    ComplexScriptSignatureHelper, StandardMultisigSignatureHelper
+    ComplexScriptSignatureHelper, StandardMultisigSignatureHelper,
+    standard_keyhash_scriptpubkey
 )
 from ..wallet import CCoinExtPubKey
 
@@ -69,14 +73,17 @@ class PSBT_OutKeyType(Enum):
 PSBT_InputSignInfo = NamedTuple(
     'PSBT_InputSignInfo', [
         ('num_new_sigs', int),
-        ('num_sigs_missing', int)
+        ('num_sigs_missing', int),
+        ('is_final', bool)
     ])
 
 PSBT_InputsSignResult = NamedTuple(
     'PSBT_InputsSignResult', [
         ('inputs_info', List[Optional[PSBT_InputSignInfo]]),
         ('num_inputs_signed', int),
+        ('num_inputs_ready', int),
         ('num_inputs_final', int),
+        ('is_ready', bool),
         ('is_final', bool)
     ])
 
@@ -126,6 +133,49 @@ def derivation_map_repr(
         for k, v in derivation_map.items()))
 
 
+def merge_input_output_common_fields(
+    dst: Union['PSBT_Input', 'PSBT_Output'],
+    src: Union['PSBT_Input', 'PSBT_Output'],
+    what: str
+) -> None:
+    if dst.index is None:
+        dst.index = src.index
+    elif src.index is not None and dst.index != src.index:
+        raise ValueError('{what} indexes do not match')
+
+    if not dst.redeem_script:
+        dst.redeem_script = src.redeem_script
+    elif src.redeem_script:
+        if dst.redeem_script != src.redeem_script:
+            raise ValueError(f'redeem scripts are different for {what}s'
+                             f'at index {dst.index}')
+
+    if not dst.witness_script:
+        dst.witness_script = src.witness_script
+    elif src.witness_script:
+        if dst.witness_script != src.witness_script:
+            raise ValueError(f'redeem scripts are different for {what}s'
+                             f'at index {dst.index}')
+
+    for key_id, dinfo in src.derivation_map.items():
+        if key_id in dst.derivation_map:
+            if dst.derivation_map[key_id].master_fingerprint != \
+                    dinfo.master_fingerprint:
+                raise ValueError(
+                    f'master fingerprint do not match in derivation info '
+                    f'for {what}s at index {dst.index}')
+            if tuple(dst.derivation_map[key_id].path) != \
+                    tuple(dinfo.path):
+                raise ValueError(
+                    f'derivation paths do not match in derivation info '
+                    f'for {what}s at index {dst.index}')
+            assert (dst.derivation_map[key_id].pubkey ==
+                    src.derivation_map[key_id].pubkey),\
+                "if key_ids match, pubkeys must match"
+        else:
+            dst.derivation_map[key_id] = dinfo.clone()
+
+
 def stream_serialize_field(
     key_type: Union[int, T_KeyTypeEnum],
     f: ByteStream_Type,
@@ -153,6 +203,21 @@ def stream_serialize_proprietary_fields(
                                    key_data=prop_key, value=prop_data.value)
 
 
+def merge_proprietary_fields(
+    proprietary_fields_dst: Dict[bytes, List[PSBT_ProprietaryTypeData]],
+    proprietary_fields_src: Dict[bytes, List[PSBT_ProprietaryTypeData]],
+) -> None:
+    for prefix, propdata_list in proprietary_fields_src.items():
+        if prefix not in proprietary_fields_dst:
+            proprietary_fields_dst[prefix] = []
+
+        for pd in propdata_list:
+            proprietary_fields_dst[prefix].append(
+                PSBT_ProprietaryTypeData(subtype=pd.subtype,
+                                         key_data=pd.key_data,
+                                         value=pd.value))
+
+
 def stream_serialize_unknown_fields(
     unknown_fields: List[PSBT_UnknownTypeData],
     f: ByteStream_Type,
@@ -161,6 +226,17 @@ def stream_serialize_unknown_fields(
         stream_serialize_field(unk_data.key_type, f,
                                key_data=unk_data.key_data,
                                value=unk_data.value)
+
+
+def merge_unknown_fields(
+    unknown_fields_dst: List[PSBT_UnknownTypeData],
+    unknown_fields_src: List[PSBT_UnknownTypeData]
+) -> None:
+    for ud in unknown_fields_src:
+        unknown_fields_dst.append(
+            PSBT_UnknownTypeData(key_type=ud.key_type,
+                                 key_data=ud.key_data,
+                                 value=ud.value))
 
 
 def read_psbt_keymap(
@@ -271,6 +347,7 @@ class PSBT_Input(Serializable):
     proof_of_reserves_commitment: bytes
     proprietary_fields: Dict[bytes, List[PSBT_ProprietaryTypeData]]
     unknown_fields: List[PSBT_UnknownTypeData]
+    # NOTE: if you add a field, don't forget to specify it in merge()
 
     def __init__(
         self, *,
@@ -393,15 +470,98 @@ class PSBT_Input(Serializable):
                               descr('contents of unkown type'))
         self.unknown_fields = unknown_fields
 
+    @classmethod
+    def from_instance(cls: Type[T_PSBT_Input],
+                      inst: T_PSBT_Input
+                      ) -> T_PSBT_Input:
+        new_inst = cls()
+        new_inst.merge(inst)
+        return new_inst
+
+    def clone(self: T_PSBT_Input) -> T_PSBT_Input:
+        return self.__class__.from_instance(self)
+
     def _check_sanity(self, unsigned_tx: CTransaction) -> None:
         if not (self.final_script_sig or self.final_script_witness):
             nonfinal_fields = self._get_nonfinal_fields_present()
-            if not nonfinal_fields:
+            if not nonfinal_fields and not self.utxo:
                 return
 
         # try to sign with empty keystore,
         # this would do all the required sanity checks on the components.
-        self.sign(unsigned_tx, KeyStore())
+        self.sign(unsigned_tx, KeyStore(), finalize=False)
+
+    def merge(self: T_PSBT_Input, other: T_PSBT_Input) -> None:
+
+        # checks index fields, so need to be first
+        merge_input_output_common_fields(self, other, 'input')
+
+        if self.utxo is None:
+            self.utxo = other.utxo
+        elif other.utxo is None:
+            pass
+        elif (isinstance(self.utxo, CTransaction)
+              and isinstance(other.utxo, CTransaction)):
+            if self.utxo.GetTxid() != other.utxo.GetTxid():
+                raise ValueError(
+                    f'inputs at index {self.index} have non-witness utxos '
+                    f'with different txids')
+        elif (isinstance(self.utxo, CTransaction)
+              and isinstance(other.utxo, CTxOut)):
+            # The witness utxo wins, but we check consistency first
+            for vout in self.utxo.vout:
+                if vout.serialize() == other.serialize():
+                    break
+            else:
+                raise ValueError(
+                    f'withess utxo (CTxOut) in in merge source at index '
+                    f'{other.index} does not exist in outputs of non-witness '
+                    f'utxo (CTransaction) of the merge destination')
+            # The witness utxo wins
+            self.utxo = other.utxo
+        elif (isinstance(self.utxo, CTxOut)
+              and isinstance(other.utxo, CTransaction)):
+            # The witness utxo wins, but we check consistency first
+            for vout in other.utxo.vout:
+                if vout.serialize() == self.serialize():
+                    break
+            else:
+                raise ValueError(
+                    f'withess utxo (CTxOut) in in merge destination at index '
+                    f'{self.index} does not exist in outputs of non-witness '
+                    f'utxo (CTransaction) of the merge source')
+        elif (isinstance(self.utxo, CTxOut)
+              and isinstance(other.utxo, CTxOut)):
+            if self.utxo.serialize() != other.utxo.serialize():
+                raise ValueError(
+                    f'witness utxos are different for inputs '
+                    f'at index {self.index}')
+
+        for pub, sig in other.partial_sigs.items():
+            if pub not in self.partial_sigs:
+                self.partial_sigs[pub] = sig
+
+        if self.sighash_type is None:
+            self.sighash_type = other.sighash_type
+        elif other.sighash_type is not None:
+            if self.sighash_type != other.sighash_type:
+                raise ValueError(f'sighash types are different for inputs'
+                                 f'at index {self.index}')
+
+        if not self.final_script_sig:
+            self.final_script_sig = other.final_script_sig
+
+        if not self.final_script_witness:
+            self.final_script_witness = other.final_script_witness
+
+        # should we check if commitments match when present in both instnaces ?
+        if not self.proof_of_reserves_commitment:
+            self.proof_of_reserves_commitment = \
+                other.proof_of_reserves_commitment
+
+        merge_proprietary_fields(self.proprietary_fields,
+                                 other.proprietary_fields)
+        merge_unknown_fields(self.unknown_fields, other.unknown_fields)
 
     @no_bool_use_as_property
     def is_null(self) -> bool:
@@ -420,12 +580,8 @@ class PSBT_Input(Serializable):
     def _get_nonfinal_fields_present(self) -> Optional[List[str]]:
         fields = []
 
-        if self.utxo:
-            fields.append('utxo')
         if self.partial_sigs:
             fields.append('partial_sigs')
-        if self.sighash_type:
-            fields.append('sighash_type')
         if self.redeem_script:
             fields.append('redeem_script')
         if self.witness_script:
@@ -443,25 +599,91 @@ class PSBT_Input(Serializable):
                 f'in finalized PSBT_Input')
 
     def _clear_nonfinal_fields(self) -> None:
-        self.utxo = None
         self.partial_sigs = OrderedDict()
-        self.sighash_type = None
         self.redeem_script = CScript()
         self.witness_script = CScript()
         self.derivation_map = OrderedDict()
+
+    def _got_single_sig(self, pub: CPubKey, sig: bytes, *,
+                        is_witness: bool = True,
+                        finalize: bool = True
+                        ) -> PSBT_InputSignInfo:
+        if self.final_script_sig or self.final_script_witness:
+            raise AssertionError(
+                f'trying to sign already finalized input '
+                'at index {self.index}')
+        if finalize:
+            if self.sighash_type is not None and sig[-1] != self.sighash_type:
+                raise ValueError(
+                    f'sighash_type ({self.sighash_type}) specified for '
+                    f'input {self.index} does not match the '
+                    f'last byte of the signature')
+            if is_witness:
+                self.final_script_sig = CScript()
+                self.final_script_witness = CScriptWitness([sig, pub])
+            else:
+                self.final_script_sig = CScript([sig, pub])
+            self._clear_nonfinal_fields()
+        elif pub not in self.partial_sigs:
+            self.partial_sigs[pub] = sig
+
+        return PSBT_InputSignInfo(num_new_sigs=1, num_sigs_missing=0,
+                                  is_final=finalize)
+
+    def _maybe_sign_complex_script(
+        self,
+        msig_helper: ComplexScriptSignatureHelper,
+        signer: Callable[[CPubKey], Optional[bytes]],
+        *,
+        is_witness: bool = True,
+        script_sig_for_witness: Optional[CScript] = None,
+        finalize: bool = True
+    ) -> PSBT_InputSignInfo:
+
+        new_sigs, is_ready = msig_helper.sign(signer, self.partial_sigs)
+
+        if is_ready:
+            if finalize:
+                if is_witness:
+                    assert script_sig_for_witness is not None
+                    self.final_script_sig = script_sig_for_witness
+                    self.final_script_witness = \
+                        CScriptWitness(msig_helper.construct_witness_stack())
+                else:
+                    self.final_script_sig = \
+                        CScript(msig_helper.construct_witness_stack())
+                self._clear_nonfinal_fields()
+            elif new_sigs:
+                self.partial_sigs.update(new_sigs)
+
+            return PSBT_InputSignInfo(num_new_sigs=len(new_sigs),
+                                      num_sigs_missing=0,
+                                      is_final=finalize)
+
+        assert msig_helper.num_sigs_missing() > 0
+        assert set(self.partial_sigs).isdisjoint(set(new_sigs))
+        self.partial_sigs.update(new_sigs)
+
+        return PSBT_InputSignInfo(
+            num_new_sigs=len(new_sigs),
+            num_sigs_missing=msig_helper.num_sigs_missing(),
+            is_final=False)
 
     def sign(self,
              unsigned_tx: CTransaction,
              key_store: KeyStore, *,
              complex_script_helper_factory: Callable[
                  [CScript], ComplexScriptSignatureHelper
-             ] = StandardMultisigSignatureHelper.__call__
+             ] = StandardMultisigSignatureHelper.__call__,
+             finalize: bool = True
              ) -> Optional[PSBT_InputSignInfo]:
         """Sign the input using keys available from `key_store`.
         `complex_script_helper_factory`, given the script, should return
         an instance of appropriate `ComplexScriptSignatureHelper` subclass
         that is capable of signing particular complex script,
         or raise `ValueError` if it cannot return such an instance."""
+
+        sighash: Optional[bytes] = None
 
         assert(self.sighash_type != 0),\
             "unspecified sighash_type must be represented by None"
@@ -473,11 +695,13 @@ class PSBT_Input(Serializable):
                     self.utxo.scriptPubKey.is_witness_scriptpubkey():
                 raise ValueError(
                     'final_script_sig is present for native segwit input')
-            return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=0)
+            return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=0,
+                                      is_final=True)
 
         if self.final_script_sig:
             self._check_nonfinal_fields_empty()
-            return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=0)
+            return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=0,
+                                      is_final=True)
 
         if self.index is None:
             raise ValueError(
@@ -488,6 +712,7 @@ class PSBT_Input(Serializable):
                 f'utxo is not set for of PSBT_Input at index {self.index}')
 
         def signer(pub: CPubKey) -> Optional[bytes]:
+            assert sighash is not None
             key = key_store.get_privkey(pub.key_id, self.derivation_map)
             if key:
                 return key.sign(sighash) + bytes([sighash_type])
@@ -524,10 +749,13 @@ class PSBT_Input(Serializable):
                     f'input at index {self.index} specified as '
                     f'witness UTXO, but has non-witness scriptPubKey')
 
-            sighash = s.sighash(
-                unsigned_tx, self.index, SIGHASH_Type(sighash_type),
-                amount=self.utxo.nValue,
-                sigversion=SIGVERSION_WITNESS_V0)
+            def calc_sighash(script_for_sighash: CScript) -> bytes:
+                assert self.index is not None
+                assert isinstance(self.utxo, CTxOut)
+                return script_for_sighash.sighash(
+                    unsigned_tx, self.index, SIGHASH_Type(sighash_type),
+                    amount=self.utxo.nValue,
+                    sigversion=SIGVERSION_WITNESS_V0)
 
             if s.is_witness_v0_keyhash():
                 if ws:
@@ -535,15 +763,31 @@ class PSBT_Input(Serializable):
                         f'witness script is specified for {input_descr} '
                         f'p2wpkh input at index {self.index}')
 
+                sighash = calc_sighash(
+                    standard_keyhash_scriptpubkey(s.pubkey_hash()))
+
+                if self.partial_sigs:
+                    if len(self.partial_sigs) > 1:
+                        raise ValueError(
+                            f'more than one signature in partial_sigs '
+                            f'for p2wpkh input at index {self.index}')
+                    pub = list(self.partial_sigs)[0]
+                    if s.pubkey_hash() != pub.key_id:
+                        raise ValueError(
+                            f'the pubkey in partial_sigs for p2wpkh input '
+                            f'at index {self.index} does not match the '
+                            f'keyhash for the input')
+                    return self._got_single_sig(pub, self.partial_sigs[pub],
+                                                is_witness=True,
+                                                finalize=finalize)
+
                 key = key_store.get_privkey(s.pubkey_hash(),
                                             self.derivation_map)
                 if key:
                     sig = key.sign(sighash) + bytes([sighash_type])
-                    self.final_script_sig = script_sig
-                    self.final_script_witness = CScriptWitness([sig, key.pub])
-                    self._clear_nonfinal_fields()
-                    return PSBT_InputSignInfo(num_new_sigs=1,
-                                              num_sigs_missing=0)
+                    return self._got_single_sig(key.pub, sig,
+                                                is_witness=True,
+                                                finalize=finalize)
             elif s.is_witness_v0_scripthash():
                 if not ws:
                     raise ValueError(
@@ -556,30 +800,16 @@ class PSBT_Input(Serializable):
                         f'p2wpkh input at index {self.index} does not match '
                         f'the redeem script')
 
+                sighash = calc_sighash(ws)
+
                 try:
                     msig_helper = complex_script_helper_factory(ws)
                 except ValueError:
                     return None
 
-                new_sigs, is_ready = msig_helper.sign(signer,
-                                                      self.partial_sigs)
-
-                if is_ready:
-                    self.final_script_sig = script_sig
-                    self.final_script_witness = \
-                        CScriptWitness(msig_helper.construct_witness_stack())
-
-                    self._clear_nonfinal_fields()
-                    return PSBT_InputSignInfo(num_new_sigs=len(new_sigs),
-                                              num_sigs_missing=0)
-
-                assert msig_helper.num_sigs_missing() > 0
-                assert set(self.partial_sigs).isdisjoint(set(new_sigs))
-                self.partial_sigs.update(new_sigs)
-
-                return PSBT_InputSignInfo(
-                    num_new_sigs=len(new_sigs),
-                    num_sigs_missing=msig_helper.num_sigs_missing())
+                return self._maybe_sign_complex_script(
+                    msig_helper, signer, is_witness=True,
+                    script_sig_for_witness=script_sig, finalize=finalize)
             else:
                 return None  # unknown scriptpubkey type, cannot sign
 
@@ -596,23 +826,41 @@ class PSBT_Input(Serializable):
             prevout_index = unsigned_tx.vin[self.index].prevout.n
             spk = self.utxo.vout[prevout_index].scriptPubKey
 
-            sighash = spk.sighash(
-                unsigned_tx, self.index, SIGHASH_Type(sighash_type),
-                sigversion=SIGVERSION_BASE)
+            def calc_sighash(script_for_sighash: CScript) -> bytes:
+                assert self.index is not None
+                return script_for_sighash.sighash(
+                    unsigned_tx, self.index, SIGHASH_Type(sighash_type),
+                    sigversion=SIGVERSION_BASE)
 
             if spk.is_p2pkh():
                 if rds:
                     raise ValueError(
                         f'redeem script is specified for p2pkh input '
                         f'at index {self.index}')
+
+                sighash = calc_sighash(spk)
+
+                if self.partial_sigs:
+                    if len(self.partial_sigs) > 1:
+                        raise ValueError(
+                            f'more than one signature in partial_sigs '
+                            f'for p2pkh input at index {self.index}')
+                    pub = list(self.partial_sigs)[0]
+                    if spk.pubkey_hash() != pub.key_id:
+                        raise ValueError(
+                            f'the pubkey in partial_sigs for p2pkh input '
+                            f'at index {self.index} does not match the '
+                            f'keyhash for the input')
+                    return self._got_single_sig(pub, self.partial_sigs[pub],
+                                                finalize=finalize)
+
                 key = key_store.get_privkey(spk.pubkey_hash(),
                                             self.derivation_map)
                 if key:
                     sig = key.sign(sighash) + bytes([sighash_type])
-                    self.final_script_sig = CScript([sig, key.pub])
-                    self._clear_nonfinal_fields()
-                    return PSBT_InputSignInfo(num_new_sigs=1,
-                                              num_sigs_missing=0)
+                    return self._got_single_sig(key.pub, sig,
+                                                is_witness=False,
+                                                finalize=finalize)
             elif spk.is_p2sh():
                 if not rds:
                     raise ValueError(
@@ -624,28 +872,15 @@ class PSBT_Input(Serializable):
                         f'redeem script for input at index {self.index} '
                         f'does not match scriptPubKey in UTXO')
 
+                sighash = calc_sighash(rds)
+
                 try:
                     msig_helper = complex_script_helper_factory(rds)
                 except ValueError:
                     return None
 
-                new_sigs, is_ready = msig_helper.sign(signer,
-                                                      self.partial_sigs)
-
-                if is_ready:
-                    self.final_script_sig = \
-                        CScript(msig_helper.construct_witness_stack())
-                    self._clear_nonfinal_fields()
-                    return PSBT_InputSignInfo(num_new_sigs=len(new_sigs),
-                                              num_sigs_missing=0)
-
-                assert msig_helper.num_sigs_missing() > 0
-                assert set(self.partial_sigs).isdisjoint(set(new_sigs))
-                self.partial_sigs.update(new_sigs)
-
-                return PSBT_InputSignInfo(
-                    num_new_sigs=len(new_sigs),
-                    num_sigs_missing=msig_helper.num_sigs_missing())
+                return self._maybe_sign_complex_script(
+                    msig_helper, signer, is_witness=False, finalize=finalize)
             else:
                 raise ValueError(
                     f'unsupported scriptPubKey type at index {self.index}')
@@ -847,6 +1082,7 @@ class PSBT_Output(Serializable):
     derivation_map: Dict[bytes, PSBT_KeyDerivationInfo]
     proprietary_fields: Dict[bytes, List[PSBT_ProprietaryTypeData]]
     unknown_fields: List[PSBT_UnknownTypeData]
+    # NOTE: if you add a field, don't forget to specify it in merge()
 
     def __init__(
         self, *,
@@ -917,6 +1153,23 @@ class PSBT_Output(Serializable):
             and not(self.proprietary_fields)
             and not(self.unknown_fields)
         )
+
+    def merge(self: T_PSBT_Output, other: T_PSBT_Output) -> None:
+        merge_input_output_common_fields(self, other, 'output')
+        merge_proprietary_fields(self.proprietary_fields,
+                                 other.proprietary_fields)
+        merge_unknown_fields(self.unknown_fields, other.unknown_fields)
+
+    @classmethod
+    def from_instance(cls: Type[T_PSBT_Output],
+                      inst: T_PSBT_Output
+                      ) -> T_PSBT_Output:
+        new_inst = cls()
+        new_inst.merge(inst)
+        return new_inst
+
+    def clone(self: T_PSBT_Output) -> T_PSBT_Output:
+        return self.__class__.from_instance(self)
 
     def _check_sanity(self, unsigned_tx: CTransaction) -> None:
         rds = self.redeem_script
@@ -1050,8 +1303,8 @@ class PSBT_Output(Serializable):
         )
 
 
-T_PartiallySigned_Transaction = TypeVar('T_PartiallySigned_Transaction',
-                                        bound='PartiallySignedTransaction')
+T_PartiallySignedTransaction = TypeVar('T_PartiallySignedTransaction',
+                                       bound='PartiallySignedTransaction')
 
 
 class PartiallySignedTransaction(Serializable):
@@ -1062,6 +1315,7 @@ class PartiallySignedTransaction(Serializable):
     xpubs: Dict[CCoinExtPubKey, PSBT_KeyDerivationInfo]
     proprietary_fields: Dict[bytes, List[PSBT_ProprietaryTypeData]]
     unknown_fields: List[PSBT_UnknownTypeData]
+    # NOTE: if you add a field, don't forget to specify it in merge()
 
     def __init__(self, *,
                  version: int = 0,
@@ -1176,6 +1430,144 @@ class PartiallySignedTransaction(Serializable):
         for index, outp in enumerate(self.outputs):
             outp._check_sanity(self.unsigned_tx)
 
+    @classmethod
+    def from_instance(cls: Type[T_PartiallySignedTransaction],
+                      inst: T_PartiallySignedTransaction
+                      ) -> T_PartiallySignedTransaction:
+        new_inst = cls()
+        new_inst.merge(inst)
+        return new_inst
+
+    def clone(self: T_PartiallySignedTransaction
+              ) -> T_PartiallySignedTransaction:
+        return self.__class__.from_instance(self)
+
+    def merge(self: T_PartiallySignedTransaction,
+              other: T_PartiallySignedTransaction
+              ) -> None:
+        if self.version != other.version:
+            raise ValueError('PSBT version do not match')
+
+        tx_assigned = False
+        if self.unsigned_tx.is_null():
+            self.unsigned_tx = other.unsigned_tx
+            tx_assigned = True
+        elif other.unsigned_tx.is_null():
+            pass
+        elif self.unsigned_tx.GetHash() != other.unsigned_tx.GetHash():
+            raise ValueError('unsigned_tx txids do not match')
+
+        if not self.inputs and other.inputs:
+            if not tx_assigned:
+                raise ValueError('number of inputs do not match')
+            self.inputs = [PSBT_Input() for _ in other.inputs]
+
+        for index, inp in enumerate(self.inputs):
+            inp.merge(other.inputs[index])
+
+        if not self.outputs and other.outputs:
+            if not tx_assigned:
+                raise ValueError('number of outputs do not match')
+            self.outputs = [PSBT_Output() for _ in other.outputs]
+
+        for index, outp in enumerate(self.outputs):
+            outp.merge(other.outputs[index])
+
+        for xpub, dinfo in other.xpubs.items():
+            if xpub in self.xpubs:
+                if self.xpubs[xpub].master_fingerprint != \
+                        dinfo.master_fingerprint:
+                    raise ValueError(
+                        f'master fingerprint do not match in derivation info '
+                        f'for xpub {str(xpub)}')
+                if tuple(self.xpubs[xpub].path) != tuple(dinfo.path):
+                    raise ValueError(
+                        f'derivation paths do not match in derivation info '
+                        f'for xpub {str(xpub)}')
+            else:
+                self.xpubs[xpub] = dinfo.clone()
+
+        merge_proprietary_fields(self.proprietary_fields,
+                                 other.proprietary_fields)
+        merge_unknown_fields(self.unknown_fields, other.unknown_fields)
+
+    def combine(self: T_PartiallySignedTransaction,
+                other: T_PartiallySignedTransaction
+                ) -> T_PartiallySignedTransaction:
+        new_psbt = self.clone()
+        new_psbt.merge(other)
+        return new_psbt
+
+    def add_input(self, txin: CTxIn, inp: PSBT_Input) -> None:
+        if inp.index is not None and inp.index != len(self.unsigned_tx.vin):
+            raise ValueError(
+                f'invalid index in supplied PSBT_Input '
+                f'(must be None or {len(self.unsigned_tx.vin)}, '
+                f'but is {inp.index})')
+
+        self._check_consistency()
+
+        tuple_or_list = list if self.unsigned_tx.is_mutable() else tuple
+
+        if self.unsigned_tx.is_mutable():
+            if txin.is_immutable():
+                txin = CMutableTxIn.from_instance(txin)
+        else:
+            if txin.is_mutable():
+                txin = CTxIn.from_instance(txin)
+
+        saved_vin = self.unsigned_tx.vin
+        vin = list(saved_vin)
+        vin.append(txin)
+
+        object.__setattr__(self.unsigned_tx, 'vin', vin)
+
+        inp.index = len(saved_vin)
+
+        try:
+            inp._check_sanity(self.unsigned_tx)
+        except ValueError:
+            object.__setattr__(self.unsigned_tx, 'vin', saved_vin)
+            raise
+
+        object.__setattr__(self.unsigned_tx, 'vin', tuple_or_list(vin))
+        self.inputs.append(inp)
+
+    def add_output(self, txout: CTxOut, outp: PSBT_Output) -> None:
+        if outp.index is not None and outp.index != len(self.unsigned_tx.vout):
+            raise ValueError(
+                f'invalid index in supplied PSBT_Output '
+                f'(must be None or {len(self.unsigned_tx.vout)}, '
+                f'but is {outp.index})')
+
+        self._check_consistency()
+
+        tuple_or_list = list if self.unsigned_tx.is_mutable() else tuple
+
+        if self.unsigned_tx.is_mutable():
+            if txout.is_immutable():
+                txout = CMutableTxOut.from_instance(txout)
+        else:
+            if txout.is_mutable():
+                txout = CTxOut.from_instance(txout)
+
+        saved_vout = self.unsigned_tx.vout
+        vout = list(saved_vout)
+        vout.append(txout)
+
+        object.__setattr__(self.unsigned_tx, 'vout', vout)
+
+        outp.index = len(saved_vout)
+
+        try:
+            outp._check_sanity(self.unsigned_tx)
+        except ValueError:
+            object.__setattr__(self.unsigned_tx, 'vout', saved_vout)
+            raise
+
+        object.__setattr__(self.unsigned_tx, 'vout', tuple_or_list(vout))
+        self.outputs.append(outp)
+
     @no_bool_use_as_property
     def is_null(self) -> bool:
         return (
@@ -1188,10 +1580,10 @@ class PartiallySignedTransaction(Serializable):
         )
 
     @classmethod
-    def stream_deserialize(cls: Type[T_PartiallySigned_Transaction],
+    def stream_deserialize(cls: Type[T_PartiallySignedTransaction],
                            f: ByteStream_Type,
                            relaxed_sanity_checks: bool = False,
-                           **kwargs: Any) -> T_PartiallySigned_Transaction:
+                           **kwargs: Any) -> T_PartiallySignedTransaction:
 
         magic = ser_read(f, 5)
         if magic != PSBT_MAGIC_HEADER_BYTES:
@@ -1265,9 +1657,13 @@ class PartiallySignedTransaction(Serializable):
         if len(self.unsigned_tx.vout) != len(self.outputs):
             raise AssertionError('outputs length must match unsigned_tx.vout')
 
-    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
+    def stream_serialize(self, f: ByteStream_Type,
+                         relaxed_sanity_checks: bool = False,
+                         **kwargs: Any) -> None:
 
         self._check_consistency()
+        if not relaxed_sanity_checks:
+            self._check_sanity()
 
         f.write(PSBT_MAGIC_HEADER_BYTES)
 
@@ -1297,32 +1693,58 @@ class PartiallySignedTransaction(Serializable):
         for outp in self.outputs:
             outp.stream_serialize(f)
 
-    def sign_inputs(self, key_store: KeyStore,
-                    complex_script_helper_factory: Callable[
-                        [CScript], ComplexScriptSignatureHelper
-                    ] = StandardMultisigSignatureHelper.__call__
-                    ) -> PSBT_InputsSignResult:
+    def sign(self, key_store: KeyStore,
+             complex_script_helper_factory: Callable[
+                 [CScript], ComplexScriptSignatureHelper
+             ] = StandardMultisigSignatureHelper.__call__,
+             finalize: bool = True,
+             ) -> PSBT_InputsSignResult:
         self._check_consistency()
 
         inputs_sign_info: List[Optional[PSBT_InputSignInfo]] = []
         num_inputs_signed = 0
+        num_inputs_ready = 0
         num_inputs_final = 0
         for txin_index, _ in enumerate(self.unsigned_tx.vin):
             info = self.inputs[txin_index].sign(
                 self.unsigned_tx, key_store,
-                complex_script_helper_factory=complex_script_helper_factory)
+                complex_script_helper_factory=complex_script_helper_factory,
+                finalize=finalize)
             if info:
                 inputs_sign_info.append(info)
                 if info.num_new_sigs:
                     num_inputs_signed += 1
-                if info.num_sigs_missing == 0:
+                if info.is_final:
                     num_inputs_final += 1
+                elif info.num_sigs_missing == 0:
+                    num_inputs_ready += 1
 
         is_final = len(self.unsigned_tx.vin) == num_inputs_final
+        is_ready = len(self.unsigned_tx.vin) == \
+            num_inputs_final + num_inputs_ready
         return PSBT_InputsSignResult(inputs_info=inputs_sign_info,
                                      num_inputs_signed=num_inputs_signed,
+                                     num_inputs_ready=num_inputs_ready,
                                      num_inputs_final=num_inputs_final,
+                                     is_ready=is_ready,
                                      is_final=is_final)
+
+    def extract_transaction(self) -> CTransaction:
+        sign_result = self.sign(KeyStore())
+        if not sign_result.is_final:
+            raise ValueError(
+                'not all inputs are have required signatures')
+
+        tx = self.unsigned_tx.to_mutable()
+
+        txin_witnesses = []
+        for index, inp in enumerate(self.inputs):
+            tx.vin[index].scriptSig = inp.final_script_sig
+            txin_witnesses.append(CTxInWitness(inp.final_script_witness))
+
+        tx.wit = CTxWitness(txin_witnesses)
+
+        return tx.to_immutable()
 
     def __repr__(self) -> str:
         xpubs = (
