@@ -138,10 +138,10 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
     _immutable_cls: Type['CoreCoinClass']
 
     def to_mutable(self) -> 'CoreCoinClass':
-        return cast('CoreCoinClass', self._mutable_cls.from_instance(self))
+        return self._mutable_cls.from_instance(self)
 
     def to_immutable(self) -> 'CoreCoinClass':
-        return cast('CoreCoinClass', self._immutable_cls.from_instance(self))
+        return self._immutable_cls.from_instance(self)
 
     @no_bool_use_as_property
     @classmethod
@@ -181,6 +181,15 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
         # but that potentially means we could miss an erroneous arguments at
         # runtime. Better just ignore this typing check.
         return cls(*args, **kwargs)  # type: ignore
+
+    @classmethod
+    @abstractmethod
+    def from_instance(cls: Type[T_CoreCoinClass], other_inst: Any
+                      ) -> T_CoreCoinClass:
+        ...
+
+    def clone(self: T_CoreCoinClass) -> T_CoreCoinClass:
+        return self.__class__.from_instance(self)
 
 
 class CoreBitcoinClassDispatcher(
@@ -819,8 +828,15 @@ class CBitcoinMutableTxInWitness(CBitcoinTxInWitness, CMutableTxInWitness,
     __slots_: List[str] = []
 
 
+T_CTxOutWitness = TypeVar('T_CTxOutWitness', bound='CTxOutWitness')
+
+
 class CTxOutWitness(CoreCoinClass, next_dispatch_final=True):
-    pass
+
+    @classmethod
+    def from_instance(cls: Type[T_CTxOutWitness], witness: 'CTxOutWitness'
+                      ) -> T_CTxOutWitness:
+        return cls._from_instance(witness)
 
 
 class CMutableTxOutWitness(CTxOutWitness, mutable_of=CTxOutWitness,
