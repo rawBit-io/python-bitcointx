@@ -86,6 +86,10 @@ class Test_COutPoint(unittest.TestCase):
         with self.assertRaises(AttributeError):
             outpoint.n = 1
 
+    def test_clone(self):
+        outpoint = COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)
+        self.assertEqual(outpoint.serialize(), outpoint.clone().serialize())
+
 
 class Test_CMutableOutPoint(unittest.TestCase):
     def test_GetHash(self):
@@ -105,6 +109,10 @@ class Test_CMutableOutPoint(unittest.TestCase):
           'CBitcoinMutableOutPoint()')
         T(CMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0),
           "CBitcoinMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)")
+
+    def test_clone(self):
+        outpoint = CMutableOutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)
+        self.assertEqual(outpoint.serialize(), outpoint.clone().serialize())
 
 
 class Test_CTxIn(unittest.TestCase):
@@ -126,6 +134,11 @@ class Test_CTxIn(unittest.TestCase):
         with self.assertRaises(AttributeError):
             txin.nSequence = 1
 
+    def test_clone(self):
+        outpoint = COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)
+        txin = CTxIn(prevout=outpoint, scriptSig=CScript(b'\x03abc'), nSequence=0xffffffff)
+        self.assertEqual(txin.serialize(), txin.clone().serialize())
+
 
 class Test_CMutableTxIn(unittest.TestCase):
     def test_GetHash(self):
@@ -143,6 +156,104 @@ class Test_CMutableTxIn(unittest.TestCase):
             self.assertEqual(actual, expected)
         T(CMutableTxIn(),
           'CBitcoinMutableTxIn(CBitcoinMutableOutPoint(), CBitcoinScript([]), 0xffffffff)')
+
+    def test_clone(self):
+        outpoint = COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)
+        txin = CMutableTxIn(prevout=outpoint, scriptSig=CScript(b'\x03abc'), nSequence=0xffffffff)
+        self.assertEqual(txin.serialize(), txin.clone().serialize())
+
+
+class Test_CTxOut(unittest.TestCase):
+    def test_repr(self):
+        def T(txout, expected):
+            actual = repr(txout)
+            self.assertEqual(actual, expected)
+        T(CTxOut(1000, CScript(b'\x03abc')),
+          "CBitcoinTxOut(0.00001*COIN, CBitcoinScript([x('616263')]))")
+
+    def test_immutable(self):
+        txout = CTxOut()
+        with self.assertRaises(AttributeError):
+            txout.Value = 1
+
+    def test_clone(self):
+        txout = CTxOut(1000, CScript(b'\x03abc'))
+        self.assertEqual(txout.serialize(), txout.clone().serialize())
+
+
+class Test_CMutableTxOut(unittest.TestCase):
+    def test_repr(self):
+        def T(txout, expected):
+            actual = repr(txout)
+            self.assertEqual(actual, expected)
+        T(CMutableTxOut(1000, CScript(b'\x03abc')),
+            "CBitcoinMutableTxOut(0.00001*COIN, CBitcoinScript([x('616263')]))")
+
+    def test_clone(self):
+        txout = CMutableTxOut(1000, CScript(b'\x03abc'))
+        self.assertEqual(txout.serialize(), txout.clone().serialize())
+
+
+class Test_CTxWitness(unittest.TestCase):
+    def test_repr(self):
+        def T(txout, expected):
+            actual = repr(txout)
+            self.assertEqual(actual, expected)
+        T(CTxWitness([CTxInWitness(CScriptWitness([1]))]),
+            "CBitcoinTxWitness([CBitcoinTxInWitness(CScriptWitness([x('51')]))])")
+
+    def test_immutable(self):
+        wit = CTxWitness([CTxInWitness(CScriptWitness([1]))])
+        with self.assertRaises(AttributeError):
+            wit.vtxinwit = []
+
+    def test_clone(self):
+        wit = CTxWitness([CTxInWitness(CScriptWitness([1]))])
+        self.assertEqual(wit.serialize(), wit.clone().serialize())
+
+
+class Test_CMutableTxWitness(unittest.TestCase):
+    def test_repr(self):
+        def T(txout, expected):
+            actual = repr(txout)
+            self.assertEqual(actual, expected)
+        T(CMutableTxWitness([CTxInWitness(CScriptWitness([1]))]),
+            "CBitcoinMutableTxWitness([CBitcoinMutableTxInWitness(CScriptWitness([x('51')]))])")
+
+    def test_clone(self):
+        wit = CMutableTxWitness([CTxInWitness(CScriptWitness([1]))])
+        self.assertEqual(wit.serialize(), wit.clone().serialize())
+
+
+class Test_CTxInWitness(unittest.TestCase):
+    def test_repr(self):
+        def T(txout, expected):
+            actual = repr(txout)
+            self.assertEqual(actual, expected)
+        T(CTxInWitness(CScriptWitness([1])),
+            "CBitcoinTxInWitness(CScriptWitness([x('51')]))")
+
+    def test_immutable(self):
+        wit = CTxInWitness(CScriptWitness([1]))
+        with self.assertRaises(AttributeError):
+            wit.scriptWitness = CScriptWitness()
+
+    def test_clone(self):
+        txinwit = CTxInWitness(CScriptWitness([1]))
+        self.assertEqual(txinwit.serialize(), txinwit.clone().serialize())
+
+
+class Test_CMutableTxInWitness(unittest.TestCase):
+    def test_repr(self):
+        def T(txout, expected):
+            actual = repr(txout)
+            self.assertEqual(actual, expected)
+        T(CMutableTxInWitness(CScriptWitness([1])),
+            "CBitcoinMutableTxInWitness(CScriptWitness([x('51')]))")
+
+    def test_clone(self):
+        txinwit = CMutableTxInWitness(CScriptWitness([1]))
+        self.assertEqual(txinwit.serialize(), txinwit.clone().serialize())
 
 
 class Test_CTransaction(unittest.TestCase):
@@ -275,6 +386,10 @@ class Test_CTransaction(unittest.TestCase):
 
         wit = CTxWitness((CMutableTxInWitness(),))
         self.assertTrue(wit.vtxinwit[0].is_immutable())
+
+    def test_clone(self):
+        tx = CTransaction.deserialize(x('020000000001025fdeae88276b595be42d440d638a52d3ea0e1e1c820ab305ce438452468d7a2201000000171600149f2ca9bcbfb16f8a5c4f664aa22a2c833545a2b5fefffffffc25d526160911147b11fefeb6598ae97e093590d642265f27a67e7242a2ac31000000001716001482ad37a540c47bbb740596667f472f9d96f6dfb3feffffff02848a1b000000000017a914dc5d78da1cd6b02e08f0aa7bf608b091094415968700e1f5050000000017a9144b8acc9fc4210a5ce3ff417b00b419fd4fb03f8c8702473044022042c7ca216ace58920d6114ad30798a7a0b2b64faf17803034316dd83c90048a002205e37943bc694622128494fa2d9d3d402a58d91c1661c9a3a28124ff0e457d561012103bb79122851602141d7ec63a7342bc23bc51f050808695c141958cf2c222e38ed02483045022100c6841686570b60540b1c5ef620f3159f1f359a12cf30112650e72c44864b3e7202205c565a6cf05578557232e03d1655b73dcbf4e082c6ff0602707f0c0394c86b7601210292f52933e2105dc7410445be9a9d01589e0b9bc09d7a4e1509dc8e094b9ee9e437040000'))
+        self.assertEqual(tx.serialize(), tx.clone().serialize())
 
     def test_tx_vsize(self):
         """simple test to check that tx virtual size calculation works.
