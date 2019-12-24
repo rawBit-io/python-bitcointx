@@ -12,7 +12,6 @@
 
 # pylama:ignore=E501
 
-import threading
 import binascii
 import struct
 import decimal
@@ -34,7 +33,7 @@ from .serialize import (
 
 from ..util import (
     no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher,
-    dispatcher_wrap_methods, classgetter, ensure_isinstance,
+    dispatcher_wrap_methods, classgetter, ensure_isinstance, ContextVarsCompat
 )
 
 # NOTE: due to custom class dispatching and mutable/immmutable
@@ -56,14 +55,11 @@ T__UintBitVector = TypeVar('T__UintBitVector', bound='_UintBitVector')
 T_CoreCoinClass = TypeVar('T_CoreCoinClass', bound='CoreCoinClass')
 
 
-class ThreadLocalMutableContext(threading.local):
+class MutableContextVar(ContextVarsCompat):
     mutable_context_enabled: bool
 
-    def __init__(self) -> None:
-        self.mutable_context_enabled = False
 
-
-_thread_local = ThreadLocalMutableContext()
+_mutable_context = MutableContextVar(mutable_context_enabled=False)
 
 
 class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
@@ -109,25 +105,25 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
                 def wrapper(*args, **kwargs):
                     # We are about to call a method of a mutable class.
                     # enable the mutable context, but save previous state.
-                    prev_state = _thread_local.mutable_context_enabled
-                    _thread_local.mutable_context_enabled = True
+                    prev_state = _mutable_context.mutable_context_enabled
+                    _mutable_context.mutable_context_enabled = True
                     try:
                         return fn(*args, **kwargs)
                     finally:
                         # After the method call, restore the context
-                        _thread_local.mutable_context_enabled = prev_state
+                        _mutable_context.mutable_context_enabled = prev_state
 
                 return wrapper
 
             dispatcher_wrap_methods(cls, wrap, dct=combined_dict)
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
-        if _thread_local.mutable_context_enabled:
+        if _mutable_context.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super().__call__(*args, **kwargs)
 
     def __getattribute__(cls, name: str) -> Any:
-        if _thread_local.mutable_context_enabled:
+        if _mutable_context.mutable_context_enabled:
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super().__getattribute__(name)
 

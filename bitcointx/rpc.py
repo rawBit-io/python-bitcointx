@@ -144,7 +144,8 @@ class InWarmupError(JSONRPCError):
     RPC_ERROR_CODE = -28
 
 
-def _try_read_conf_file(conf_file: str, conf_file_contents: str,
+def _try_read_conf_file(conf_file: Optional[str],
+                        conf_file_contents: Optional[str],
                         allow_default_conf: bool
                         ) -> Dict[str, str]:
     assert ((conf_file is None) != (conf_file_contents is None))
@@ -182,6 +183,8 @@ def _try_read_conf_file(conf_file: str, conf_file_contents: str,
             line, buf = buf.split('\n', 1)
             process_line(line)
         return conf
+
+    assert conf_file is not None
 
     # Extract contents of bitcoin.conf to build service_url
     try:

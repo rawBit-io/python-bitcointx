@@ -9,7 +9,15 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
-import threading
+# pylama:ignore=C901
+
+try:
+    from contextvars import ContextVar
+    has_contextvars = True
+except ImportError:
+    import threading
+    has_contextvars = False
+
 import functools
 from types import FunctionType
 from abc import ABCMeta, ABC, abstractmethod
@@ -19,7 +27,6 @@ from typing import (
 )
 
 _attributes_of_ABC = dir(ABC)
-
 
 T_Callable = TypeVar('T_Callable', bound=Callable[..., Any])
 T_ClassMappingDispatcher = TypeVar('T_ClassMappingDispatcher',
@@ -495,33 +502,70 @@ class WriteableField(ReadOnlyField[T_unbounded]):
         raise NotImplementedError
 
 
-class ThreadLocalClassDispatchers(threading.local):
-    __slots__: List[str] = [
-        'default_core', 'default_wallet', 'default_script']
+if has_contextvars:
+    class ContextVarsCompat:
+        _context_vars_storage__: Dict[str, 'ContextVar[Any]']
+
+        def __init__(self, **kwargs: Any):
+            assert self.__class__ is not ContextVarsCompat, \
+                "ContextVarsCompat should always be subclassed"
+            vardict = {name: ContextVar(name, default=default_value)
+                       for name, default_value in kwargs.items()}
+            object.__setattr__(self, '_context_vars_storage__', vardict)
+
+        def __getattr__(self, name: str) -> Any:
+            if name not in self._context_vars_storage__:
+                raise AttributeError
+            return self._context_vars_storage__[name].get()
+
+        def __setattr__(self, name: str, value: Any) -> None:
+            if name not in self._context_vars_storage__:
+                raise AttributeError(
+                    f'context variable {name} was not specified on '
+                    f'{self.__class__.__name__} creation')
+            self._context_vars_storage__[name].set(value)
+else:
+    class ContextVarsCompat(threading.local):  # type: ignore
+        _context_vars_defaults__: Dict[str, Any] = {}
+
+        def __init__(self, **kwargs: Any):
+            assert self.__class__ is not ContextVarsCompat, \
+                "ContextVarsCompat should always be subclassed"
+            defaults = self.__class__._context_vars_defaults__
+
+            if not kwargs:
+                kwargs = defaults
+            elif defaults and kwargs != defaults:
+                raise ValueError(
+                    f'{self.__class__.__name__} cannot be instantiated twice '
+                    f'with different default values')
+            else:
+                self.__class__._context_vars_defaults__ = kwargs
+
+            for name, default_value in kwargs.items():
+                setattr(self, name, default_value)
+
+        def __setattr__(self, name: str, value: Any) -> None:
+            if name not in self.__class__._context_vars_defaults__:
+                raise AttributeError(
+                    f'context variable {name} was not specified on '
+                    f'{self.__class__.__name__} creation')
+            super().__setattr__(name, value)
+
+
+class ContextLocalClassDispatchers(ContextVarsCompat):
+
+    _known_identities = ('core', 'wallet', 'script')
 
     core: Type[ClassMappingDispatcher]
     wallet: Type[ClassMappingDispatcher]
     script: Type[ClassMappingDispatcher]
 
-    default_core: Type[ClassMappingDispatcher]
-    default_wallet: Type[ClassMappingDispatcher]
-    default_script: Type[ClassMappingDispatcher]
-
     def __init__(self) -> None:
-        for def_name in self.__slots__:
-            identity = def_name.replace('default_', '', 1)
-            assert identity != def_name
-            setattr(self, identity,
-                    getattr(self, def_name, None))
+        super().__init__(**{k: None for k in self._known_identities})
 
     def is_valid_identity(self, identity: str) -> bool:
-        # cannot use the default identity
-        if identity.startswith('default_'):
-            return False
-
-        # if we have corresponding default identity,
-        # then the specified identity is valid
-        return ('default_' + identity) in self.__slots__
+        return identity in self._known_identities
 
     def get_dispatcher_class(
         self, identity: str
@@ -535,19 +579,12 @@ class ThreadLocalClassDispatchers(threading.local):
 
     def set_dispatcher_class(self, identity: str,
                              value: Type[ClassMappingDispatcher]) -> None:
-        if identity.startswith('default_'):
-            raise ValueError(
-                'cannot set dispatcher class for default identity directly')
-        cur = getattr(self, identity)
-        if cur is None:
-            def_attr = 'default_' + identity
-            assert not hasattr(self, def_attr)
-            setattr(self, def_attr, value)
-
+        assert self.is_valid_identity(identity)
+        assert issubclass(value, ClassMappingDispatcher)
         setattr(self, identity, value)
 
 
-class_mapping_dispatch_data = ThreadLocalClassDispatchers()
+class_mapping_dispatch_data = ContextLocalClassDispatchers()
 
 __all__ = (
     'no_bool_use_as_property',
@@ -561,4 +598,5 @@ __all__ = (
     'ensure_isinstance',
     'ReadOnlyField',
     'WriteableField',
+    'ContextVarsCompat',
 )

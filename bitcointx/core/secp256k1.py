@@ -25,9 +25,10 @@
 import os
 import ctypes
 import ctypes.util
-import threading
 from types import FunctionType
-from typing import Dict, Union, Any, cast
+from typing import Dict, Union, Any, Optional, cast
+
+import bitcointx.util
 
 
 PUBLIC_KEY_SIZE             = 65
@@ -55,7 +56,12 @@ SECP256K1_FLAGS_BIT_COMPRESSION = (1 << 8)
 SECP256K1_EC_COMPRESSED = (SECP256K1_FLAGS_TYPE_COMPRESSION | SECP256K1_FLAGS_BIT_COMPRESSION)
 SECP256K1_EC_UNCOMPRESSED = (SECP256K1_FLAGS_TYPE_COMPRESSION)
 
-_secp256k1_error_storage = threading.local()
+
+class Secp256k1LastErrorContextVar(bitcointx.util.ContextVarsCompat):
+    last_error: Optional[Dict[str, Union[int, str]]]
+
+
+_secp256k1_error_storage = Secp256k1LastErrorContextVar(last_error=None)
 
 _ctypes_functype = getattr(ctypes, 'WINFUNCTYPE', getattr(ctypes, 'CFUNCTYPE'))
 

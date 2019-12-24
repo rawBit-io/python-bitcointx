@@ -12,7 +12,6 @@
 
 import os
 import platform
-import threading
 
 from abc import ABCMeta
 from contextlib import contextmanager
@@ -34,7 +33,7 @@ __version__ = '1.0.2.dev0'
 
 # initialized at the end of the module, because it
 # references BitcoinMainnetParams, which is not yet defined here.
-_thread_local:  'ThreadLocalChainParams'
+_chain_params_context:  'ChainParamsContextVar'
 
 
 class ChainParamsMeta(ABCMeta):
@@ -205,7 +204,7 @@ class BitcoinSignetParams(BitcoinMainnetParams, name='bitcoin/signet'):
 
 
 def get_current_chain_params() -> ChainParamsBase:
-    return _thread_local.params
+    return _chain_params_context.params
 
 
 @contextmanager
@@ -261,22 +260,19 @@ def select_chain_params(params: Union[str, ChainParamsBase,
                          'subclass of, nor an instance of ChainParamsBase')
 
     # the params are expected to be initialized
-    prev_params = _thread_local.params
-    _thread_local.params = params
+    prev_params = _chain_params_context.params
+    _chain_params_context.params = params
 
     bitcointx.util.activate_class_dispatcher(params.WALLET_DISPATCHER)
 
     return prev_params, params
 
 
-class ThreadLocalChainParams(threading.local):
+class ChainParamsContextVar(bitcointx.util.ContextVarsCompat):
     params: ChainParamsBase
 
-    def __init__(self) -> None:
-        self.params = BitcoinMainnetParams()
 
-
-_thread_local = ThreadLocalChainParams()
+_chain_params_context = ChainParamsContextVar(params=BitcoinMainnetParams())
 
 
 __all__ = (
