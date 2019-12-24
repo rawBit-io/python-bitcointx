@@ -22,6 +22,18 @@
   Also, `parse_standard_multisig_redeem_script()` now raises ValueError if there are
   duplicate pubkeys found in the script.
 
+Breaking changes:
+
+* `parse_standard_multisig_redeem_script()` now returns an instance of
+  `StandardMultisigScriptInfo` instead of a dict (typecheking with dicts that
+  have heterogenous values is a pain)
+* `bitcointx.core.scripteval.EvalScriptError` now does not directly store various
+  script eval state variables. There is now `ScriptEvalState` class that stores those,
+  and `EvalScriptError` has `state` attribute that stores the state as the instance
+  of that class
+
+Non-reaking changes:
+
 * Added support for PSBT (BIP174 partially signed transactions). For usage examples,
   please refer to `bitcointx/tests/test_psbt.py`
 * Added `standard_witness_v0_scriptpubkey()` -- a helper function that checks the length
@@ -35,6 +47,10 @@
   [mypy](https://github.com/python/mypy). The main code of the library and the examples
   are checked with --strict option, while the tests are checked with default settings.
 * Return current chain params in ChainParams context manager.
+* RPCCaller now looks for rpc user/password in chain-specific section in bitcoin.conf
+  if it cannot find rpcpassword in global section, and can take config file contents
+  as `conf_file_contents` named arg. Conf dir lookup for Bitcoin testnet is fixed
+  (the network id is 'test', the extra data dir is 'testnet3')
 * `select_chain_params` returns tuple of previous chain params and new chain params. 
 * Some asserts in the library are conveted to the checks that raise
   `ValueError` or `TypeError` depending on the check.
@@ -80,16 +96,6 @@
   CPubKey's `IsValid()`/`IsFullyValid()`, but the possible confusion and
   subsequent incorrect checks is dangerous, and it is better to not maintain
   the correspondense with Core in this case.
-
-Breaking changes:
-
-* `parse_standard_multisig_redeem_script()` now returns an instance of
-  `StandardMultisigScriptInfo` instead of a dict (typecheking with dicts that
-  have heterogenous values is a pain)
-* `bitcointx.core.scripteval.EvalScriptError` now does not directly store various
-  script eval state variables. There is now `ScriptEvalState` class that stores those,
-  and `EvalScriptError` has `state` attribute that stores the state as the instance
-  of that class
 
 ## v1.0.1
 

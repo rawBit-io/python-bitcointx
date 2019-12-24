@@ -153,6 +153,16 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
             return ''
         return name_parts[1]
 
+    def get_network_id(self) -> str:
+        """Return appropriate dir name to find data for the chain,
+        and .cookie file. For mainnet, it will be an empty string -
+        because data directory is the same as config directory.
+        For others, like testnet or regtest, it will differ."""
+        name_parts = self.NAME.split('/')
+        if len(name_parts) == 1:
+            return "main"
+        return name_parts[1]
+
     @property
     def name(self) -> str:
         return self.NAME
@@ -176,6 +186,12 @@ class BitcoinMainnetParams(ChainParamsBase,
 class BitcoinTestnetParams(BitcoinMainnetParams, name='bitcoin/testnet'):
     RPC_PORT = 18332
     WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinTestnetClassDispatcher
+
+    def get_datadir_extra_name(self) -> str:
+        return "testnet3"
+
+    def get_network_id(self) -> str:
+        return "test"
 
 
 class BitcoinRegtestParams(BitcoinMainnetParams, name='bitcoin/regtest'):

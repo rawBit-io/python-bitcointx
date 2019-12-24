@@ -144,23 +144,50 @@ class InWarmupError(JSONRPCError):
     RPC_ERROR_CODE = -28
 
 
-def _try_read_conf_file(conf_file: str, allow_default_conf: bool
+def _try_read_conf_file(conf_file: str, conf_file_contents: str,
+                        allow_default_conf: bool
                         ) -> Dict[str, str]:
+    assert ((conf_file is None) != (conf_file_contents is None))
+
     # Bitcoin Core accepts empty rpcuser,
     # not specified in conf_file
     conf = {'rpcuser': ""}
+
+    section = ''
+
+    def process_line(line: str) -> None:
+        nonlocal section
+
+        if '#' in line:
+            line = line[:line.index('#')]
+
+        line = line.strip()
+
+        if not line:
+            return
+
+        if line[0] == '[' and line[-1] == ']':
+            section = line[1:-1] + '.'
+            return
+
+        if '=' not in line:
+            return
+
+        k, v = line.split('=', 1)
+        conf[f'{section}{k.strip()}'] = v.strip()
+
+    if conf_file_contents is not None:
+        buf = conf_file_contents
+        while '\n' in buf:
+            line, buf = buf.split('\n', 1)
+            process_line(line)
+        return conf
 
     # Extract contents of bitcoin.conf to build service_url
     try:
         with open(conf_file, 'r') as fd:
             for line in fd.readlines():
-                if '#' in line:
-                    line = line[:line.index('#')]
-                if '=' not in line:
-                    continue
-                k, v = line.split('=', 1)
-                conf[k.strip()] = v.strip()
-
+                process_line(line)
     # Treat a missing bitcoin.conf as though it were empty
     except FileNotFoundError:
         if not allow_default_conf:
@@ -196,10 +223,15 @@ class RPCCaller:
                  service_url: Optional[str] = None,
                  service_port: Optional[int] = None,
                  conf_file: Optional[str] = None,
+                 conf_file_contents: Optional[str] = None,
                  allow_default_conf: bool = False,
                  timeout: int = DEFAULT_HTTP_TIMEOUT,
                  connection: Optional[HTTPClient_Type] = None) -> None:
 
+        if (conf_file is not None) and (conf_file_contents is not None):
+            raise ValueError(
+                'Either conf_file or conf_file_contents must be specified, '
+                'but not both')
         # Create a dummy connection early on so if __init__() fails prior to
         # __conn being created __del__() can detect the condition and handle it
         # correctly.
@@ -212,44 +244,60 @@ class RPCCaller:
             params = bitcointx.get_current_chain_params()
 
             # Figure out the path to the config file
-            if conf_file is None:
+            if conf_file is None and conf_file_contents is None:
                 if not allow_default_conf:
                     raise ValueError("if conf_file is not specified, "
                                      "allow_default_conf must be True")
                 conf_file = params.get_config_path()
 
-            conf = _try_read_conf_file(conf_file, allow_default_conf)
+            conf = _try_read_conf_file(conf_file, conf_file_contents,
+                                       allow_default_conf)
 
             if service_port is None:
                 service_port = params.RPC_PORT
 
             extraname = params.get_datadir_extra_name()
+            network_id = params.get_network_id()
 
             (host, port) = split_hostport(
-                conf.get('{}.rpcconnect'.format(extraname),
+                conf.get(f'{network_id}.rpcconnect',
                          conf.get('rpcconnect', 'localhost')))
 
-            port = int(conf.get('{}.rpcport'.format(extraname),
+            port = int(conf.get(f'{network_id}.rpcport',
                                 conf.get('rpcport', port or service_port)))
             service_url = ('%s://%s:%d' % ('http', host, port))
 
-            cookie_dir = conf.get('datadir', os.path.dirname(conf_file))
-            cookie_dir = os.path.join(cookie_dir,
-                                      params.get_datadir_extra_name())
-            cookie_file = os.path.join(cookie_dir, ".cookie")
-            try:
-                with open(cookie_file, 'r') as fd:
-                    authpair = fd.read()
-            except IOError as err:
-                if 'rpcpassword' in conf:
-                    authpair = "%s:%s" % (conf['rpcuser'], conf['rpcpassword'])
+            cookie_dir = conf.get(f'{network_id}.datadir',
+                                  conf.get('datadir',
+                                           None if conf_file is None
+                                           else os.path.dirname(conf_file)))
+            io_err = None
+            if cookie_dir is not None:
+                cookie_dir = os.path.join(cookie_dir, extraname)
+                cookie_file = os.path.join(cookie_dir, ".cookie")
+                try:
+                    with open(cookie_file, 'r') as fd:
+                        authpair = fd.read()
+                except IOError as err:
+                    io_err = err
 
+            if authpair is None:
+                if f'{network_id}.rpcpassword' in conf:
+                    authpair = "%s:%s" % (
+                        conf.get(f'{network_id}.rpcuser', ''),
+                        conf[f'{network_id}.rpcpassword'])
+                elif 'rpcpassword' in conf:
+                    authpair = "%s:%s" % (conf.get('rpcuser', ''),
+                                          conf['rpcpassword'])
+                elif io_err is None:
+                    raise ValueError(
+                        'Cookie dir is not known and rpcpassword is not '
+                        'specified in conf_file_contents')
                 else:
                     raise ValueError(
                         'Cookie file unusable (%s) and rpcpassword '
                         'not specified in the configuration file: %r'
-                        % (err, conf_file))
-
+                        % (io_err, conf_file))
         else:
             url = urllib.parse.urlparse(service_url)
             authpair = "%s:%s" % (url.username, url.password)
