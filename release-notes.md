@@ -2,10 +2,17 @@
 
 ## v1.0.2.dev0
 
-* IMPORTANT FIX: `parse_standard_multisig_redeem_script()` - add check that there's
-  no extra opcodes after `OP_CHECKMULTISIG`. Before the fix, this function could
-  incorrectly report certain non-standatd multisig scripts as 'standard' and return
-  pubkeys that might not be the pubkeys of the keys that control the actual spending.
+* Library is now fully type-annotated and statically checked using
+  [mypy](https://github.com/python/mypy). The main code of the library and the examples
+  are checked with --strict option, while the tests are checked with default settings.
+* Added support for PSBT (BIP174 partially signed transactions). For usage examples,
+  please refer to `bitcointx/tests/test_psbt.py`
+
+* IMPORTANT FIX (with potential security implications):
+  `parse_standard_multisig_redeem_script()` - a check was added that there are
+  no extra unexpected opcodes. Before the fix, this function could incorrectly report
+  certain non-standard multisig scripts as 'standard' and return pubkeys that might
+  not be the pubkeys of the keys that control the actual spending.
 
   If you need to compare that some untrusted redeem script matches some known keys,
   the best and least error-prone approach is to construct the new redeem
@@ -13,10 +20,10 @@
 
   If you instead chosen to use this function to parse untrusted data and then compare
   the extracted pubkeys with known ones, the function before the fix could allow
-  to bypass such checks. It was not initially considered that this function would be
-  used for parse-untrusted-data-then-compare-components tasks, but nothing is stopping
+  to bypass such checks. It was not initially considered that this function would be used
+  for parse-untrusted-data-then-compare-components tasks, but nothing is stopping
   anyone from using this function in this way, and therefore not checking that there is
-  no extra opcodes after CHECKMULTISIG can be considered a serious flaw, which was fixed
+  no unexpected extra opcodes can be considered a serious flaw, which was fixed
   in this release.
 
   Also, `parse_standard_multisig_redeem_script()` now raises ValueError if there are
@@ -32,10 +39,18 @@ Breaking changes:
   and `EvalScriptError` has `state` attribute that stores the state as the instance
   of that class
 
+Deprecations:
+
+* `CPubKey.is_valid()` is deprecated due to possibility of confusion 
+  with `CPubKey.is_fullyvalid()`. `CPubKey.is_valid()` will be removed
+  in the future. Please use `CPubKey.is_nonempty()` instead.
+  CPubKey's `is_valid()`/`is_fullyvalid()` was modelled after BitcoinCore's
+  CPubKey's `IsValid()`/`IsFullyValid()`, but the possible confusion and
+  subsequent incorrect checks is dangerous, and it is better to not maintain
+  the correspondense with Core in this case.
+
 Non-reaking changes:
 
-* Added support for PSBT (BIP174 partially signed transactions). For usage examples,
-  please refer to `bitcointx/tests/test_psbt.py`
 * Added `standard_witness_v0_scriptpubkey()` -- a helper function that checks the length
   of supplied keyhash or scripthash, and then returns `CScript([0, keyhash_or_scripthash])`
 * Removed `CScript.to_p2wpkh_scriptPubKey()` - it was incorrect, and the only thing that
@@ -43,9 +58,6 @@ Non-reaking changes:
   which is not very interesting thing to do, and can be done easily with
   `standard_witness_v0_scriptpubkey()`
 * Added signet support `bitcoin/signet`.
-* Library is now fully type-annotated and statically checked using
-  [mypy](https://github.com/python/mypy). The main code of the library and the examples
-  are checked with --strict option, while the tests are checked with default settings.
 * Return current chain params in ChainParams context manager.
 * RPCCaller now looks for rpc user/password in chain-specific section in bitcoin.conf
   if it cannot find rpcpassword in global section, and can take config file contents
@@ -71,13 +83,14 @@ Non-reaking changes:
 * Result types for `to_mutable()` / `to_immutable` methods are only provided
   for `CTransaction` and its subclasses. Classes for transaction components,
   such as `CTxOut` etc. still have `to_mutable()`/`to_immutable()` methods,
-  but their return types will be Any.
+  but their return types will be Any. `CMutableTxOut.from_instance(immutable_txout)`
+  will always have correct the result type, so you can use it instead.
 * `scripteval.VerifyWitnessProgram()` returns None. It was returning True previously,
   in case of success, but in case of failure, it raised an exception. The result was
   never examined - so it was not correct to use bool as a return type.
 * Threading is actually supported now, threading-related tests added
 * Asyncio is supported for python >= 3.7
-* sighash-calculation functions now has their `amount` argument None by default
+* sighash-calculation functions now has their `amount` argument as None by default
   (before it was 0). With `SIGVERSION_BASE`, amount is not used, and for
   `SIGVERSION_WITNESS_V0`, amount must be specified.
 * `CTxWitness.stream_deserialize()` is now a classmethod, same as
@@ -85,18 +98,9 @@ Non-reaking changes:
   supplied with `num_inputs=` keyword argument.
 * fix `CScript.to_p2wsh_scriptPubKey()` -- check for 3600 bytes standardness
   limit instead of 520 byte limit that is applicable for p2sh, not for p2wsh
-* fix `CScript.to_p2wpkh_scriptPubKey()` -- check that redeemScript
-  is a p2pkh script
 * `core.serialize.VarIntSerializer` now checks for value bounds of deserialized
   compact size integer. If it enconters non-canonical encoding, or the size
   bigger than `MAX_SIZE` (0x02000000) it throws DeserializationValueBoundsError
-* `CPubKey.is_valid()` is deprecated due to possibility of confusion 
-  with `CPubKey.is_fullyvalid()`. `CPubKey.is_valid()` will be removed
-  in the future. Please use `CPubKey.is_nonempty()` instead.
-  CPubKey's `is_valid()`/`is_fullyvalid()` was modelled after BitcoinCore's
-  CPubKey's `IsValid()`/`IsFullyValid()`, but the possible confusion and
-  subsequent incorrect checks is dangerous, and it is better to not maintain
-  the correspondense with Core in this case.
 
 ## v1.0.1
 
