@@ -16,6 +16,7 @@ from typing import (
     NamedTuple, Callable
 )
 
+import base64
 import struct
 from enum import Enum
 from collections import OrderedDict
@@ -40,6 +41,7 @@ from ..wallet import CCoinExtPubKey
 from ..util import ensure_isinstance, no_bool_use_as_property
 
 PSBT_MAGIC_HEADER_BYTES = b'psbt\xff'
+PSBT_MAGIC_HEADER_BASE64 = 'cHNidP'
 PSBT_SEPARATOR = b'\x00'
 
 PSBT_PROPRIETARY_TYPE = 0xFC
@@ -1567,6 +1569,44 @@ class PartiallySignedTransaction(Serializable):
 
         object.__setattr__(self.unsigned_tx, 'vout', tuple_or_list(vout))
         self.outputs.append(outp)
+
+    @classmethod
+    def from_base64_or_binary(
+        cls: Type[T_PartiallySignedTransaction], data: Union[bytes, str]
+    ) -> T_PartiallySignedTransaction:
+        if isinstance(data, str):
+            if data[:len(PSBT_MAGIC_HEADER_BASE64)] != \
+                    PSBT_MAGIC_HEADER_BASE64:
+                raise ValueError(
+                    'got data of type str, but magic bytes at the start '
+                    'do not match base64-encoded PSBT magic bytes')
+            data_b = data.encode('ascii')
+        elif isinstance(data, bytes):
+            data_b = data
+        else:
+            raise TypeError('type of data is not str or bytes')
+
+        if data_b[:len(PSBT_MAGIC_HEADER_BYTES)] == PSBT_MAGIC_HEADER_BYTES:
+            return cls.from_binary(bytes(data_b))
+        elif (data_b[:len(PSBT_MAGIC_HEADER_BASE64)] ==
+              PSBT_MAGIC_HEADER_BASE64.encode('ascii')):
+            return cls.deserialize(base64.b64decode(data_b.decode('ascii')))
+        else:
+            raise ValueError(
+                'magic bytes at the start do not match PSBT magic bytes')
+
+    @classmethod
+    def from_binary(cls: Type[T_PartiallySignedTransaction], data: bytes
+                    ) -> T_PartiallySignedTransaction:
+        return cls.deserialize(data)
+
+    @classmethod
+    def from_base64(cls: Type[T_PartiallySignedTransaction], b64_data: str
+                    ) -> T_PartiallySignedTransaction:
+        return cls.deserialize(base64.b64decode(b64_data))
+
+    def to_base64(self) -> str:
+        return base64.b64encode(self.serialize()).decode('ascii')
 
     @no_bool_use_as_property
     def is_null(self) -> bool:
