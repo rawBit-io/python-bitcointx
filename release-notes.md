@@ -49,7 +49,7 @@ Deprecations:
   subsequent incorrect checks is dangerous, and it is better to not maintain
   the correspondense with Core in this case.
 
-Non-reaking changes:
+Non-breaking changes:
 
 * Added `standard_witness_v0_scriptpubkey()` -- a helper function that checks the length
   of supplied keyhash or scripthash, and then returns `CScript([0, keyhash_or_scripthash])`
