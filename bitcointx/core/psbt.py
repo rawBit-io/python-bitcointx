@@ -208,12 +208,22 @@ def stream_serialize_proprietary_fields(
 def merge_proprietary_fields(
     proprietary_fields_dst: Dict[bytes, List[PSBT_ProprietaryTypeData]],
     proprietary_fields_src: Dict[bytes, List[PSBT_ProprietaryTypeData]],
+    allow_duplicates: bool = False
 ) -> None:
     for prefix, propdata_list in proprietary_fields_src.items():
         if prefix not in proprietary_fields_dst:
             proprietary_fields_dst[prefix] = []
 
+        dst_set: Set[PSBT_ProprietaryTypeData]
+
+        if allow_duplicates:
+            dst_set = set()
+        else:
+            dst_set = set(proprietary_fields_dst[prefix])
+
         for pd in propdata_list:
+            if pd in dst_set:
+                continue
             proprietary_fields_dst[prefix].append(
                 PSBT_ProprietaryTypeData(subtype=pd.subtype,
                                          key_data=pd.key_data,
@@ -232,9 +242,17 @@ def stream_serialize_unknown_fields(
 
 def merge_unknown_fields(
     unknown_fields_dst: List[PSBT_UnknownTypeData],
-    unknown_fields_src: List[PSBT_UnknownTypeData]
+    unknown_fields_src: List[PSBT_UnknownTypeData],
+    allow_duplicates: bool = False
 ) -> None:
+    dst_set: Set[PSBT_UnknownTypeData]
+    if allow_duplicates:
+        dst_set = set()
+    else:
+        dst_set = set(unknown_fields_dst)
     for ud in unknown_fields_src:
+        if ud in dst_set:
+            continue
         unknown_fields_dst.append(
             PSBT_UnknownTypeData(key_type=ud.key_type,
                                  key_data=ud.key_data,
@@ -477,7 +495,7 @@ class PSBT_Input(Serializable):
                       inst: T_PSBT_Input
                       ) -> T_PSBT_Input:
         new_inst = cls()
-        new_inst.merge(inst)
+        new_inst.merge(inst, allow_blob_duplicates=True)
         return new_inst
 
     def clone(self: T_PSBT_Input) -> T_PSBT_Input:
@@ -493,7 +511,8 @@ class PSBT_Input(Serializable):
         # this would do all the required sanity checks on the components.
         self.sign(unsigned_tx, KeyStore(), finalize=False)
 
-    def merge(self: T_PSBT_Input, other: T_PSBT_Input) -> None:
+    def merge(self: T_PSBT_Input, other: T_PSBT_Input,
+              allow_blob_duplicates: bool = False) -> None:
 
         # checks index fields, so need to be first
         merge_input_output_common_fields(self, other, 'input')
@@ -562,8 +581,10 @@ class PSBT_Input(Serializable):
                 other.proof_of_reserves_commitment
 
         merge_proprietary_fields(self.proprietary_fields,
-                                 other.proprietary_fields)
-        merge_unknown_fields(self.unknown_fields, other.unknown_fields)
+                                 other.proprietary_fields,
+                                 allow_duplicates=allow_blob_duplicates)
+        merge_unknown_fields(self.unknown_fields, other.unknown_fields,
+                             allow_duplicates=allow_blob_duplicates)
 
     @no_bool_use_as_property
     def is_null(self) -> bool:
@@ -1156,18 +1177,21 @@ class PSBT_Output(Serializable):
             and not(self.unknown_fields)
         )
 
-    def merge(self: T_PSBT_Output, other: T_PSBT_Output) -> None:
+    def merge(self: T_PSBT_Output, other: T_PSBT_Output,
+              allow_blob_duplicates: bool = False) -> None:
         merge_input_output_common_fields(self, other, 'output')
         merge_proprietary_fields(self.proprietary_fields,
-                                 other.proprietary_fields)
-        merge_unknown_fields(self.unknown_fields, other.unknown_fields)
+                                 other.proprietary_fields,
+                                 allow_duplicates=allow_blob_duplicates)
+        merge_unknown_fields(self.unknown_fields, other.unknown_fields,
+                             allow_duplicates=allow_blob_duplicates)
 
     @classmethod
     def from_instance(cls: Type[T_PSBT_Output],
                       inst: T_PSBT_Output
                       ) -> T_PSBT_Output:
         new_inst = cls()
-        new_inst.merge(inst)
+        new_inst.merge(inst, allow_blob_duplicates=True)
         return new_inst
 
     def clone(self: T_PSBT_Output) -> T_PSBT_Output:
@@ -1437,7 +1461,7 @@ class PartiallySignedTransaction(Serializable):
                       inst: T_PartiallySignedTransaction
                       ) -> T_PartiallySignedTransaction:
         new_inst = cls()
-        new_inst.merge(inst)
+        new_inst.merge(inst, allow_blob_duplicates=True)
         return new_inst
 
     def clone(self: T_PartiallySignedTransaction
@@ -1445,7 +1469,8 @@ class PartiallySignedTransaction(Serializable):
         return self.__class__.from_instance(self)
 
     def merge(self: T_PartiallySignedTransaction,
-              other: T_PartiallySignedTransaction
+              other: T_PartiallySignedTransaction,
+              allow_blob_duplicates: bool = False
               ) -> None:
         if self.version != other.version:
             raise ValueError('PSBT version do not match')
@@ -1465,7 +1490,8 @@ class PartiallySignedTransaction(Serializable):
             self.inputs = [PSBT_Input() for _ in other.inputs]
 
         for index, inp in enumerate(self.inputs):
-            inp.merge(other.inputs[index])
+            inp.merge(other.inputs[index],
+                      allow_blob_duplicates=allow_blob_duplicates)
 
         if not self.outputs and other.outputs:
             if not tx_assigned:
@@ -1473,7 +1499,8 @@ class PartiallySignedTransaction(Serializable):
             self.outputs = [PSBT_Output() for _ in other.outputs]
 
         for index, outp in enumerate(self.outputs):
-            outp.merge(other.outputs[index])
+            outp.merge(other.outputs[index],
+                       allow_blob_duplicates=allow_blob_duplicates)
 
         for xpub, dinfo in other.xpubs.items():
             if xpub in self.xpubs:
@@ -1490,14 +1517,16 @@ class PartiallySignedTransaction(Serializable):
                 self.xpubs[xpub] = dinfo.clone()
 
         merge_proprietary_fields(self.proprietary_fields,
-                                 other.proprietary_fields)
-        merge_unknown_fields(self.unknown_fields, other.unknown_fields)
+                                 other.proprietary_fields,
+                                 allow_duplicates=allow_blob_duplicates)
+        merge_unknown_fields(self.unknown_fields, other.unknown_fields,
+                             allow_duplicates=allow_blob_duplicates)
 
     def combine(self: T_PartiallySignedTransaction,
                 other: T_PartiallySignedTransaction
                 ) -> T_PartiallySignedTransaction:
         new_psbt = self.clone()
-        new_psbt.merge(other)
+        new_psbt.merge(other, allow_blob_duplicates=True)
         return new_psbt
 
     def add_input(self, txin: CTxIn, inp: PSBT_Input) -> None:
