@@ -1572,7 +1572,8 @@ class PartiallySignedTransaction(Serializable):
 
     @classmethod
     def from_base64_or_binary(
-        cls: Type[T_PartiallySignedTransaction], data: Union[bytes, str]
+        cls: Type[T_PartiallySignedTransaction], data: Union[bytes, str],
+        validate: bool = True
     ) -> T_PartiallySignedTransaction:
         if isinstance(data, str):
             if data[:len(PSBT_MAGIC_HEADER_BASE64)] != \
@@ -1590,7 +1591,8 @@ class PartiallySignedTransaction(Serializable):
             return cls.from_binary(bytes(data_b))
         elif (data_b[:len(PSBT_MAGIC_HEADER_BASE64)] ==
               PSBT_MAGIC_HEADER_BASE64.encode('ascii')):
-            return cls.deserialize(base64.b64decode(data_b.decode('ascii')))
+            return cls.deserialize(base64.b64decode(data_b.decode('ascii'),
+                                                    validate=validate))
         else:
             raise ValueError(
                 'magic bytes at the start do not match PSBT magic bytes')
@@ -1601,9 +1603,10 @@ class PartiallySignedTransaction(Serializable):
         return cls.deserialize(data)
 
     @classmethod
-    def from_base64(cls: Type[T_PartiallySignedTransaction], b64_data: str
+    def from_base64(cls: Type[T_PartiallySignedTransaction], b64_data: str,
+                    validate: bool = True
                     ) -> T_PartiallySignedTransaction:
-        return cls.deserialize(base64.b64decode(b64_data))
+        return cls.deserialize(base64.b64decode(b64_data, validate=validate))
 
     def to_base64(self) -> str:
         return base64.b64encode(self.serialize()).decode('ascii')

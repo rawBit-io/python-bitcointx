@@ -21,14 +21,16 @@ import base64
 
 
 def VerifyMessage(address: P2PKHCoinAddress, message: 'BitcoinMessage',
-                  sig: Union[str, bytes]) -> bool:
+                  sig: Union[str, bytes],
+                  validate_base64: bool = True
+                  ) -> bool:
 
     if isinstance(sig, bytes):
         sig_b64 = sig.decode('ascii')
     else:
         sig_b64 = sig
 
-    sig_bytes = base64.b64decode(sig_b64)
+    sig_bytes = base64.b64decode(sig_b64, validate=validate_base64)
     hash = message.GetHash()
 
     pubkey = CPubKey.recover_compact(hash, sig_bytes)

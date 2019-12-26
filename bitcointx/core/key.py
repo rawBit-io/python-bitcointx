@@ -28,7 +28,7 @@ import warnings
 from abc import abstractmethod
 from typing import (
     TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast,
-    Dict
+    Dict, Iterable
 )
 
 import bitcointx.core
@@ -991,6 +991,7 @@ class KeyDerivationInfo:
 
 
 T_KeyStoreKeyArg = Union[CKeyBase, CPubKey, CExtKeyBase, CExtPubKeyBase]
+T_KeyStore = TypeVar('T_KeyStore', bound='KeyStore')
 
 
 class KeyStore:
@@ -1011,6 +1012,15 @@ class KeyStore:
         for k in args:
             self.add_key(k)
 
+    @classmethod
+    def from_iterable(cls: Type[T_KeyStore],
+                      iterable: Iterable[T_KeyStoreKeyArg]
+                      ) -> T_KeyStore:
+        kstore = cls()
+        for k in iterable:
+            kstore.add_key(k)
+        return kstore
+
     def add_key(self, k: T_KeyStoreKeyArg) -> None:
         if isinstance(k, CKeyBase):
             self._privkeys[k.pub.key_id] = k
@@ -1030,7 +1040,9 @@ class KeyStore:
                 derinfo.master_fingerprint
             ][derinfo.path._indexes] = k
         else:
-            raise ValueError('unrecognized argument type')
+            raise ValueError(
+                f'object supplied to add_key is of type '
+                f'{k.__class__.__name__}, which is not recognized key type')
 
     def remove_key(self, k: T_KeyStoreKeyArg) -> None:
         if isinstance(k, CKeyBase):
