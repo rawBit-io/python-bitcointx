@@ -13,25 +13,31 @@
 
 import os
 import sys
+from bitcointx import select_chain_params
 from bitcointx.core import b2x
 from bitcointx.core.key import BIP32Path
 from bitcointx.base58 import Base58Error, UnexpectedBase58PrefixError
-from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
+from bitcointx.wallet import CCoinExtKey, CCoinExtPubKey
 from typing import Union
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("usage: {} <derivation_path> [xpriv_or_xpub]"
-              .format(sys.argv[0]))
-        sys.exit(-1)
+    xkey: Union[CCoinExtKey, CCoinExtPubKey]
 
-    xkey: Union[CBitcoinExtKey, CBitcoinExtPubKey]
+    if len(sys.argv) >= 2 and sys.argv[1] in ('-t', '-r'):
+        if sys.argv[1] == '-t':
+            select_chain_params('bitcoin/testnet')
+        elif sys.argv[1] == '-r':
+            select_chain_params('bitcoin/regtest')
+        else:
+            assert (0)
+
+        sys.argv.pop(1)
 
     if len(sys.argv) == 2:
-        xkey = CBitcoinExtKey.from_seed(os.urandom(32))
+        xkey = CCoinExtKey.from_seed(os.urandom(32))
         print("generated xpriv: ", xkey)
-    else:
-        key_classes = (CBitcoinExtKey, CBitcoinExtPubKey)
+    elif len(sys.argv) == 3:
+        key_classes = (CCoinExtKey, CCoinExtPubKey)
         for i, cls in enumerate(key_classes):
             try:
 
@@ -55,6 +61,10 @@ if __name__ == '__main__':
         else:
             print("ERROR: specified key does not appear to be valid")
             sys.exit(-1)
+    else:
+        print("usage: {} [-r|-t] <derivation_path> [xpriv_or_xpub]"
+              .format(sys.argv[0]))
+        sys.exit(-1)
 
     path_str = sys.argv[1]
 
@@ -77,23 +87,23 @@ if __name__ == '__main__':
     for n in path:
         print("child number: 0x{:08x}".format(n))
         xkey = xkey.derive(n)
-        if isinstance(xkey, CBitcoinExtKey):
+        if isinstance(xkey, CCoinExtKey):
             print("xpriv:", xkey)
 
             # Note:
-            # if xkey is CBitcoinExtKey, xkey.priv is CBitcoinKey
-            #     CBitcoinKey is in WIF format, and compressed
+            # if xkey is CCoinExtKey, xkey.priv is CCoinKey
+            #     CCoinKey is in WIF format, and compressed
             #     len(bytes(xkey.privkey)) == 33
             # if xkey is CExtKey, xkey.priv is CKey
             #     CKey is always 32 bytes
             #
-            # Standalone CBitcoinKey key can be uncompressed,
+            # Standalone CCoinKey key can be uncompressed,
             # and be of 32 bytes length, but this is not the case
-            # with xpriv encapsulated in CBitcoinExtKey - it is
+            # with xpriv encapsulated in CCoinExtKey - it is
             # always compressed there.
             #
             # you can always use xkey.priv.secret_bytes
-            # to get raw 32-byte secret data from both CBitcoinKey and CKey
+            # to get raw 32-byte secret data from both CCoinKey and CKey
             #
             print("priv WIF:", xkey.priv)
             print("raw priv:", b2x(xkey.priv.secret_bytes))
@@ -101,6 +111,6 @@ if __name__ == '__main__':
             print("xpub: ", xkey.neuter())
             print("pub:", b2x(xkey.pub))
         else:
-            assert isinstance(xkey, CBitcoinExtPubKey)
+            assert isinstance(xkey, CCoinExtPubKey)
             print("xpub:", xkey)
             print("pub:", b2x(xkey.pub))
