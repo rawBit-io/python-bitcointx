@@ -13,6 +13,7 @@
 
 import sys
 import argparse
+from typing import Optional, Union
 
 from bitcointx import select_chain_params
 from bitcointx.core import b2x
@@ -58,7 +59,7 @@ if __name__ == '__main__':
 
     keys = []
     for key_index, key_data in enumerate(args.key or []):
-        k = None
+        k: Optional[Union[CCoinKey, CCoinExtKey]] = None
         try:
             k = CCoinKey(key_data)
         except (ValueError, Base58Error):
@@ -90,10 +91,14 @@ if __name__ == '__main__':
 
     if not sign_result.is_final and sign_result.num_inputs_signed > 0:
         for index, info in enumerate(sign_result.inputs_info):
-            print(f"Input {index}: added {info.num_new_sigs} sigs, ", end='')
-            print(f"input is now final"
-                  if info.is_final
-                  else f"{info.num_sigs_missing} is still missing")
+            if info:
+                print(f"Input {index}: added {info.num_new_sigs} sigs, ",
+                      end='')
+                print(f"input is now final"
+                      if info.is_final
+                      else f"{info.num_sigs_missing} is still missing")
+            else:
+                print(f"Input {index}: skipped, cannot be processed")
 
     print()
     if args.finalize:

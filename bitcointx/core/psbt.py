@@ -143,7 +143,7 @@ def merge_input_output_common_fields(
     if dst.index is None:
         dst.index = src.index
     elif src.index is not None and dst.index != src.index:
-        raise ValueError('{what} indexes do not match')
+        raise ValueError(f'{what} indexes do not match')
 
     if not dst.redeem_script:
         dst.redeem_script = src.redeem_script
@@ -613,7 +613,7 @@ class PSBT_Input(Serializable):
         if self.final_script_sig or self.final_script_witness:
             raise AssertionError(
                 f'trying to sign already finalized input '
-                'at index {self.index}')
+                f'at index {self.index}')
         if finalize:
             if self.sighash_type is not None and sig[-1] != self.sighash_type:
                 raise ValueError(
@@ -822,8 +822,8 @@ class PSBT_Input(Serializable):
                     f'non-segwit output at index {self.index}')
             if ws:
                 raise ValueError(
-                    'witness script is specified for non-segwit input '
-                    'at index {self.index}')
+                    f'witness script is specified for non-segwit input '
+                    f'at index {self.index}')
 
             prevout_index = unsigned_tx.vin[self.index].prevout.n
             spk = self.utxo.vout[prevout_index].scriptPubKey
@@ -884,8 +884,8 @@ class PSBT_Input(Serializable):
                 return self._maybe_sign_complex_script(
                     msig_helper, signer, is_witness=False, finalize=finalize)
             else:
-                raise ValueError(
-                    f'unsupported scriptPubKey type at index {self.index}')
+                # unknown scriptpubkey type (maybe bare pubkey) cannot sign
+                return None
         else:
             raise AssertionError(
                 f'type of utxo in PSBT input at index {self.index} '
@@ -952,7 +952,7 @@ class PSBT_Input(Serializable):
                 ensure_empty_key_data(key_type, key_data, descr(''))
                 if len(value) != 4:
                     raise SerializationError(
-                        descr('Incorrect data length for {key_type.name}'))
+                        descr(f'Incorrect data length for {key_type.name}'))
                 sighash_type = struct.unpack(b"<I", value)[0]
             elif key_type is PSBT_InKeyType.REDEEM_SCRIPT:
                 ensure_empty_key_data(key_type, key_data, descr(''))
@@ -1662,7 +1662,7 @@ class PartiallySignedTransaction(Serializable):
                 ensure_empty_key_data(key_type, key_data)
                 if len(value) != 4:
                     raise SerializationError(
-                        'Incorrect data length for {key_type.name}')
+                        f'Incorrect data length for {key_type.name}')
                 version = struct.unpack(b'<I', value)[0]
             else:
                 raise AssertionError(
@@ -1753,8 +1753,8 @@ class PartiallySignedTransaction(Serializable):
                 self.unsigned_tx, key_store,
                 complex_script_helper_factory=complex_script_helper_factory,
                 finalize=finalize)
+            inputs_sign_info.append(info)
             if info:
-                inputs_sign_info.append(info)
                 if info.num_new_sigs:
                     num_inputs_signed += 1
                 if info.is_final:
