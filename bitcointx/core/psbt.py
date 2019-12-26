@@ -79,8 +79,8 @@ PSBT_InputSignInfo = NamedTuple(
         ('is_final', bool)
     ])
 
-PSBT_InputsSignResult = NamedTuple(
-    'PSBT_InputsSignResult', [
+PSBT_SignResult = NamedTuple(
+    'PSBT_SignResult', [
         ('inputs_info', List[Optional[PSBT_InputSignInfo]]),
         ('num_inputs_signed', int),
         ('num_inputs_ready', int),
@@ -1738,7 +1738,7 @@ class PartiallySignedTransaction(Serializable):
                  [CScript], ComplexScriptSignatureHelper
              ] = StandardMultisigSignatureHelper.__call__,
              finalize: bool = True,
-             ) -> PSBT_InputsSignResult:
+             ) -> PSBT_SignResult:
         self._check_consistency()
 
         inputs_sign_info: List[Optional[PSBT_InputSignInfo]] = []
@@ -1762,12 +1762,12 @@ class PartiallySignedTransaction(Serializable):
         is_final = len(self.unsigned_tx.vin) == num_inputs_final
         is_ready = len(self.unsigned_tx.vin) == \
             num_inputs_final + num_inputs_ready
-        return PSBT_InputsSignResult(inputs_info=inputs_sign_info,
-                                     num_inputs_signed=num_inputs_signed,
-                                     num_inputs_ready=num_inputs_ready,
-                                     num_inputs_final=num_inputs_final,
-                                     is_ready=is_ready,
-                                     is_final=is_final)
+        return PSBT_SignResult(inputs_info=inputs_sign_info,
+                               num_inputs_signed=num_inputs_signed,
+                               num_inputs_ready=num_inputs_ready,
+                               num_inputs_final=num_inputs_final,
+                               is_ready=is_ready,
+                               is_final=is_final)
 
     def extract_transaction(self) -> CTransaction:
         sign_result = self.sign(KeyStore())
