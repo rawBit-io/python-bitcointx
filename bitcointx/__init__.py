@@ -28,7 +28,7 @@ import bitcointx.util
 # Note that setup.py can break if __init__.py imports any external
 # dependencies, as these might not be installed when setup.py runs. In this
 # case __version__ could be moved to a separate version.py and imported here.
-__version__ = '1.0.2'
+__version__ = '1.0.2.post0'
 
 
 # initialized at the end of the module, because it
