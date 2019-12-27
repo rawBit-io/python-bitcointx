@@ -1,5 +1,9 @@
 # python-bitcointx release notes
 
+## v1.0.2.post0
+
+* fix PSBT outputs decode: `redeem_script` was set instead of `witness_script`
+
 ## v1.0.2
 
 * Library is now fully type-annotated and statically checked using
