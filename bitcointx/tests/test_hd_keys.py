@@ -233,9 +233,7 @@ class Test_CExtKey(unittest.TestCase):
 class Test_BIP32Path(unittest.TestCase):
     def test_from_string(self):
         with self.assertRaises(ValueError):
-            BIP32Path('')  # empty path that is not 'm'
-        with self.assertRaises(ValueError):
-            BIP32Path('m/')  # empty path that is not 'm'
+            BIP32Path('m/')  # empty path that is not 'm' or ''
         with self.assertRaises(ValueError):
             BIP32Path('/')
         with self.assertRaises(ValueError):
@@ -262,9 +260,27 @@ class Test_BIP32Path(unittest.TestCase):
         with self.assertRaises(ValueError):
             # too long path
             BIP32Path('m/'+'/'.join('0' for _ in range(256)))
+        with self.assertRaises(ValueError):
+            # non-partial with is_partial=True
+            BIP32Path('m/0', is_partial=True)
+        with self.assertRaises(ValueError):
+            # partial with is_partial=False
+            BIP32Path('0', is_partial=False)
+        with self.assertRaises(ValueError):
+            # partial with is_partial=False
+            BIP32Path(BIP32Path('0'), is_partial=False)
+        with self.assertRaises(ValueError):
+            # non-partial with is_partial=True
+            BIP32Path(BIP32Path('m/0'), is_partial=True)
 
+        self.assertTrue(BIP32Path('').is_partial())
+        self.assertFalse(BIP32Path('m').is_partial())
+        self.assertTrue(BIP32Path('0/1/2').is_partial())
+        self.assertFalse(BIP32Path('m/0/1/2').is_partial())
         self.assertEqual(list(BIP32Path('m/0')), [0])
+        self.assertEqual(list(BIP32Path('0')), [0])
         self.assertEqual(list(BIP32Path('m')), [])
+        self.assertEqual(list(BIP32Path('')), [])
 
         self.assertEqual(list(BIP32Path("m/4h/5/1h")),
                          [4+BIP32_HARDENED_KEY_OFFSET, 5,
@@ -299,21 +315,27 @@ class Test_BIP32Path(unittest.TestCase):
             # too long path
             BIP32Path([0 for _ in range(256)])
 
-        self.assertEqual(str(BIP32Path([0])), "m/0")
-        self.assertEqual(str(BIP32Path([])), "m")
+        self.assertEqual(str(BIP32Path([0], is_partial=False)), "m/0")
+        self.assertEqual(str(BIP32Path(BIP32Path([0], is_partial=False))),
+                         "m/0")
+        self.assertEqual(str(BIP32Path(BIP32Path([0], is_partial=True))),
+                         "0")
+        self.assertEqual(str(BIP32Path([], is_partial=False)), "m")
+        self.assertEqual(str(BIP32Path([0])), "0")
+        self.assertEqual(str(BIP32Path([])), "")
 
         self.assertEqual(
             str(BIP32Path([0xFFFFFFFF, 0x80000001, 1, 0x80000002])),
-            "m/2147483647'/1'/1/2'")
+            "2147483647'/1'/1/2'")
 
         self.assertEqual(
             str(BIP32Path([0xFFFFFFFF, 0x80000001, 1, 2],
-                          hardened_marker='h')),
+                          hardened_marker='h', is_partial=False)),
             "m/2147483647h/1h/1/2")
 
         self.assertEqual(
             str(BIP32Path([n+BIP32_HARDENED_KEY_OFFSET for n in range(128)]
-                          + [n for n in range(127)])),
+                          + [n for n in range(127)], is_partial=False)),
             'm/'+'/'.join("%u'" % n for n in range(128))
             + '/' + '/'.join("%u" % n for n in range(127)))
 
@@ -324,6 +346,9 @@ class Test_BIP32Path(unittest.TestCase):
         p = BIP32Path("m/4'/5'/1/4")
         self.assertEqual(str(BIP32Path(p)), "m/4'/5'/1/4")
         self.assertEqual(str(BIP32Path(p, hardened_marker='h')), "m/4h/5h/1/4")
+        p = BIP32Path("4'/5'/1/4")
+        self.assertEqual(str(BIP32Path(p)), "4'/5'/1/4")
+        self.assertEqual(str(BIP32Path(p, hardened_marker='h')), "4h/5h/1/4")
 
     def test_random_access(self):
         p = BIP32Path("m/4h/5h/1/4")

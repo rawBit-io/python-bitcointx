@@ -1,5 +1,29 @@
 # python-bitcointx release notes
 
+## v1.0.3.dev0
+
+Breaking changes:
+
+* `KeyStore`'s `get_privkey()` and `get_pubkey()` second argument now
+  is KeyDerivationInfo, not Dict[bytes, KeyDerivationInfo]. Using dict was a mistake,
+  because we always need only one entry, the `key_id` one. If the caller has a dict,
+  it can also look up the derivation info itself.
+* KeyDerivationInfo's `master_fingerprint` renamed to `master_fp`,
+  and KeyDerivationInfo now does not store pubkeys. Derivation maps in `PSBT_Input`
+  and `PSBT_Output` now map from `pubkey` to `PSBT_KeyDerivationInfo`
+* BIP32Path handling became more strict, extended keys now can retain associated
+  `derivation_info` through derivations, and it is checked if the path given to
+  `derive_path(path)` is full path or partial path. It can only accept full path
+  if the current key has depth = 0.
+
+Non-breaking changes:
+
+* `BIP32Path`: paths can now skip 'm/' at the beginning, and `BIP32Path` now has
+  `is_partial()` method that returns False when if the path is not partal - starts
+  from master, 'm/', or False if it is not starts from master. String representations
+  also use this property and return results with 'm/' prefix or without.
+* `KeyStore` implementation was improved and tests was added
+
 ## v1.0.2.post0
 
 * fix PSBT outputs decode: `redeem_script` was set instead of `witness_script`

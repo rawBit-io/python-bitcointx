@@ -23,7 +23,7 @@ from collections import OrderedDict
 
 from .serialize import (
     BytesSerializer, VarIntSerializer, ByteStream_Type, SerializationError,
-    SerializationTruncationError, ser_read, Serializable
+    SerializationTruncationError, ser_read, Serializable, ImmutableSerializable
 )
 from . import (
     CTransaction, CTxIn, CTxOut, CTxInWitness, CTxWitness, b2x,
@@ -127,10 +127,10 @@ def unknown_fields_repr(unknown_fields: List[PSBT_UnknownTypeData]) -> str:
 
 
 def derivation_map_repr(
-    derivation_map: Dict[bytes, 'PSBT_KeyDerivationInfo']
+    derivation_map: Dict[CPubKey, 'PSBT_KeyDerivationInfo']
 ) -> str:
     return (', '.join(
-        f"x('{b2x(v.pubkey or b'')}'): (x('{b2x(v.master_fingerprint)}'), "
+        f"x('{b2x(k or b'')}'): (x('{b2x(v.master_fp)}'), "
         f"\"{str(v.path)}\")"
         for k, v in derivation_map.items()))
 
@@ -159,23 +159,20 @@ def merge_input_output_common_fields(
             raise ValueError(f'redeem scripts are different for {what}s'
                              f'at index {dst.index}')
 
-    for key_id, dinfo in src.derivation_map.items():
-        if key_id in dst.derivation_map:
-            if dst.derivation_map[key_id].master_fingerprint != \
-                    dinfo.master_fingerprint:
+    for pub, dinfo in src.derivation_map.items():
+        if pub in dst.derivation_map:
+            if dst.derivation_map[pub].master_fp != dinfo.master_fp:
                 raise ValueError(
                     f'master fingerprint do not match in derivation info '
                     f'for {what}s at index {dst.index}')
-            if tuple(dst.derivation_map[key_id].path) != \
-                    tuple(dinfo.path):
+            if tuple(dst.derivation_map[pub].path) != tuple(dinfo.path):
                 raise ValueError(
                     f'derivation paths do not match in derivation info '
                     f'for {what}s at index {dst.index}')
-            assert (dst.derivation_map[key_id].pubkey ==
-                    src.derivation_map[key_id].pubkey),\
+            assert (dst.derivation_map[pub] == dinfo),\
                 "if key_ids match, pubkeys must match"
         else:
-            dst.derivation_map[key_id] = dinfo.clone()
+            dst.derivation_map[CPubKey(pub)] = dinfo.clone()
 
 
 def stream_serialize_field(
@@ -316,12 +313,11 @@ T_PSBT_KeyDerivationInfo = TypeVar('T_PSBT_KeyDerivationInfo',
                                    bound='PSBT_KeyDerivationInfo')
 
 
-class PSBT_KeyDerivationInfo(Serializable, KeyDerivationInfo):
+class PSBT_KeyDerivationInfo(ImmutableSerializable, KeyDerivationInfo):
 
     @classmethod
     def stream_deserialize(cls: Type[T_PSBT_KeyDerivationInfo],
                            f: ByteStream_Type,
-                           pubkey: Optional[CPubKey] = None,
                            _err_msg_suffix: str = '', **kwargs: Any
                            ) -> T_PSBT_KeyDerivationInfo:
         fingerprint = ser_read(f, 4)
@@ -343,10 +339,10 @@ class PSBT_KeyDerivationInfo(Serializable, KeyDerivationInfo):
                     'Derivation path longer than 255 elements'
                     + _err_msg_suffix)
 
-        return cls(fingerprint, BIP32Path(indexlist), pubkey=pubkey)
+        return cls(fingerprint, BIP32Path(indexlist, is_partial=False))
 
     def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
-        f.write(self.master_fingerprint)
+        f.write(self.master_fp)
         for index in self.path:
             f.write(struct.pack(b"<I", index))
 
@@ -361,7 +357,7 @@ class PSBT_Input(Serializable):
     sighash_type: Optional[int]
     redeem_script: CScript
     witness_script: CScript
-    derivation_map: Dict[bytes, PSBT_KeyDerivationInfo]
+    derivation_map: Dict[CPubKey, PSBT_KeyDerivationInfo]
     final_script_sig: bytes
     final_script_witness: CScriptWitness
     proof_of_reserves_commitment: bytes
@@ -376,7 +372,7 @@ class PSBT_Input(Serializable):
         sighash_type: Optional[int] = None,
         redeem_script: CScript = CScript(),
         witness_script: CScript = CScript(),
-        derivation_map: Optional[Dict[bytes, PSBT_KeyDerivationInfo]] = None,
+        derivation_map: Optional[Dict[CPubKey, PSBT_KeyDerivationInfo]] = None,
         final_script_sig: bytes = b'',
         final_script_witness: CScriptWitness = CScriptWitness(),
         proof_of_reserves_commitment: bytes = b'',
@@ -444,11 +440,11 @@ class PSBT_Input(Serializable):
         if derivation_map is None:
             derivation_map = OrderedDict()
 
-        for key_id, derinfo in derivation_map.items():
-            ensure_isinstance(key_id, bytes,
-                              descr('one of key_ids in bip32 derivation map'))
+        for pub, derinfo in derivation_map.items():
+            ensure_isinstance(pub, CPubKey,
+                              descr('one of pubkeys in bip32 derivation map'))
             ensure_isinstance(derinfo, PSBT_KeyDerivationInfo,
-                              descr('derivation info for one of pubkeys'))
+                              descr(f'derivation info for pubkey {pub}'))
 
         self.derivation_map = derivation_map
 
@@ -692,6 +688,13 @@ class PSBT_Input(Serializable):
             num_sigs_missing=msig_helper.num_sigs_missing(),
             is_final=False)
 
+    def _get_derinfo_by_key_id(self, key_id: bytes
+                               ) -> Optional['PSBT_KeyDerivationInfo']:
+        for pub, derinfo in self.derivation_map.items():
+            if pub.key_id == key_id:
+                return derinfo
+        return None
+
     def sign(self,
              unsigned_tx: CTransaction,
              key_store: KeyStore, *,
@@ -736,7 +739,8 @@ class PSBT_Input(Serializable):
 
         def signer(pub: CPubKey) -> Optional[bytes]:
             assert sighash is not None
-            key = key_store.get_privkey(pub.key_id, self.derivation_map)
+            derinfo = self.derivation_map.get(pub)
+            key = key_store.get_privkey(pub.key_id, derinfo)
             if key:
                 return key.sign(sighash) + bytes([sighash_type])
             return None
@@ -780,6 +784,8 @@ class PSBT_Input(Serializable):
                     amount=self.utxo.nValue,
                     sigversion=SIGVERSION_WITNESS_V0)
 
+            derinfo: Optional[PSBT_KeyDerivationInfo]
+
             if s.is_witness_v0_keyhash():
                 if ws:
                     raise ValueError(
@@ -804,8 +810,9 @@ class PSBT_Input(Serializable):
                                                 is_witness=True,
                                                 finalize=finalize)
 
-                key = key_store.get_privkey(s.pubkey_hash(),
-                                            self.derivation_map)
+                key_id = s.pubkey_hash()
+                derinfo = self._get_derinfo_by_key_id(key_id)
+                key = key_store.get_privkey(key_id, derinfo)
                 if key:
                     sig = key.sign(sighash) + bytes([sighash_type])
                     return self._got_single_sig(key.pub, sig,
@@ -877,8 +884,9 @@ class PSBT_Input(Serializable):
                     return self._got_single_sig(pub, self.partial_sigs[pub],
                                                 finalize=finalize)
 
-                key = key_store.get_privkey(spk.pubkey_hash(),
-                                            self.derivation_map)
+                key_id = spk.pubkey_hash()
+                derinfo = self._get_derinfo_by_key_id(key_id)
+                key = key_store.get_privkey(key_id, derinfo)
                 if key:
                     sig = key.sign(sighash) + bytes([sighash_type])
                     return self._got_single_sig(key.pub, sig,
@@ -926,7 +934,7 @@ class PSBT_Input(Serializable):
         sighash_type: Optional[int] = None
         redeem_script: CScript = CScript()
         witness_script: CScript = CScript()
-        derivation_map: Dict[bytes, PSBT_KeyDerivationInfo] = OrderedDict()
+        derivation_map: Dict[CPubKey, PSBT_KeyDerivationInfo] = OrderedDict()
         final_script_sig: bytes = b''
         final_script_witness: CScriptWitness = CScriptWitness()
         proof_of_reserves_commitment: bytes = b''
@@ -987,11 +995,10 @@ class PSBT_Input(Serializable):
                     raise SerializationError(
                         descr(
                             f'Invalid pubkey encountered in {key_type.name}'))
-                assert pub.key_id not in derivation_map,\
+                assert pub not in derivation_map,\
                     ("duplicate keys should have been catched "
                      "inside read_psbt_keymap()")
-                derivation_map[pub.key_id] = \
-                    PSBT_KeyDerivationInfo.deserialize(value, pubkey=pub)
+                derivation_map[pub] = PSBT_KeyDerivationInfo.deserialize(value)
             elif key_type is PSBT_InKeyType.FINAL_SCRIPTSIG:
                 ensure_empty_key_data(key_type, key_data, descr(''))
                 final_script_sig = value
@@ -1051,11 +1058,10 @@ class PSBT_Input(Serializable):
                 stream_serialize_field(PSBT_InKeyType.WITNESS_SCRIPT, f,
                                        value=self.witness_script)
 
-            for key_id, derinfo in self.derivation_map.items():
-                assert derinfo.pubkey is not None
+            for pub, dinfo in self.derivation_map.items():
+                assert isinstance(pub, CPubKey) and pub.is_fullyvalid()
                 stream_serialize_field(PSBT_InKeyType.BIP32_DERIVATION, f,
-                                       key_data=derinfo.pubkey,
-                                       value=derinfo.serialize())
+                                       key_data=pub, value=dinfo.serialize())
 
         if self.final_script_sig:
             stream_serialize_field(PSBT_InKeyType.FINAL_SCRIPTSIG, f,
@@ -1102,7 +1108,7 @@ class PSBT_Output(Serializable):
     index: Optional[int]
     redeem_script: CScript
     witness_script: CScript
-    derivation_map: Dict[bytes, PSBT_KeyDerivationInfo]
+    derivation_map: Dict[CPubKey, PSBT_KeyDerivationInfo]
     proprietary_fields: Dict[bytes, List[PSBT_ProprietaryTypeData]]
     unknown_fields: List[PSBT_UnknownTypeData]
     # NOTE: if you add a field, don't forget to specify it in merge()
@@ -1111,7 +1117,7 @@ class PSBT_Output(Serializable):
         self, *,
         redeem_script: CScript = CScript(),
         witness_script: CScript = CScript(),
-        derivation_map: Optional[Dict[bytes, PSBT_KeyDerivationInfo]] = None,
+        derivation_map: Optional[Dict[CPubKey, PSBT_KeyDerivationInfo]] = None,
         proprietary_fields: Optional[Dict[
             bytes, List[PSBT_ProprietaryTypeData]
         ]] = None,
@@ -1138,11 +1144,11 @@ class PSBT_Output(Serializable):
         if derivation_map is None:
             derivation_map = OrderedDict()
 
-        for key_id, derinfo in derivation_map.items():
-            ensure_isinstance(key_id, bytes,
-                              descr('one key_ids in bip32 derivation map'))
+        for pub, derinfo in derivation_map.items():
+            ensure_isinstance(pub, CPubKey,
+                              descr('one of pubkeys in bip32 derivation map'))
             ensure_isinstance(derinfo, PSBT_KeyDerivationInfo,
-                              descr('derivation info for one of pubkeys'))
+                              descr(f'derivation info for pubkey {pub}'))
 
         self.derivation_map = derivation_map
 
@@ -1258,7 +1264,7 @@ class PSBT_Output(Serializable):
 
         redeem_script: CScript = CScript()
         witness_script: CScript = CScript()
-        derivation_map: Dict[bytes, PSBT_KeyDerivationInfo] = OrderedDict()
+        derivation_map: Dict[CPubKey, PSBT_KeyDerivationInfo] = OrderedDict()
         proprietary_fields: Dict[
             bytes, List[PSBT_ProprietaryTypeData]
         ] = OrderedDict()
@@ -1287,8 +1293,7 @@ class PSBT_Output(Serializable):
                 assert pub not in derivation_map,\
                     ("duplicate keys should have been catched "
                      "inside read_psbt_keymap()")
-                derivation_map[pub.key_id] =\
-                    PSBT_KeyDerivationInfo.deserialize(value, pubkey=pub)
+                derivation_map[pub] = PSBT_KeyDerivationInfo.deserialize(value)
 
         return cls(redeem_script=redeem_script, witness_script=witness_script,
                    derivation_map=derivation_map,
@@ -1305,11 +1310,10 @@ class PSBT_Output(Serializable):
             stream_serialize_field(PSBT_OutKeyType.WITNESS_SCRIPT, f,
                                    value=self.witness_script)
 
-        for key_id, derinfo in self.derivation_map.items():
-            assert derinfo.pubkey is not None
+        for pub, dinfo in self.derivation_map.items():
+            assert isinstance(pub, CPubKey) and pub.is_fullyvalid()
             stream_serialize_field(PSBT_OutKeyType.BIP32_DERIVATION, f,
-                                   key_data=derinfo.pubkey,
-                                   value=derinfo.serialize())
+                                   key_data=pub, value=dinfo.serialize())
 
         stream_serialize_proprietary_fields(self.proprietary_fields, f)
         stream_serialize_unknown_fields(self.unknown_fields, f)
@@ -1504,8 +1508,8 @@ class PartiallySignedTransaction(Serializable):
 
         for xpub, dinfo in other.xpubs.items():
             if xpub in self.xpubs:
-                if self.xpubs[xpub].master_fingerprint != \
-                        dinfo.master_fingerprint:
+                if self.xpubs[xpub].master_fp != \
+                        dinfo.master_fp:
                     raise ValueError(
                         f'master fingerprint do not match in derivation info '
                         f'for xpub {str(xpub)}')
@@ -1749,6 +1753,7 @@ class PartiallySignedTransaction(Serializable):
                 value=struct.pack(b"<I", self.version))
 
         for xpub, derinfo in self.xpubs.items():
+            assert isinstance(xpub, CCoinExtPubKey)
             stream_serialize_field(
                 PSBT_GlobalKeyType.XPUB, f,
                 key_data=xpub.base58_prefix + xpub,
@@ -1821,7 +1826,7 @@ class PartiallySignedTransaction(Serializable):
     def __repr__(self) -> str:
         xpubs = (
             ', '.join(
-                f"'{k}': (x('{b2x(v.master_fingerprint)}'), \"{str(v.path)}\")"
+                f"'{k}': (x('{b2x(v.master_fp)}'), \"{str(v.path)}\")"
                 for k, v in self.xpubs.items()))
 
         return (

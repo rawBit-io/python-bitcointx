@@ -68,13 +68,6 @@ if __name__ == '__main__':
 
     path_str = sys.argv[1]
 
-    if not path_str.startswith('m'):
-        # Allow users to omit path prefix
-        if path_str == '':
-            path_str = 'm'
-        else:
-            path_str = 'm/' + path_str.lstrip('/')
-
     path = BIP32Path(path_str)
 
     if len(path) == 0:

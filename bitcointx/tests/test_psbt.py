@@ -198,15 +198,14 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(psbt.inputs[0].utxo.serialize(), tx_data)
         self.assertEqual(psbt.inputs[1].utxo.serialize(), txout_data)
         self.assertEqual(
-            psbt.outputs[0].derivation_map[pub1.key_id].master_fingerprint,
+            psbt.outputs[0].derivation_map[pub1].master_fp, x('b4a6ba67'))
+        self.assertEqual(
+            str(psbt.outputs[0].derivation_map[pub1].path), "m/0'/0'/2'")
+        self.assertEqual(
+            psbt.outputs[1].derivation_map[pub2].master_fp,
             x('b4a6ba67'))
         self.assertEqual(
-            str(psbt.outputs[0].derivation_map[pub1.key_id].path), "m/0'/0'/2'")
-        self.assertEqual(
-            psbt.outputs[1].derivation_map[pub2.key_id].master_fingerprint,
-            x('b4a6ba67'))
-        self.assertEqual(
-            str(psbt.outputs[1].derivation_map[pub2.key_id].path), "m/0'/1'/2'")
+            str(psbt.outputs[1].derivation_map[pub2].path), "m/0'/1'/2'")
         self.assertEqual(psbt.inputs[1].utxo.serialize(), txout_data)
 
         # PSBT with one P2SH-P2WSH input of a 2-of-2 multisig, redeemScript,
@@ -255,30 +254,30 @@ class Test_PSBT(unittest.TestCase):
             self.assertEqual(psbt.inputs[0].witness_script, witness_script)
             self.assertEqual(psbt.inputs[0].redeem_script, CScript([]))
             self.assertEqual(
-                psbt.inputs[0].derivation_map[pubkey1.key_id].master_fingerprint,
+                psbt.inputs[0].derivation_map[pubkey1].master_fp,
                 x('d90c6a4f'))
             self.assertEqual(
-                str(psbt.inputs[0].derivation_map[pubkey1.key_id].path),
+                str(psbt.inputs[0].derivation_map[pubkey1].path),
                 "m/174'/0'/0")
             self.assertEqual(
-                psbt.inputs[0].derivation_map[pubkey2.key_id].master_fingerprint,
+                psbt.inputs[0].derivation_map[pubkey2].master_fp,
                 x('d90c6a4f'))
             self.assertEqual(
-                str(psbt.inputs[0].derivation_map[pubkey2.key_id].path),
+                str(psbt.inputs[0].derivation_map[pubkey2].path),
                 "m/174'/1'/0")
             self.assertFalse(psbt.outputs[0].is_null())
             self.assertEqual(
-                psbt.outputs[0].derivation_map[pubkey3.key_id].master_fingerprint,
+                psbt.outputs[0].derivation_map[pubkey3].master_fp,
                 x('ede45cc5'))
             self.assertEqual(
-                str(psbt.outputs[0].derivation_map[pubkey3.key_id].path),
+                str(psbt.outputs[0].derivation_map[pubkey3].path),
                 "m/0'/0'/1'")
             self.assertEqual(len(psbt.xpubs), 2)
             self.assertTrue(xpub1 in psbt.xpubs)
             self.assertTrue(xpub2 in psbt.xpubs)
-            self.assertEqual(psbt.xpubs[xpub1].master_fingerprint, x('d90c6a4f'))
+            self.assertEqual(psbt.xpubs[xpub1].master_fp, x('d90c6a4f'))
             self.assertEqual(str(psbt.xpubs[xpub1].path), "m/174'/0'")
-            self.assertEqual(psbt.xpubs[xpub2].master_fingerprint, x('d90c6a4f'))
+            self.assertEqual(psbt.xpubs[xpub2].master_fp, x('d90c6a4f'))
             self.assertEqual(str(psbt.xpubs[xpub2].path), "m/174'/1'")
 
         # PSBT with unknown types in the inputs
@@ -295,7 +294,7 @@ class Test_PSBT(unittest.TestCase):
         xpub = CCoinExtPubKey('xpub6CpGH79LXVkeiux2ZPWMpEubBrRfgcGCgy2HiagyN6NW3qdioJaqFYyD1fG6LDfxWEhMXJqcDuU5VneKt5UQYUGPa5Mfxdw2D2NArwX5TBm')
         self.assertEqual(len(psbt.inputs), 2)
         self.assertEqual(len(psbt.outputs), 2)
-        self.assertEqual(psbt.xpubs[xpub].master_fingerprint, x('27569c50'))
+        self.assertEqual(psbt.xpubs[xpub].master_fp, x('27569c50'))
         self.assertEqual(str(psbt.xpubs[xpub].path), "m/49'/0'/0'")
 
         # PSBT with proprietary values
@@ -389,25 +388,21 @@ class Test_PSBT(unittest.TestCase):
 
             self.assertEqual(msig0.pubkeys[0], xpriv.derive_path("m/0'/0'/0'").pub)
             self.assertEqual(msig0.pubkeys[1], xpriv.derive_path("m/0'/0'/1'").pub)
-            psbt.inputs[0].derivation_map[msig0.pubkeys[0].key_id] = \
+            psbt.inputs[0].derivation_map[msig0.pubkeys[0]] = \
                 PSBT_KeyDerivationInfo(xpriv.fingerprint,
-                                       BIP32Path("m/0'/0'/0'"),
-                                       msig0.pubkeys[0])
-            psbt.inputs[0].derivation_map[msig0.pubkeys[1].key_id] = \
+                                       BIP32Path("m/0'/0'/0'"))
+            psbt.inputs[0].derivation_map[msig0.pubkeys[1]] = \
                 PSBT_KeyDerivationInfo(xpriv.fingerprint,
-                                       BIP32Path("m/0'/0'/1'"),
-                                       msig0.pubkeys[1])
+                                       BIP32Path("m/0'/0'/1'"))
 
             self.assertEqual(msig1.pubkeys[0], xpriv.derive_path("m/0'/0'/2'").pub)
             self.assertEqual(msig1.pubkeys[1], xpriv.derive_path("m/0'/0'/3'").pub)
-            psbt.inputs[1].derivation_map[msig1.pubkeys[1].key_id] = \
+            psbt.inputs[1].derivation_map[msig1.pubkeys[1]] = \
                 PSBT_KeyDerivationInfo(xpriv.fingerprint,
-                                       BIP32Path("m/0'/0'/3'"),
-                                       msig1.pubkeys[1])
-            psbt.inputs[1].derivation_map[msig1.pubkeys[0].key_id] = \
+                                       BIP32Path("m/0'/0'/3'"))
+            psbt.inputs[1].derivation_map[msig1.pubkeys[0]] = \
                 PSBT_KeyDerivationInfo(xpriv.fingerprint,
-                                       BIP32Path("m/0'/0'/2'"),
-                                       msig1.pubkeys[0])
+                                       BIP32Path("m/0'/0'/2'"))
 
             outpub0 = xpriv.derive_path("m/0'/0'/4'").pub
             outpub1 = xpriv.derive_path("m/0'/0'/5'").pub
@@ -415,12 +410,12 @@ class Test_PSBT(unittest.TestCase):
                              standard_witness_v0_scriptpubkey(outpub0.key_id))
             self.assertEqual(psbt.unsigned_tx.vout[1].scriptPubKey,
                              standard_witness_v0_scriptpubkey(outpub1.key_id))
-            psbt.outputs[0].derivation_map[outpub0.key_id] = \
+            psbt.outputs[0].derivation_map[outpub0] = \
                 PSBT_KeyDerivationInfo(xpriv.fingerprint,
-                                       BIP32Path("m/0'/0'/4'"), outpub0)
-            psbt.outputs[1].derivation_map[outpub1.key_id] = \
+                                       BIP32Path("m/0'/0'/4'"))
+            psbt.outputs[1].derivation_map[outpub1] = \
                 PSBT_KeyDerivationInfo(xpriv.fingerprint,
-                                       BIP32Path("m/0'/0'/5'"), outpub1)
+                                       BIP32Path("m/0'/0'/5'"))
 
             self.assertEqual(b2x(psbt.serialize()),
                              '70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f00000000000100bb0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f6187650000000104475221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752ae2206029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f10d90c6a4f000000800000008000000080220602dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d710d90c6a4f0000008000000080010000800001012000c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e88701042200208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028903010547522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ae2206023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7310d90c6a4f000000800000008003000080220603089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc10d90c6a4f00000080000000800200008000220203a9a4c37f5996d3aa25dbac6b570af0650394492942460b354753ed9eeca5877110d90c6a4f000000800000008004000080002202027f6399757d2eff55a136ad02c684b1838b6556e5f1b6b34282a94b6b5005109610d90c6a4f00000080000000800500008000')
@@ -550,22 +545,22 @@ class Test_PSBT(unittest.TestCase):
         psbt.inputs[0].utxo.scriptPubKey = psbt.inputs[0].redeem_script.to_p2sh_scriptPubKey()
         psbt.inputs[0].partial_sigs[pub] = b'123'
         psbt.inputs[0].sighash_type = SIGHASH_ALL
-        psbt.inputs[0].derivation_map[pub.key_id] = \
-            PSBT_KeyDerivationInfo(x('d90c6a4f'), BIP32Path("m/0'/0'/5'"), pub)
+        psbt.inputs[0].derivation_map[pub] = \
+            PSBT_KeyDerivationInfo(x('d90c6a4f'), BIP32Path("m/0'/0'/5'"))
         psbt.inputs[0].proof_of_reserves_commitment = b'123'
 
         psbt.unsigned_tx = psbt.unsigned_tx.to_mutable()
         psbt.outputs[0].witness_script = CScript([7, 8, 9])
         psbt.outputs[0].redeem_script = psbt.outputs[0].witness_script.to_p2wsh_scriptPubKey()
         psbt.unsigned_tx.vout[0].scriptPubKey = psbt.outputs[0].redeem_script.to_p2sh_scriptPubKey()
-        psbt.outputs[0].derivation_map[pub.key_id] = \
-            PSBT_KeyDerivationInfo(x('ffffeeee'), BIP32Path("m/1'/2'/3'"), pub)
+        psbt.outputs[0].derivation_map[pub] = \
+            PSBT_KeyDerivationInfo(x('ffffeeee'), BIP32Path("m/1'/2'/3'"))
 
         with ChainParams('bitcoin/testnet'):
             xpriv = CCoinExtKey('tprv8ZgxMBicQKsPd9TeAdPADNnSyH9SSUUbTVeFszDE23Ki6TBB5nCefAdHkK8Fm3qMQR6sHwA56zqRmKmxnHk37JkiFzvncDqoKmPWubu7hDF')
 
         psbt.xpubs[xpriv.neuter()] = \
-            PSBT_KeyDerivationInfo(x('ddddcccc'), BIP32Path("m/5'/4'/8'"), pub)
+            PSBT_KeyDerivationInfo(x('ddddcccc'), BIP32Path("m/5'/4'/8'"))
 
         self.assertEqual(b2x(psbt.serialize()), b2x(psbt.clone().serialize()))
 
