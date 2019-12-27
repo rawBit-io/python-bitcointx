@@ -1277,7 +1277,7 @@ class PSBT_Output(Serializable):
                 redeem_script = CScript(value)
             elif key_type == PSBT_OutKeyType.WITNESS_SCRIPT:
                 ensure_empty_key_data(key_type, key_data, descr(''))
-                redeem_script = CScript(value)
+                witness_script = CScript(value)
             elif key_type == PSBT_OutKeyType.BIP32_DERIVATION:
                 pub = CPubKey(key_data)
                 if not pub.is_fullyvalid():
@@ -1453,7 +1453,7 @@ class PartiallySignedTransaction(Serializable):
     def _check_sanity(self) -> None:
         for inp in self.inputs:
             inp._check_sanity(self.unsigned_tx)
-        for index, outp in enumerate(self.outputs):
+        for outp in self.outputs:
             outp._check_sanity(self.unsigned_tx)
 
     @classmethod
