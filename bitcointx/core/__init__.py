@@ -1078,6 +1078,11 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
                                                        **kwargs)
             wit = CTxWitness.stream_deserialize(f, num_inputs=len(vin),
                                                 **kwargs)
+            if wit.is_null():
+                # It's illegal to encode witnesses
+                # when all witness stacks are empty.
+                raise ValueError('Superfluous witness record')
+
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion, wit)
 
