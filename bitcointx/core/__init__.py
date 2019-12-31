@@ -1066,7 +1066,12 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         pos = f.tell()
         markerbyte = struct.unpack(b'B', ser_read(f, 1))[0]
         flagbyte = struct.unpack(b'B', ser_read(f, 1))[0]
-        if markerbyte == 0 and flagbyte == 1:
+
+        if markerbyte == 0:
+            if flagbyte != 1:
+                raise ValueError(
+                    f'unexpected flag value {flagbyte} after segwit marker, '
+                    f'expected 1')
             vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn,
                                                       **kwargs)
             vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut,
@@ -1075,14 +1080,14 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
                                                 **kwargs)
             nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
             return cls(vin, vout, nLockTime, nVersion, wit)
-        else:
-            f.seek(pos)  # put marker byte back, since we don't have peek
-            vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn,
-                                                      **kwargs)
-            vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut,
-                                                       **kwargs)
-            nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
-            return cls(vin, vout, nLockTime, nVersion)
+
+        f.seek(pos)  # put marker byte back, since we don't have peek
+        vin = VectorSerializer.stream_deserialize(f, element_class=CTxIn,
+                                                  **kwargs)
+        vout = VectorSerializer.stream_deserialize(f, element_class=CTxOut,
+                                                   **kwargs)
+        nLockTime = struct.unpack(b"<I", ser_read(f, 4))[0]
+        return cls(vin, vout, nLockTime, nVersion)
 
     # NOTE: for_sighash is ignored, but may be used in other implementations
     def stream_serialize(self, f: ByteStream_Type,
