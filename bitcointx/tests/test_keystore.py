@@ -43,6 +43,39 @@ class Test_KeyStore(unittest.TestCase):
         self.assertEqual(kstore.get_privkey(priv1.pub.key_id), priv1)
         self.assertEqual(kstore.get_pubkey(priv1.pub.key_id), priv1.pub)
         self.assertEqual(kstore.get_pubkey(pub1.key_id), pub1)
+
+        # check no-derivation lookup for (priv, pub) of extended keys
+        self.assertEqual(kstore.get_privkey(xpriv1.pub.key_id), xpriv1.priv)
+        self.assertEqual(
+            kstore.get_privkey(xpriv1.pub.key_id,
+                               KeyDerivationInfo(xpriv1.fingerprint,
+                                                 BIP32Path("m"))),
+            xpriv1.priv)
+        self.assertEqual(kstore.get_pubkey(xpriv1.pub.key_id), xpriv1.pub)
+        self.assertEqual(
+            kstore.get_pubkey(xpriv1.pub.key_id,
+                              KeyDerivationInfo(xpriv1.fingerprint,
+                                                BIP32Path("m"))),
+            xpriv1.pub)
+
+        # can find xpub1's pub without derivation
+        self.assertEqual(kstore.get_pubkey(xpub1.pub.key_id), xpub1.pub)
+
+        # and with derivation info supplied
+        self.assertEqual(
+            kstore.get_pubkey(xpub1.pub.key_id,
+                              KeyDerivationInfo(xpub1.parent_fp,
+                                                BIP32Path("m/0"))),
+            xpub1.pub)
+
+        # but not with incorrect derivation info
+        self.assertEqual(
+            kstore.get_pubkey(xpub1.pub.key_id,
+                              KeyDerivationInfo(xpub1.parent_fp,
+                                                BIP32Path("m"))),
+            None)
+
+        # check longer derivations
         self.assertEqual(
             kstore.get_privkey(xpriv1.derive_path("0'/1'/2'").pub.key_id),
             None)

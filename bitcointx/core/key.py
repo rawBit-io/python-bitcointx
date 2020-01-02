@@ -1276,31 +1276,59 @@ class KeyStore:
 
     # Even if _find_by_derivation_* functions are similar,
     # they had to be separate due to (current?) limitations of mypy typing
-    def _find_by_derivation_xpub(
-        self,
-        l0_dict: Dict[bytes, Dict[Tuple[int, ...], Set[CExtPubKeyBase]]],
-        master_fp: bytes,
-        indexes: Tuple[int, ...]
-    ) -> Optional[Tuple[Tuple[int, ...], Set[CExtPubKeyBase]]]:
+    def _find_by_derivation_pub(  # noqa
+        self, key_id: bytes, master_fp: bytes, indexes: Tuple[int, ...]
+    ) -> Optional[CPubKey]:
+        l0_dict = self._xpubkeys
+
+        if not master_fp and not indexes:
+            # derivation was not supplied, check all xkeys without derivation
+            for l1_dict in l0_dict.values():
+                for xpub_set in l1_dict.values():
+                    for xpub in xpub_set:
+                        if xpub.pub.key_id == key_id:
+                            return xpub.pub
+
         if master_fp in l0_dict:
             l1_dict = l0_dict[master_fp]
             for l1_indexes, xpub_set in l1_dict.items():
                 if indexes[:len(l1_indexes)] == l1_indexes:
-                    return (indexes[len(l1_indexes):], xpub_set)
+                    indexes_tail = indexes[len(l1_indexes):]
+                    if all(idx < BIP32_HARDENED_KEY_OFFSET
+                            for idx in indexes_tail):
+                        for xpub in xpub_set:
+                            if indexes_tail:
+                                xpub = xpub.derive_path(indexes_tail)
+                            if xpub.pub.key_id == key_id:
+                                return xpub.pub
+                    break
 
         return None
 
-    def _find_by_derivation_xpriv(
-        self,
-        l0_dict: Dict[bytes, Dict[Tuple[int, ...], Set[CExtKeyBase]]],
-        master_fp: bytes,
-        indexes: Tuple[int, ...]
-    ) -> Optional[Tuple[Tuple[int, ...], Set[CExtKeyBase]]]:
+    def _find_by_derivation_priv(
+        self, key_id: bytes, master_fp: bytes, indexes: Tuple[int, ...]
+    ) -> Optional[CKeyBase]:
+        l0_dict = self._xprivkeys
+
+        if not master_fp and not indexes:
+            # derivation was not supplied, check all xkeys without derivation
+            for l1_dict in l0_dict.values():
+                for xkey_set in l1_dict.values():
+                    for xkey in xkey_set:
+                        if xkey.pub.key_id == key_id:
+                            return xkey.priv
+
         if master_fp in l0_dict:
             l1_dict = l0_dict[master_fp]
             for l1_indexes, xkey_set in l1_dict.items():
                 if indexes[:len(l1_indexes)] == l1_indexes:
-                    return (indexes[len(l1_indexes):], xkey_set)
+                    for xpriv in xkey_set:
+                        indexes_tail = indexes[len(l1_indexes):]
+                        if indexes_tail:
+                            xpriv = xpriv.derive_path(indexes_tail)
+                        if xpriv.pub.key_id == key_id:
+                            return xpriv.priv
+                    break
 
         return None
 
@@ -1318,13 +1346,9 @@ class KeyStore:
 
         mfp, indexes = self._mfp_and_indexes_from_derivation(derivation)
 
-        details = self._find_by_derivation_xpriv(self._xprivkeys, mfp, indexes)
-        if details:
-            indexes_tail, xpriv_set = details
-            for xpriv in xpriv_set:
-                xpriv = xpriv.derive_path(indexes_tail)
-                if xpriv.pub.key_id == key_id:
-                    return xpriv.priv
+        priv = self._find_by_derivation_priv(key_id, mfp, indexes)
+        if priv:
+            return priv
 
         if self._external_privkey_lookup:
             priv = self._external_privkey_lookup(key_id, derivation)
@@ -1350,15 +1374,9 @@ class KeyStore:
 
         mfp, indexes = self._mfp_and_indexes_from_derivation(derivation)
 
-        details = self._find_by_derivation_xpub(self._xpubkeys, mfp, indexes)
-        if details:
-            indexes_tail, xpub_set = details
-            if all(idx < BIP32_HARDENED_KEY_OFFSET
-                    for idx in indexes_tail):
-                for xpub in xpub_set:
-                    xpub = xpub.derive_path(indexes_tail)
-                    if xpub.pub.key_id == key_id:
-                        return xpub.pub
+        pub = self._find_by_derivation_pub(key_id, mfp, indexes)
+        if pub:
+            return pub
 
         priv = self.get_privkey(key_id, derivation)
         if priv:
