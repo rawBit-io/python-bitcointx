@@ -263,7 +263,9 @@ class VarIntSerializer(Serializer[int]):
             f.write(struct.pack(b'<Q', i))
 
     @classmethod
-    def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any) -> int:
+    def stream_deserialize(cls, f: ByteStream_Type,
+                           allow_full_range: bool = False, **kwargs: Any
+                           ) -> int:
         r = ser_read(f, 1)[0]
 
         if r < 0xfd:
@@ -299,11 +301,11 @@ class VarIntSerializer(Serializer[int]):
                     klass=cls, value=v, lower_bound=lower_bound,
                     upper_bound=MAX_SIZE)
 
-        # With MAX_SIZE being defined as less than 32-bit max value,
-        # this means that any canonically encoded 64-bit value will be
-        # more than MAX_SIZE. This also means that upper_bound supplied
-        # to the exception may happen to be less than lower bound.
-        if v > MAX_SIZE:
+        if not allow_full_range and v > MAX_SIZE:
+            # With MAX_SIZE being defined as less than 32-bit max value,
+            # this means that any canonically encoded 64-bit value will be
+            # more than MAX_SIZE. This also means that upper_bound supplied
+            # to the exception may happen to be less than lower bound.
             raise DeserializationValueBoundsError(
                 f"non-canonical compact size for variable integer: "
                 f"0x{v:x} more than 0x{MAX_SIZE:x}",

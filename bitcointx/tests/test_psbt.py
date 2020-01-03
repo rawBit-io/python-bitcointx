@@ -298,7 +298,7 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(str(psbt.xpubs[xpub].path), "m/49'/0'/0'")
 
         # PSBT with proprietary values
-        psbt = deserialize('70736274ff0100550200000001ab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40100000000feffffff018e240000000000001976a9146f4620b553fa095e721b9ee0efe9fa039cca459788ac0000000015fc0a676c6f62616c5f706678016d756c7469706c790563686965660001012000e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787010416001485d13537f2e265405a34dbafa9e3dda01fb823080ffc06696e5f706678fde80377686174056672616d650afc00fe40420f0061736b077361746f7368690012fc076f75745f706678feffffff01636f726e05746967657213fc076f75745f706678fe00000002707570707905647269766500')
+        psbt = deserialize('70736274ff0100550200000001ab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40100000000feffffff018e240000000000001976a9146f4620b553fa095e721b9ee0efe9fa039cca459788ac0000000015fc0a676c6f62616c5f706678016d756c7469706c790563686965660001012000e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787010416001485d13537f2e265405a34dbafa9e3dda01fb823080ffc06696e5f706678fde80377686174056672616d650afc00fe40420f0061736b077361746f7368690012fc076f75745f706678feffffff01636f726e05746967657217fc076f75745f706678ffffffffffffffffff707570707905647269766500')
         self.assertEqual(len(psbt.inputs), 1)
         self.assertEqual(len(psbt.outputs), 1)
         self.assertEqual(len(psbt.proprietary_fields), 1)
@@ -320,7 +320,7 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][0].subtype, 0x2000000-1)
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][0].key_data, b'corn')
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][0].value, b'tiger')
-        self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].subtype, 0x2000000)
+        self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].subtype, 0xFFFFFFFFFFFFFFFF)
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].key_data, b'puppy')
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].value, b'drive')
 

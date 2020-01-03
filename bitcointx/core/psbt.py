@@ -195,7 +195,8 @@ def stream_serialize_proprietary_fields(
         for prop_data in proprietary_fields[prefix]:
             prop_key = (
                 BytesSerializer.serialize(prefix)
-                + VarIntSerializer.serialize(prop_data.subtype)
+                + VarIntSerializer.serialize(prop_data.subtype,
+                                             allow_full_range=True)
                 + prop_data.key_data
             )
             stream_serialize_field(PSBT_PROPRIETARY_TYPE, f,
@@ -274,13 +275,15 @@ def read_psbt_keymap(
 
         keys_seen.add(key_data)
 
-        key_type, key_data = VarIntSerializer.deserialize_partial(key_data)
+        key_type, key_data = VarIntSerializer.deserialize_partial(
+            key_data, allow_full_range=True)
 
         value = BytesSerializer.stream_deserialize(f)
 
         if key_type == PSBT_PROPRIETARY_TYPE:
             prefix, tail = BytesSerializer.deserialize_partial(key_data)
-            subtype, key_data = VarIntSerializer.deserialize_partial(tail)
+            subtype, key_data = VarIntSerializer.deserialize_partial(
+                tail, allow_full_range=True)
             field = PSBT_ProprietaryTypeData(
                 subtype=subtype, key_data=key_data, value=value)
             if prefix in proprietary_fields:
