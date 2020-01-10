@@ -1083,6 +1083,22 @@ class PSBT_Input(Serializable):
 
         f.write(PSBT_SEPARATOR)
 
+    def get_amount(self, unsigned_tx: Optional[CTransaction]) -> int:
+        if isinstance(self.utxo, CTxOut):
+            return self.utxo.nValue
+
+        assert isinstance(self.utxo, CTransaction)
+        if not unsigned_tx:
+            raise ValueError(
+                'cannot get input amount without associated unsigned_tx '
+                'because we need prevout.n from there')
+
+        if self.index is None:
+            raise ValueError('index field is not set on PSBT_Input, '
+                             ' cannot know which CTxIn to access')
+
+        return self.utxo.vout[unsigned_tx.vin[self.index].prevout.n].nValue
+
     def __repr__(self) -> str:
         partial_sigs = (', '.join(f"x('{b2x(k)}'): x('{b2x(v)}')"
                                   for k, v in self.partial_sigs.items()))
@@ -1825,6 +1841,9 @@ class PartiallySignedTransaction(Serializable):
         tx.wit = CTxWitness(txin_witnesses)
 
         return tx.to_immutable()
+
+    def get_input_amounts(self) -> Tuple[int, ...]:
+        return tuple(inp.get_amount(self.unsigned_tx) for inp in self.inputs)
 
     def __repr__(self) -> str:
         xpubs = (
