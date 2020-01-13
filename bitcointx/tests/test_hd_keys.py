@@ -15,7 +15,8 @@ import unittest
 
 from bitcointx.core import b2x, x
 from bitcointx.core.key import (
-    CExtKey, CExtPubKey, BIP32Path, BIP32_HARDENED_KEY_OFFSET
+    CExtKey, CExtPubKey, BIP32Path, BIP32PathTemplate,
+    BIP32_HARDENED_KEY_OFFSET
 )
 from bitcointx.wallet import CBitcoinExtKey, CBitcoinExtPubKey
 
@@ -231,64 +232,107 @@ class Test_CExtKey(unittest.TestCase):
 
 
 class Test_BIP32Path(unittest.TestCase):
-    def test_from_string(self):
+    def do_common_tests(self, cls):
         with self.assertRaises(ValueError):
-            BIP32Path('m/')  # empty path that is not 'm' or ''
+            cls('m/')  # empty path that is not 'm' or ''
         with self.assertRaises(ValueError):
-            BIP32Path('/')
+            cls('/')
         with self.assertRaises(ValueError):
-            BIP32Path('nonsense')
+            cls('nonsense')
         with self.assertRaises(ValueError):
-            BIP32Path('m/-1')
+            cls('m/-1')
         with self.assertRaises(ValueError):
-            BIP32Path('m/4/')  # slash at the end of the path
+            cls('m/1-')
         with self.assertRaises(ValueError):
-            BIP32Path("m/4h/1'")  # inconsistent use of markers
+            cls('m/-')
         with self.assertRaises(ValueError):
-            BIP32Path("m/2147483648'/1'")  # hardened index too big
+            cls('m/,')
         with self.assertRaises(ValueError):
-            BIP32Path("m/2147483648/1")  # non-hardened index too big
+            cls('m/[-1,]')
+        with self.assertRaises(ValueError):
+            cls('m/[-1,0]')
+        with self.assertRaises(ValueError):
+            cls('m/1,')
+        with self.assertRaises(ValueError):
+            cls('m/,2')
+        with self.assertRaises(ValueError):
+            cls('m/[1,]')
+        with self.assertRaises(ValueError):
+            cls('m/[,]')
+        with self.assertRaises(ValueError):
+            cls('m/abc')
+        with self.assertRaises(ValueError):
+            cls('m/[1,]')
+        with self.assertRaises(ValueError):
+            cls('m/[,3]')
+        with self.assertRaises(ValueError):
+            cls('m/[3-]')
+        with self.assertRaises(ValueError):
+            cls('m/[3-7,*]')
+        with self.assertRaises(ValueError):
+            cls('m/[7-3]')  # second bound less than first
+        with self.assertRaises(ValueError):
+            cls('m/[3-7, 23]')  # space in template
+        with self.assertRaises(ValueError):
+            cls('m/[*]')
+        with self.assertRaises(ValueError):
+            cls('m/4/')  # slash at the end of the path
+        with self.assertRaises(ValueError):
+            cls("m/4h/1'")  # inconsistent use of markers
+        with self.assertRaises(ValueError):
+            cls("m/2147483648'/1'")  # hardened index too big
+        with self.assertRaises(ValueError):
+            cls("m/[0-2147483648]'/1'")  # hardened index too big
+        with self.assertRaises(ValueError):
+            cls("m/2147483648/1")  # non-hardened index too big
         with self.assertRaises(ValueError):
             # wrong markers
-            BIP32Path("m/2147483647'/1'/0", hardened_marker='h')
+            cls("m/2147483647'/1'/0", hardened_marker='h')
         with self.assertRaises(ValueError):
             # wrong markers
-            BIP32Path("m/2147483647h/1h/0", hardened_marker="'")
+            cls("m/2147483647h/1h/0", hardened_marker="'")
         with self.assertRaises(ValueError):
             # invalid marker
-            BIP32Path("m/2147483647h/1h/0", hardened_marker="?")
+            cls("m/2147483647h/1h/0", hardened_marker="?")
         with self.assertRaises(ValueError):
             # too long path
-            BIP32Path('m/'+'/'.join('0' for _ in range(256)))
+            cls('m/'+'/'.join('0' for _ in range(256)))
         with self.assertRaises(ValueError):
             # non-partial with is_partial=True
-            BIP32Path('m/0', is_partial=True)
+            cls('m/0', is_partial=True)
         with self.assertRaises(ValueError):
             # partial with is_partial=False
-            BIP32Path('0', is_partial=False)
+            cls('0', is_partial=False)
         with self.assertRaises(ValueError):
             # partial with is_partial=False
-            BIP32Path(BIP32Path('0'), is_partial=False)
+            cls(cls('0'), is_partial=False)
         with self.assertRaises(ValueError):
             # non-partial with is_partial=True
-            BIP32Path(BIP32Path('m/0'), is_partial=True)
+            cls(cls('m/0'), is_partial=True)
 
-        self.assertTrue(BIP32Path('').is_partial())
-        self.assertFalse(BIP32Path('m').is_partial())
-        self.assertTrue(BIP32Path('0/1/2').is_partial())
-        self.assertFalse(BIP32Path('m/0/1/2').is_partial())
+        # check that markers correctly picked up from the string
+        self.assertEqual(str(cls("m/4h/5h/1/4")), "m/4h/5h/1/4")
+        self.assertEqual(str(cls("m/4'/5'/1/4")), "m/4'/5'/1/4")
+
+        self.assertTrue(cls('').is_partial())
+        self.assertFalse(cls('m').is_partial())
+        self.assertTrue(cls('0/1/2').is_partial())
+        self.assertFalse(cls('m/0/1/2').is_partial())
+
+        self.assertEqual(list(cls('m')), [])
+        self.assertEqual(list(cls('')), [])
+
+    def test_from_string(self):
+        self.do_common_tests(BIP32Path)
+        self.do_common_tests(BIP32PathTemplate)
+
+    def test_path_as_list(self):
         self.assertEqual(list(BIP32Path('m/0')), [0])
         self.assertEqual(list(BIP32Path('0')), [0])
-        self.assertEqual(list(BIP32Path('m')), [])
-        self.assertEqual(list(BIP32Path('')), [])
 
         self.assertEqual(list(BIP32Path("m/4h/5/1h")),
                          [4+BIP32_HARDENED_KEY_OFFSET, 5,
                           1+BIP32_HARDENED_KEY_OFFSET])
-
-        # check that markers correctly picked up from the string
-        self.assertEqual(str(BIP32Path("m/4h/5h/1/4")), "m/4h/5h/1/4")
-        self.assertEqual(str(BIP32Path("m/4'/5'/1/4")), "m/4'/5'/1/4")
 
         self.assertEqual(list(BIP32Path("m/0'/2147483647'/1/10")),
                          [BIP32_HARDENED_KEY_OFFSET, 0xFFFFFFFF, 1, 10])
@@ -301,17 +345,45 @@ class Test_BIP32Path(unittest.TestCase):
             [n+BIP32_HARDENED_KEY_OFFSET for n in range(128)]
             + [BIP32_HARDENED_KEY_OFFSET-n-1 for n in range(127)])
 
-    def test_from_list(self):
-        with self.assertRaises(ValueError):
+    def test_tempate_as_list(self):
+        self.assertEqual(list(BIP32PathTemplate('m/0')), [((0, 0),)])
+        self.assertEqual(list(BIP32PathTemplate('0')), [((0, 0),)])
+        self.assertEqual(list(BIP32PathTemplate('[0-10,11,59]/*')),
+                         [((0, 10), (11, 11), (59, 59)),
+                          ((0, BIP32_HARDENED_KEY_OFFSET-1),)])
+
+        self.assertEqual(
+            list(BIP32PathTemplate("m/4h/[5-10,15]/1h")),
+            [((4+BIP32_HARDENED_KEY_OFFSET, 4+BIP32_HARDENED_KEY_OFFSET),),
+             ((5, 10), (15, 15)),
+             ((1+BIP32_HARDENED_KEY_OFFSET, 1+BIP32_HARDENED_KEY_OFFSET),)])
+
+        self.assertEqual(
+            list(BIP32PathTemplate("m/0'/2147483647'/1/10")),
+            [((BIP32_HARDENED_KEY_OFFSET, BIP32_HARDENED_KEY_OFFSET),),
+             ((0xFFFFFFFF, 0xFFFFFFFF),), ((1, 1),), ((10, 10),)])
+
+        self.assertEqual(
+            list(BIP32PathTemplate(
+                'm/'+'/'.join("%u'" % n for n in range(128))
+                + '/' + '/'.join("%u" % (BIP32_HARDENED_KEY_OFFSET-n-1)
+                                 for n in range(127)))),
+            [((n+BIP32_HARDENED_KEY_OFFSET, n+BIP32_HARDENED_KEY_OFFSET),)
+             for n in range(128)]
+            + [((BIP32_HARDENED_KEY_OFFSET-n-1, BIP32_HARDENED_KEY_OFFSET-n-1),)
+               for n in range(127)])
+
+    def test_path_from_list(self):
+        with self.assertRaisesRegex(ValueError, 'cannot be negative'):
             BIP32Path([-1])
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'derivation index cannot be'):
             BIP32Path([0xFFFFFFFF+1])  # more than 32bit
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'unsupported hardened_marker'):
             # only apostrophe and "h" markers are allowed
             BIP32Path([0xFFFFFFFF, 0, 0x80000000],
                       hardened_marker='b')
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'derivation path longer than 255 elements'):
             # too long path
             BIP32Path([0 for _ in range(256)])
 
@@ -339,6 +411,80 @@ class Test_BIP32Path(unittest.TestCase):
             'm/'+'/'.join("%u'" % n for n in range(128))
             + '/' + '/'.join("%u" % n for n in range(127)))
 
+    def test_path_template_from_list(self):
+        with self.assertRaisesRegex(ValueError, 'cannot be negative'):
+            BIP32PathTemplate([((-1, 0),)])
+        with self.assertRaisesRegex(ValueError, 'only increase'):
+            BIP32PathTemplate([((10, 10), (10, 10))])
+        with self.assertRaisesRegex(ValueError, 'index_from cannot be larger than index_to'):
+            BIP32PathTemplate([((10, 9),)])
+        with self.assertRaisesRegex(TypeError, 'is expected to be an instance of '):
+            BIP32PathTemplate([(0, 0)])
+        with self.assertRaisesRegex(ValueError, 'derivation index cannot be'):
+            BIP32PathTemplate([[(0xFFFFFFFF+1, 0xFFFFFFFF+2)]])  # more than 32bit
+        with self.assertRaisesRegex(ValueError, 'unsupported hardened_marker'):
+            # only apostrophe and "h" markers are allowed
+            BIP32PathTemplate([[(0xFFFFFFFF, 0xFFFFFFFF)], [(0, 0)],
+                               [(0x80000000, 0x80000000)]],
+                              hardened_marker='b')
+
+        with self.assertRaisesRegex(ValueError, 'derivation path longer than 255 elements'):
+            # too long path
+            BIP32PathTemplate([((n, n),) for n in range(256)])
+
+        self.assertEqual(str(BIP32PathTemplate([((0, 0),)], is_partial=False)),
+                         "m/0")
+        self.assertEqual(str(BIP32PathTemplate([((0, 1),)], is_partial=True)),
+                         "[0-1]")
+        self.assertEqual(str(BIP32PathTemplate([((0, 0),)], is_partial=True)),
+                         "0")
+
+        self.assertEqual(str(BIP32PathTemplate(
+            [((0, BIP32_HARDENED_KEY_OFFSET-1),)], is_partial=False)), "m/*")
+
+        self.assertEqual(str(BIP32PathTemplate(
+            [((BIP32_HARDENED_KEY_OFFSET, 0xFFFFFFFF),)], is_partial=False)),
+            "m/*'")
+        self.assertEqual(str(BIP32PathTemplate(
+            [((BIP32_HARDENED_KEY_OFFSET, 0xFFFFFFFF),)], is_partial=False,
+            hardened_marker='h')),
+            "m/*h")
+        self.assertEqual(str(BIP32PathTemplate(
+            [((BIP32_HARDENED_KEY_OFFSET, 0xFFFFFFFF),)], is_partial=True,
+            hardened_marker='h')),
+            "*h")
+        self.assertEqual(str(BIP32PathTemplate([], is_partial=False)), "m")
+        self.assertEqual(str(BIP32PathTemplate([((0, 0),)])), "0")
+        self.assertEqual(str(BIP32PathTemplate([])), "")
+
+        self.assertEqual(
+            str(BIP32PathTemplate(
+                [((0xFFFFFFFF, 0xFFFFFFFF),),
+                 ((0x80000001, 0x80000001),),
+                 ((1, 2),),
+                 ((0x80000002, 0x80000003), (0x80000004, 0x80000004))
+                 ])),
+            "2147483647'/1'/[1-2]/[2-3,4]'")
+
+        self.assertEqual(
+            str(BIP32PathTemplate(
+                [((0xFFFFFFFF, 0xFFFFFFFF),),
+                 ((0x80000001, 0x80000001),),
+                 ((1, 2),),
+                 ((0x80000002, 0x80000003), (0x80000004, 0x80000004))
+                 ],
+                hardened_marker='h', is_partial=False)),
+            "m/2147483647h/1h/[1-2]/[2-3,4]h")
+
+        self.assertEqual(
+            str(BIP32PathTemplate(
+                [((n+BIP32_HARDENED_KEY_OFFSET, n+BIP32_HARDENED_KEY_OFFSET),)
+                 for n in range(128)]
+                + [((n, n),) for n in range(127)],
+                is_partial=False)),
+            'm/'+'/'.join("%u'" % n for n in range(128))
+            + '/' + '/'.join("%u" % n for n in range(127)))
+
     def test_from_BIP32Path(self):
         p = BIP32Path("m/4h/5h/1/4")
         self.assertEqual(str(BIP32Path(p)), "m/4h/5h/1/4")
@@ -350,6 +496,21 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertEqual(str(BIP32Path(p)), "4'/5'/1/4")
         self.assertEqual(str(BIP32Path(p, hardened_marker='h')), "4h/5h/1/4")
 
+    def test_from_BIP32PathTemplate(self):
+        p = BIP32PathTemplate("m/[4-44]h/[5-555555]h/1/4/*h")
+        self.assertEqual(str(BIP32PathTemplate(p)),
+                         "m/[4-44]h/[5-555555]h/1/4/*h")
+        self.assertEqual(str(BIP32PathTemplate(p, hardened_marker="'")),
+                         "m/[4-44]'/[5-555555]'/1/4/*'")
+        p = BIP32PathTemplate("m/4'/5'/*/4")
+        self.assertEqual(str(BIP32PathTemplate(p)), "m/4'/5'/*/4")
+        self.assertEqual(str(BIP32PathTemplate(p, hardened_marker='h')),
+                         "m/4h/5h/*/4")
+        p = BIP32PathTemplate("4'/5'/1/[3,4,5-10]")
+        self.assertEqual(str(BIP32PathTemplate(p)), "4'/5'/1/[3,4,5-10]")
+        self.assertEqual(str(BIP32PathTemplate(p, hardened_marker='h')),
+                         "4h/5h/1/[3,4,5-10]")
+
     def test_random_access(self):
         p = BIP32Path("m/4h/5h/1/4")
         self.assertEqual(p[0], 4+BIP32_HARDENED_KEY_OFFSET)
@@ -358,3 +519,19 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertEqual(p[3], 4)
         p = BIP32Path([0xFFFFFFFF-n for n in range(255)])
         self.assertEqual(p[254], 0xFFFFFF01)
+
+        p = BIP32PathTemplate("m/4h/5h/[1-2]/[4,5]")
+        self.assertEqual(p[0][0][0], 4+BIP32_HARDENED_KEY_OFFSET)
+        self.assertEqual(p[0][0][1], 4+BIP32_HARDENED_KEY_OFFSET)
+        self.assertEqual(p[1][0][0], 5+BIP32_HARDENED_KEY_OFFSET)
+        self.assertEqual(p[1][0][1], 5+BIP32_HARDENED_KEY_OFFSET)
+        self.assertEqual(p[2][0][0], 1)
+        self.assertEqual(p[2][0][1], 2)
+        self.assertEqual(p[3][0][0], 4)
+        self.assertEqual(p[3][0][1], 4)
+        self.assertEqual(p[3][1][0], 5)
+        self.assertEqual(p[3][1][1], 5)
+        p = BIP32PathTemplate([[(0xFFFFFFFF-n, 0xFFFFFFFF-n)]
+                               for n in range(255)])
+        self.assertEqual(p[254][0][0], 0xFFFFFF01)
+        self.assertEqual(p[254][0][1], 0xFFFFFF01)

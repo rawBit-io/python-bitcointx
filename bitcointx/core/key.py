@@ -28,7 +28,7 @@ import warnings
 from abc import abstractmethod
 from typing import (
     TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast,
-    Dict, Set, Iterable, Callable
+    Dict, Set, Any, Iterable, Callable, Generic
 )
 
 import bitcointx.core
@@ -923,27 +923,28 @@ class CExtKey(bytes, CExtKeyBase):
         return CExtPubKey
 
 
-T_BIP32Path = TypeVar('T_BIP32Path', bound='BIP32Path')
+T_BIP32PathIndex = TypeVar('T_BIP32PathIndex')
 
 
-class BIP32Path:
+class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
 
     HARDENED_MARKERS = ("'", "h")
 
     __slots__ = ['_indexes', '_hardened_marker', '_is_partial_path']
 
-    _indexes: Tuple[int, ...]
+    _indexes: Tuple[T_BIP32PathIndex, ...]
     _hardened_marker: str
     _is_partial_path: bool  # True if path does not start from master (no 'm/')
 
-    def __init__(self, path: Union[str, 'BIP32Path', Sequence[int]],  # noqa
+    def __init__(self, path: Union[str, 'BIP32PathGeneric[T_BIP32PathIndex]',  # noqa
+                                   Sequence[T_BIP32PathIndex]],
                  is_partial: Optional[bool] = None,
                  hardened_marker: Optional[str] = None):
         if hardened_marker is not None:
             if hardened_marker not in self.__class__.HARDENED_MARKERS:
                 raise ValueError('unsupported hardened_marker')
 
-        indexes: Sequence[int]
+        indexes: Sequence[T_BIP32PathIndex]
 
         if isinstance(path, str):
             indexes, hardened_marker, partial = self._parse_string(
@@ -956,7 +957,7 @@ class BIP32Path:
                         'is_partial argument is specified, but does not '
                         'match the actual path string (which specifies '
                         '{} path)'.format('partial' if is_partial else 'full'))
-        elif isinstance(path, BIP32Path):
+        elif isinstance(path, BIP32PathGeneric):
             if hardened_marker is None:
                 hardened_marker = path._hardened_marker
             if is_partial is None:
@@ -966,7 +967,7 @@ class BIP32Path:
                     raise ValueError(
                         'is_partial argument is specified, but does not '
                         'match the is_partial() property of the supplied '
-                        'BIP32Path instance')
+                        'BIP32PathGeneric instance')
             indexes = path._indexes
             # we cannot just use _indexes if it is mutalbe,
             # assert that it is a tuple, so if the _indexes attr will
@@ -980,14 +981,11 @@ class BIP32Path:
         if len(indexes) > 255:
             raise ValueError('derivation path longer than 255 elements')
 
-        for i, n in enumerate(indexes):
-            ensure_isinstance(n, int, f'element at position {i} in the path')
-            self._check_bip32_index_bounds(n, allow_hardened=True)
-
         if hardened_marker is None:
             hardened_marker = self.__class__.HARDENED_MARKERS[0]
 
-        self._indexes = tuple(indexes)
+        self._indexes = tuple(self.__class__._index_from_argument(n)
+                              for n in indexes)
         self._hardened_marker = hardened_marker
         self._is_partial_path = bool(is_partial)
 
@@ -998,24 +996,36 @@ class BIP32Path:
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}("{str(self)}")'
 
+    @abstractmethod
+    def _index_to_str(self, n: T_BIP32PathIndex) -> str:
+        ...
+
+    @classmethod
+    @abstractmethod
+    def _index_from_argument(cls, n: Any) -> T_BIP32PathIndex:
+        ...
+
+    @classmethod
+    @abstractmethod
+    def _index_from_str(cls, s: str, *, is_hardened: bool) -> T_BIP32PathIndex:
+        ...
+
     def __str__(self) -> str:
         if len(self._indexes) == 0:
             return '' if self.is_partial() else 'm'
 
         pfx = '%s' if self.is_partial() else 'm/%s'
 
-        return pfx % '/'.join('%u' % n if n < BIP32_HARDENED_KEY_OFFSET
-                              else
-                              '%u%s' % (n - BIP32_HARDENED_KEY_OFFSET,
-                                        self._hardened_marker)
-                              for n in self._indexes)
+        return pfx % '/'.join(self._index_to_str(n) for n in self._indexes)
 
     def __len__(self) -> int:
         return len(self._indexes)
 
-    def __add__(self: T_BIP32Path, other: Union['BIP32Path', Iterable[int]]
-                ) -> T_BIP32Path:
-        if isinstance(other, BIP32Path):
+    def __add__(self,
+                other: Union['BIP32PathGeneric[T_BIP32PathIndex]',
+                             Iterable[T_BIP32PathIndex]]
+                ) -> 'BIP32PathGeneric[T_BIP32PathIndex]':
+        if isinstance(other, BIP32PathGeneric):
             if not other.is_partial():
                 raise ValueError(
                     'cannot append full path to anything, can only '
@@ -1023,25 +1033,14 @@ class BIP32Path:
         return self.__class__(list(self._indexes) + list(other),
                               is_partial=self.is_partial())
 
-    def __getitem__(self, key: int) -> int:
+    def __getitem__(self, key: int) -> T_BIP32PathIndex:
         return self._indexes[key]
 
-    def __iter__(self) -> Iterator[int]:
+    def __iter__(self) -> Iterator[T_BIP32PathIndex]:
         return (n for n in self._indexes)
 
-    def _check_bip32_index_bounds(self, n: int, allow_hardened: bool = False
-                                  ) -> None:
-        if n < 0:
-            raise ValueError('derivation index cannot be negative')
-
-        limit = 0xFFFFFFFF if allow_hardened else BIP32_HARDENED_KEY_OFFSET-1
-
-        if n > limit:
-            raise ValueError(
-                'derivation index cannot be > {}' .format(limit))
-
     def _parse_string(self, path: str, hardened_marker: Optional[str] = None
-                      ) -> Tuple[List[int], Optional[str], bool]:
+                      ) -> Tuple[List[T_BIP32PathIndex], Optional[str], bool]:
         """Parse bip32 derivation path.
         returns a tuple (list_of_indexes, actual_hardened_marker).
         hardened indexes will have BIP32_HARDENED_KEY_OFFSET added to them."""
@@ -1052,20 +1051,19 @@ class BIP32Path:
             return [], hardened_marker, True
         elif path == 'm':
             return [], hardened_marker, False
-        elif path[0].isdigit():
-            is_partial = True
         elif path.startswith('m/'):
             is_partial = False
             path = path[2:]
         else:
-            raise ValueError(
-                'derivation path does not start with digit or "m/", '
-                'is not empty and not equal to "m"')
+            if path.startswith('/'):
+                raise ValueError(
+                    'partial derivation path must not start with "/"')
+            is_partial = True
 
         if path.endswith('/'):
             raise ValueError('derivation path must not end with "/"')
 
-        indexes = []
+        indexes: List[T_BIP32PathIndex] = []
 
         expected_marker = hardened_marker
 
@@ -1076,7 +1074,7 @@ class BIP32Path:
                 raise ValueError('duplicate slashes are not allowed')
 
             c = elt
-            hardened = 0
+            is_hardened = False
             if c[-1] in self.__class__.HARDENED_MARKERS:
                 if expected_marker is None:
                     expected_marker = c[-1]
@@ -1088,17 +1086,192 @@ class BIP32Path:
                                  if hardened_marker is None
                                  else 'was specified'),
                                 c[-1]))
-                hardened = BIP32_HARDENED_KEY_OFFSET
+                is_hardened = True
                 c = c[:-1]
 
-            # If element is not valid int, ValueError will be raised
-            n = int(c)
-
-            self._check_bip32_index_bounds(n, allow_hardened=False)
-
-            indexes.append(n + hardened)
+            indexes.append(
+                self.__class__._index_from_str(c, is_hardened=is_hardened))
 
         return indexes, expected_marker, is_partial
+
+
+class BIP32Path(BIP32PathGeneric[int]):
+
+    @classmethod
+    def _index_from_str(cls, s: str, *, is_hardened: bool) -> int:
+        n = int(s)
+
+        if n < 0:
+            raise ValueError('derivation index cannot be negative')
+
+        if n >= BIP32_HARDENED_KEY_OFFSET:
+            raise ValueError(
+                f'derivation index string cannot represent value > '
+                f'{BIP32_HARDENED_KEY_OFFSET-1}')
+
+        if is_hardened:
+            n += BIP32_HARDENED_KEY_OFFSET
+
+        return n
+
+    def _index_to_str(self, n: int) -> str:
+        if n < BIP32_HARDENED_KEY_OFFSET:
+            return f'{n}'
+
+        return f'{n - BIP32_HARDENED_KEY_OFFSET}{self._hardened_marker}'
+
+    @classmethod
+    def _index_from_argument(cls, n: Any) -> int:
+        ensure_isinstance(n, int, 'derivation index')
+
+        if n < 0:
+            raise ValueError('derivation index cannot be negative')
+
+        if n > 0xFFFFFFFF:
+            raise ValueError(f'derivation index cannot be > {0xFFFFFFFF}')
+
+        assert isinstance(n, int)
+        return n
+
+    def __add__(self, other: Union['BIP32Path', Iterable[int]]
+                ) -> 'BIP32Path':
+        return cast(BIP32Path, super().__add__(other))
+
+
+class BIP32PathTemplateIndex(tuple):
+
+    def __init__(self, index_tuples: Iterable[Tuple[int, int]]) -> None:
+        max_index = -1
+        for from_to_tuple in index_tuples:
+            ensure_isinstance(from_to_tuple, (tuple, list), 'index_bounds')
+            if len(from_to_tuple) != 2:
+                raise ValueError(
+                    'index tuple must have two values: from and to')
+            ensure_isinstance(from_to_tuple[0], int, 'index_from')
+            ensure_isinstance(from_to_tuple[1], int, 'index_to')
+
+            left, right = from_to_tuple
+
+            if left < 0 or right < 0:
+                raise ValueError('derivation index cannot be negative')
+
+            if left > 0xFFFFFFFF or right > 0xFFFFFFFF:
+                raise ValueError(f'derivation index cannot be > {0xFFFFFFFF}')
+
+            left_hardened = left < BIP32_HARDENED_KEY_OFFSET
+            right_hardened = right < BIP32_HARDENED_KEY_OFFSET
+            if left_hardened != right_hardened:
+                raise ValueError(
+                    "index bounds must be both hardened or both unhardened")
+
+            if left > right:
+                raise ValueError(
+                    'index_from cannot be larger than index_to in an '
+                    'index tuple')
+
+            if right <= max_index:
+                raise ValueError(
+                    f'incorrect path template index bound: {right} is '
+                    f'less than or equal {max_index}, which is already '
+                    f'seen, and index bounds must only increase')
+
+            max_index = right
+
+
+class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
+
+    @classmethod
+    def _index_from_str(cls, index_str: str, *, is_hardened: bool
+                        ) -> BIP32PathTemplateIndex:
+
+        if len(index_str.split()) > 1:
+            raise ValueError('whitespace found in index template')
+
+        def parse_index(s: str, *, is_hardened: bool) -> Optional[int]:
+            try:
+                n_int = BIP32Path._index_from_str(s, is_hardened=is_hardened)
+            except ValueError:
+                return None
+
+            return n_int
+
+        n_int = parse_index(index_str, is_hardened=is_hardened)
+
+        if n_int is not None:
+            return BIP32PathTemplateIndex([(n_int, n_int)])
+
+        offset = BIP32_HARDENED_KEY_OFFSET if is_hardened else 0
+
+        if index_str == '*':
+            return BIP32PathTemplateIndex(
+                [(offset, BIP32_HARDENED_KEY_OFFSET - 1 + offset)])
+
+        if '[' != index_str[0] or ']' != index_str[-1]:
+            raise ValueError('index template format is not valid')
+
+        index_str = index_str[1:-1]
+
+        index_bounds_list = []
+        for index_substr in index_str.split(','):
+            maybe_range = index_substr.split('-', maxsplit=1)
+            if len(maybe_range) > 1:
+                left, right = maybe_range
+                n_left = parse_index(left, is_hardened=False)
+                n_right = parse_index(right, is_hardened=False)
+                if n_left is None or n_right is None:
+                    raise ValueError('index template format is not valid')
+
+                index_bounds_list.append((n_left + offset, n_right + offset))
+            else:
+                idx = parse_index(index_substr, is_hardened=False)
+                if idx is None:
+                    raise ValueError('index template format is not valid')
+                index_bounds_list.append((idx + offset, idx + offset))
+
+        return BIP32PathTemplateIndex(index_bounds_list)
+
+    def _index_to_str(self, ti: BIP32PathTemplateIndex) -> str:
+        items = []
+        for left, right in ti:
+            left_hardened = left >= BIP32_HARDENED_KEY_OFFSET
+            right_hardened = right >= BIP32_HARDENED_KEY_OFFSET
+            if left_hardened != right_hardened:
+                raise AssertionError(
+                    "index bounds must be both hardened or both unhardened")
+
+            is_hardened = left_hardened
+
+            marker = self._hardened_marker if is_hardened else ''
+
+            if is_hardened:
+                left -= BIP32_HARDENED_KEY_OFFSET
+                right -= BIP32_HARDENED_KEY_OFFSET
+
+            if left == right:
+                items.append(str(left))
+            elif left == 0 and right == BIP32_HARDENED_KEY_OFFSET-1:
+                items.append('*')
+            else:
+                items.append(f'{left}-{right}')
+
+        assert len(items) > 0
+
+        if len(items) == 1 and ('-' not in items[0]):
+            return f'{items[0]}{marker}'
+
+        return f"[{','.join(items)}]{marker}"
+
+    @classmethod
+    def _index_from_argument(cls, n: Any) -> BIP32PathTemplateIndex:
+        if isinstance(n, BIP32PathTemplateIndex):
+            return n
+
+        return BIP32PathTemplateIndex(n)
+
+    def __add__(self, other: Union['BIP32PathTemplate',
+                                   Iterable[BIP32PathTemplateIndex]]
+                ) -> 'BIP32PathTemplate':
+        return cast(BIP32PathTemplate, super().__add__(other))
 
 
 T_KeyDerivationInfo = TypeVar('T_KeyDerivationInfo', bound='KeyDerivationInfo')
@@ -1402,6 +1575,8 @@ __all__ = (
     'CExtKeyBase',
     'CExtPubKeyBase',
     'BIP32Path',
+    'BIP32PathTemplate',
+    'BIP32PathTemplateIndex',
     'KeyDerivationInfo',
     'KeyStore'
 )
