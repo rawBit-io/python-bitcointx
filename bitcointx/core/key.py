@@ -1138,7 +1138,14 @@ class BIP32Path(BIP32PathGeneric[int]):
         return cast(BIP32Path, super().__add__(other))
 
 
-class BIP32PathTemplateIndex(tuple):
+# NOTE that mypy complains
+#   error: Implicit generic "Any".
+#   Use "typing.Tuple" and specify generic parameters
+# on directly subclassing tuple. But using
+# class BIP32PathTemplateIndex(Tuple[Tuple[int, int]]) here is unacceptable,
+# because this causes isinstance(var, BIP32PathTemplateIndex) to return true
+# if var is a tuple. This is happens on python3.6, but on not on python 3.7
+class BIP32PathTemplateIndex(tuple):  # type: ignore
 
     def __init__(self, index_tuples: Iterable[Tuple[int, int]]) -> None:
         max_index = -1

@@ -37,13 +37,13 @@ def print_verbose(signature: bytes, key: str, msg: str) -> None:
     secret = CCoinKey(key)
     address = P2PKHCoinAddress.from_pubkey(secret.pub)
     message = BitcoinMessage(msg)
-    print('Address: %s' % address)
+    print('Address: %s' % str(address))
     print('Message: %s' % msg)
-    print('Signature: %s' % signature)
+    print('Signature: %s' % signature.decode('ascii'))
     print('Verified: %s' % VerifyMessage(address, message, signature))
     print('\nTo verify using bitcoin core:')
     print('\n`bitcoin-cli verifymessage %s \'%s\' \'%s\'`\n'
-          % (address, signature.decode('ascii'), msg))
+          % (str(address), signature.decode('ascii'), msg))
 
 
 def parser() -> 'argparse.ArgumentParser':

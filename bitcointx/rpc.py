@@ -222,7 +222,10 @@ def split_hostport(hostport: str) -> Tuple[str, Optional[int]]:
 
 
 class RPCCaller:
-    def __init__(self,
+    __port: int
+    __auth_header: Optional[str]
+
+    def __init__(self,  # noqa
                  service_url: Optional[str] = None,
                  service_port: Optional[int] = None,
                  conf_file: Optional[str] = None,
@@ -312,16 +315,16 @@ class RPCCaller:
             raise ValueError('Unsupported URL scheme %r' % self.__url.scheme)
 
         if self.__url.port is None:
-            self.__port: int = service_port or http.client.HTTP_PORT
+            self.__port = service_port or http.client.HTTP_PORT
         else:
-            self.__port: int = self.__url.port
+            self.__port = self.__url.port
 
         self.__id_count = 0
 
         if authpair is None:
-            self.__auth_header: Optional[str] = None
+            self.__auth_header = None
         else:
-            self.__auth_header: Optional[str] = (
+            self.__auth_header = (
                 "Basic " + base64.b64encode(
                     authpair.encode('utf8')).decode('utf8')
             )
@@ -333,7 +336,8 @@ class RPCCaller:
             self.__conn = connection
         else:
             self.__conn = http.client.HTTPConnection(
-                self.__url.hostname, port=self.__port, timeout=self.__timeout)
+                self.__url.hostname or '', port=self.__port,
+                timeout=self.__timeout)
 
     def _call(self, service_name: str, *args: Any) -> Any:
 
@@ -348,7 +352,7 @@ class RPCCaller:
                                'id': self.__id_count})
 
         headers = {
-            'Host': self.__url.hostname,
+            'Host': self.__url.hostname or '',
             'User-Agent': DEFAULT_USER_AGENT,
             'Content-type': 'application/json',
         }
@@ -380,7 +384,7 @@ class RPCCaller:
         postdata = json.dumps(list(rpc_call_list))
 
         headers = {
-            'Host': self.__url.hostname,
+            'Host': self.__url.hostname or '',
             'User-Agent': DEFAULT_USER_AGENT,
             'Content-type': 'application/json',
         }

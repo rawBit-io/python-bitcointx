@@ -23,6 +23,7 @@ Non-breaking changes:
   from master, 'm/', or False if it is not starts from master. String representations
   also use this property and return results with 'm/' prefix or without.
 * `KeyStore` implementation was improved and tests was added
+* Typing fixes for issues revelead by mypy 0.760
 
 ## v1.0.2.post0
 

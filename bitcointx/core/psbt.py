@@ -446,8 +446,9 @@ class PSBT_Input(Serializable):
         for pub, derinfo in derivation_map.items():
             ensure_isinstance(pub, CPubKey,
                               descr('one of pubkeys in bip32 derivation map'))
-            ensure_isinstance(derinfo, PSBT_KeyDerivationInfo,
-                              descr(f'derivation info for pubkey {pub}'))
+            ensure_isinstance(
+                derinfo, PSBT_KeyDerivationInfo,
+                descr(f'derivation info for pubkey x(\'{b2x(pub)}\')'))
 
         self.derivation_map = derivation_map
 
@@ -1166,8 +1167,9 @@ class PSBT_Output(Serializable):
         for pub, derinfo in derivation_map.items():
             ensure_isinstance(pub, CPubKey,
                               descr('one of pubkeys in bip32 derivation map'))
-            ensure_isinstance(derinfo, PSBT_KeyDerivationInfo,
-                              descr(f'derivation info for pubkey {pub}'))
+            ensure_isinstance(
+                derinfo, PSBT_KeyDerivationInfo,
+                descr(f'derivation info for pubkey x(\'{b2x(pub)}\')'))
 
         self.derivation_map = derivation_map
 
@@ -1342,8 +1344,8 @@ class PSBT_Output(Serializable):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"redeem_script={self.redeem_script}, "
-            f"witness_script={self.witness_script}, "
+            f"redeem_script={self.redeem_script!r}, "
+            f"witness_script={self.witness_script!r}, "
             f"derivation_map={{{derivation_map_repr(self.derivation_map)}}}, "
             f"proprietary_fields="
             f"{{{proprietary_field_repr(self.proprietary_fields)}}}, "
@@ -1848,7 +1850,7 @@ class PartiallySignedTransaction(Serializable):
     def __repr__(self) -> str:
         xpubs = (
             ', '.join(
-                f"'{k}': (x('{b2x(v.master_fp)}'), \"{str(v.path)}\")"
+                f"'{str(k)}': (x('{b2x(v.master_fp)}'), \"{str(v.path)}\")"
                 for k, v in self.xpubs.items()))
 
         return (

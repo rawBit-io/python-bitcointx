@@ -53,6 +53,8 @@ T__UintBitVector = TypeVar('T__UintBitVector', bound='_UintBitVector')
 
 
 T_CoreCoinClass = TypeVar('T_CoreCoinClass', bound='CoreCoinClass')
+T_CoreCoinClassDispatcher = TypeVar('T_CoreCoinClassDispatcher',
+                                    bound='CoreCoinClassDispatcher')
 
 
 class MutableContextVar(ContextVarsCompat):
@@ -65,13 +67,13 @@ _mutable_context = MutableContextVar(mutable_context_enabled=False)
 class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
                               depends=[script.ScriptCoinClassDispatcher]):
 
-    def __init_subclass__(mcs: Type[type], **kwargs: Any) -> None:
+    def __init_subclass__(mcs: Type[T_CoreCoinClassDispatcher], **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
-    def __new__(mcs: Type[type], name: str, bases: Tuple[type],
+    def __new__(mcs: Type[T_CoreCoinClassDispatcher], name: str, bases: Tuple[type],
                 namespace: Dict[str, Any],
                 mutable_of: Optional['CoreCoinClassDispatcher'] = None,
-                **kwargs: Any) -> type:
+                **kwargs: Any) -> T_CoreCoinClassDispatcher:
         return super().__new__(mcs, name, bases, namespace, **kwargs)
 
     def __init__(cls: 'CoreCoinClassDispatcher', name: str,
@@ -757,12 +759,12 @@ class CBitcoinTxOut(CTxOut, CoreBitcoinClass):
     scriptPubKey: ReadOnlyField[script.CBitcoinScript]  # type: ignore
 
 
-class CBitcoinMutableTxOut(CBitcoinTxOut, CMutableTxOut,  # type: ignore
+class CBitcoinMutableTxOut(CBitcoinTxOut, CMutableTxOut,
                            mutable_of=CBitcoinTxOut):
     """A mutable Bitcoin CTxOut"""
     __slots_: List[str] = []
 
-    scriptPubKey: WriteableField[script.CBitcoinScript]
+    scriptPubKey: WriteableField[script.CBitcoinScript]  # type: ignore
 
 
 T_CTxInWitness = TypeVar('T_CTxInWitness', bound='CTxInWitness')
@@ -925,7 +927,7 @@ class CBitcoinTxWitness(CTxWitness, CoreBitcoinClass):
     vtxinwit: ReadOnlyField[Tuple[CBitcoinTxInWitness]]  # type: ignore
 
 
-class CBitcoinMutableTxWitness(CBitcoinTxWitness,  # type: ignore
+class CBitcoinMutableTxWitness(CBitcoinTxWitness,
                                CMutableTxWitness, mutable_of=CBitcoinTxWitness):
     """Witness data for all inputs to a transaction, mutable version"""
     __slots_: List[str] = []
@@ -1167,7 +1169,7 @@ class CBitcoinTransaction(CTransaction, CoreBitcoinClass):
         return cast('CBitcoinTransaction', super().to_immutable())
 
 
-class CBitcoinMutableTransaction(CBitcoinTransaction,  # type: ignore
+class CBitcoinMutableTransaction(CBitcoinTransaction,
                                  CMutableTransaction,
                                  mutable_of=CBitcoinTransaction):
     """Bitcoin transaction, mutable version"""

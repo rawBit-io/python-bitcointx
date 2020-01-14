@@ -17,7 +17,8 @@ from abc import ABCMeta
 from contextlib import contextmanager
 from collections import OrderedDict
 from typing import (
-    Dict, List, Tuple, Union, Optional, Type, Any, Generator, cast
+    Dict, List, Tuple, Union, Optional, Type, Any, Generator, cast,
+    TypeVar
 )
 
 import bitcointx.core
@@ -36,6 +37,9 @@ __version__ = '1.0.3.dev0'
 _chain_params_context:  'ChainParamsContextVar'
 
 
+T_ChainParamsMeta = TypeVar('T_ChainParamsMeta', bound='ChainParamsMeta')
+
+
 class ChainParamsMeta(ABCMeta):
     _required_attributes = (
         ('NAME', isinstance, str),
@@ -46,9 +50,10 @@ class ChainParamsMeta(ABCMeta):
     _registered_classes: Dict[str, Type['ChainParamsBase']] = OrderedDict()
     _common_base_cls: Optional[Type['ChainParamsBase']] = None
 
-    def __new__(cls, cls_name: str, bases: Tuple[type],
-                dct: Dict[str, Any], name: Optional[str] = None
-                ) -> Type['ChainParamsBase']:
+    def __new__(cls: Type[T_ChainParamsMeta], cls_name: str,
+                bases: Tuple[type], dct: Dict[str, Any],
+                name: Optional[str] = None
+                ) -> T_ChainParamsMeta:
         """check that the chainparams class uses unique base class
         (no two chain param classes can share a base class).
         if `name=` parameter is specified in the class declaration,
@@ -99,7 +104,7 @@ class ChainParamsMeta(ABCMeta):
                                                cls._common_base_cls))
             cls._common_base_cls = cls_instance
 
-        return cls_instance
+        return cast(T_ChainParamsMeta, cls_instance)
 
 
 def find_chain_params(*, name: str) -> Optional[Type['ChainParamsBase']]:

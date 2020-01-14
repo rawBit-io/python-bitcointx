@@ -93,7 +93,11 @@ class BitcoinMessage(ImmutableSerializable):
             self.message, f, **kwargs)
 
     def __str__(self) -> str:
-        return self.message.decode('ascii')
+        return self.message.decode('utf-8')
 
     def __repr__(self) -> str:
-        return 'BitcoinMessage(%s, %s)' % (self.magic, self.message)
+        try:
+            return (f'BitcoinMessage({self.magic.decode("utf-8")}, '
+                    f'{self.message.decode("utf-8")})')
+        except UnicodeDecodeError:
+            return f'BitcoinMessage({self.magic!r}, {self.message!r})'

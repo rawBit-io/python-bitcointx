@@ -269,10 +269,12 @@ class ClassMappingDispatcher(ABCMeta):
 
             mcs._class_dispatcher__depends = tuple(combined_depends)
 
-    def __new__(mcs: Type[type], name: str, bases: Tuple[type, ...],
-                namespace: Dict[str, Any], next_dispatch_final: bool = False,
-                variant_of: Optional[type] = None) -> type:
-        return super().__new__(mcs, name, bases, namespace)
+    def __new__(mcs: Type[T_ClassMappingDispatcher], name: str,
+                bases: Tuple[type, ...], namespace: Dict[str, Any],
+                next_dispatch_final: bool = False,
+                variant_of: Optional[type] = None) -> T_ClassMappingDispatcher:
+        return cast(T_ClassMappingDispatcher,
+                    super().__new__(mcs, name, bases, namespace))
 
     def __init__(cls: 'ClassMappingDispatcher', name: str,
                  bases: Tuple[type, ...], namespace: Dict[str, Any],
@@ -470,7 +472,7 @@ class ReadOnlyFieldGuard(ABC):
     defined as abstractmethod."""
 
     @abstractmethod
-    def __new__(cls) -> None:
+    def __new__(cls) -> None:  # type: ignore
         raise NotImplementedError
 
 

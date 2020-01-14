@@ -616,7 +616,7 @@ class DATA(bytes):
     with CScript([DATA(var)]), this is communicated clearly, and will
     raise TypeError if var is not bytes or bytearray instance."""
 
-    def __new__(cls, data: Union[bytes, bytearray]) -> bytes:
+    def __new__(cls, data: Union[bytes, bytearray]) -> 'DATA':
         if not isinstance(data, (bytes, bytearray)):
             raise TypeError(
                 'DATA can only accept bytes or bytearray instance')
@@ -636,7 +636,7 @@ class NUMBER(int):
     and instance of CScriptOp (special case needed because CScriptOp is
     a subclas of int, but there are special OPCODE guard for it"""
 
-    def __new__(cls, num: int) -> int:
+    def __new__(cls, num: int) -> 'NUMBER':
         if not isinstance(num, int):
             raise TypeError(
                 'NUMBER can only accept values that are instance of '
