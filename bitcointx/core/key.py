@@ -28,7 +28,7 @@ import warnings
 from abc import abstractmethod
 from typing import (
     TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast,
-    Dict, Set, Any, Iterable, Callable, Generic
+    Dict, Any, Iterable, Callable, Generic
 )
 
 import bitcointx.core
@@ -1280,6 +1280,56 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
                 ) -> 'BIP32PathTemplate':
         return cast(BIP32PathTemplate, super().__add__(other))
 
+    def match_path(self, path: BIP32Path) -> bool:
+        if self.is_partial() != path.is_partial():
+            return False
+
+        if len(path) != len(self):
+            return False
+
+        for pos, bounds_tuples in enumerate(self):
+            for first, last in bounds_tuples:
+                if first <= path[pos] <= last:
+                    break
+            else:
+                # path[pos] did not match any bounds
+                return False
+
+        # all elements of a path matched respective bounds
+        return True
+
+
+class BIP32PathTemplateViolation(Exception):
+    """Raised when the key to be returned from `get_privkey()`
+    or `get_pubkey()` is derived via path that do no match any path templates
+    specified for the extended key."""
+
+    def __init__(self, *,
+                 path_templates: List[BIP32PathTemplate],
+                 key_id: bytes, master_fp: bytes,
+                 full_path: Optional[BIP32Path] = None,
+                 partial_path: Optional[BIP32Path] = None
+                 ) -> None:
+        self.path_templates = path_templates
+        self.key_id = key_id
+        self.master_fp = master_fp
+        self.full_path = full_path
+        self.partial_path = partial_path
+
+    def __repr__(self) -> str:
+        return (
+            f'{self.__class__.__name__}('
+            f'path_templates={self.path_templates}, '
+            f'key_id=x(\'{bitcointx.core.b2x(self.key_id)}\'), '
+            f'master_fp=x(\'{bitcointx.core.b2x(self.master_fp)}\'), '
+            f'full_path=BIP32Path("{self.full_path}"), '
+            f'partial_path=BIP32Path("{self.partial_path}")'
+            f')'
+        )
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
 
 T_KeyDerivationInfo = TypeVar('T_KeyDerivationInfo', bound='KeyDerivationInfo')
 
@@ -1315,7 +1365,13 @@ class KeyDerivationInfo:
             path=BIP32Path(path=self.path))
 
 
-T_KeyStoreKeyArg = Union[CKeyBase, CPubKey, CExtKeyBase, CExtPubKeyBase]
+T_KeyStoreKeyArg = Union[CKeyBase, CPubKey, CExtKeyBase, CExtPubKeyBase,
+                         Tuple[CExtKeyBase,
+                               Union[BIP32PathTemplate,
+                                     Iterable[BIP32PathTemplate]]],
+                         Tuple[CExtPubKeyBase,
+                               Union[BIP32PathTemplate,
+                                     Iterable[BIP32PathTemplate]]]]
 T_KeyStore = TypeVar('T_KeyStore', bound='KeyStore')
 
 
@@ -1323,8 +1379,8 @@ class KeyStore:
     # KeyStore can store pubkeys and xpubkeys. This can be used, for example,
     # for output checks to determine the change output when you do not
     # have the privkeys
-    _xprivkeys: Dict[bytes, Dict[Tuple[int, ...], Set[CExtKeyBase]]]
-    _xpubkeys: Dict[bytes, Dict[Tuple[int, ...], Set[CExtPubKeyBase]]]
+    _xprivkeys: Dict[bytes, Dict[Tuple[int, ...], Dict[CExtKeyBase, List[BIP32PathTemplate]]]]
+    _xpubkeys: Dict[bytes, Dict[Tuple[int, ...], Dict[CExtPubKeyBase, List[BIP32PathTemplate]]]]
     _privkeys: Dict[bytes, CKeyBase]
     _pubkeys: Dict[bytes, CPubKey]
     _external_privkey_lookup: Optional[
@@ -1335,6 +1391,8 @@ class KeyStore:
         Callable[[bytes, Optional[KeyDerivationInfo]],
                  Optional[CPubKey]]
     ]
+    _require_path_templates: bool
+    _default_path_template: Optional[BIP32PathTemplate]
 
     def __init__(self, *args: T_KeyStoreKeyArg,
                  external_privkey_lookup: Optional[
@@ -1345,11 +1403,25 @@ class KeyStore:
                      Callable[[bytes, Optional[KeyDerivationInfo]],
                               Optional[CPubKey]]
                  ] = None,
+                 default_path_template: Optional[
+                     Union[BIP32PathTemplate, str]
+                 ] = None,
+                 require_path_templates: bool = True
                  ) -> None:
         self._privkeys = {}
         self._pubkeys = {}
         self._xpubkeys = {}
         self._xprivkeys = {}
+
+        # must be set before add_key() is called
+        self._require_path_templates = require_path_templates
+        if default_path_template is not None:
+            ensure_isinstance(default_path_template, (BIP32PathTemplate, str),
+                              'default_path_template')
+            if isinstance(default_path_template, str):
+                default_path_template = BIP32PathTemplate(default_path_template)
+
+        self._default_path_template = default_path_template
 
         for k in args:
             self.add_key(k)
@@ -1366,18 +1438,52 @@ class KeyStore:
             kstore.add_key(k)
         return kstore
 
-    def add_key(self, k: T_KeyStoreKeyArg) -> None:
+    def add_key(self, k: T_KeyStoreKeyArg) -> None:  # noqa
+
+        path_templates = []
+        if isinstance(k, tuple):
+            k, pts = k
+            if isinstance(pts, BIP32PathTemplate):
+                # single path template
+                path_templates.append(pts)
+            else:
+                # possibly an iterable of templates
+                for pt in pts:
+                    ensure_isinstance(pt, BIP32PathTemplate, 'path template')
+                    path_templates.append(pt)
+
+                # Note: cannot do `if not pts` because it might be a generator
+                if not path_templates:
+                    raise ValueError(
+                        'path templates list is empty')
+
         if isinstance(k, CKeyBase):
+            if path_templates:
+                raise ValueError(
+                    'path_templates only make sense for extended keys')
             if k.pub.key_id in self._privkeys:
                 assert self._privkeys[k.pub.key_id] == k
             else:
                 self._privkeys[k.pub.key_id] = k
         elif isinstance(k, CPubKey):
+            if path_templates:
+                raise ValueError(
+                    'path_templates only make sense for extended keys')
             if k.key_id in self._pubkeys:
                 assert self._pubkeys[k.key_id] == k
             else:
                 self._pubkeys[k.key_id] = k
         elif isinstance(k, CExtKeyCommonBase):
+            if not path_templates and self._default_path_template:
+                path_templates = [self._default_path_template]
+
+            if not path_templates and self._require_path_templates:
+                raise ValueError(
+                    'path templates must be specified for extended key')
+
+            for pt in path_templates:
+                ensure_isinstance(pt, BIP32PathTemplate, 'path template')
+
             mfp, indexes = self._mfp_and_indexes_from_derivation(
                 k.derivation_info)
 
@@ -1389,18 +1495,24 @@ class KeyStore:
                     l0_dict_priv[mfp] = {}
                 l1_dict_priv = l0_dict_priv[mfp]
                 if indexes in l1_dict_priv:
-                    l1_dict_priv[indexes].add(k)
+                    if k in l1_dict_priv[indexes]:
+                        l1_dict_priv[indexes][k].extend(path_templates)
+                    else:
+                        l1_dict_priv[indexes][k] = path_templates
                 else:
-                    l1_dict_priv[indexes] = set([k])
+                    l1_dict_priv[indexes] = {k: path_templates}
             else:
                 l0_dict_pub = self._xpubkeys
                 if mfp not in l0_dict_pub:
                     l0_dict_pub[mfp] = {}
                 l1_dict_pub = l0_dict_pub[mfp]
                 if indexes in l1_dict_pub:
-                    l1_dict_pub[indexes].add(k)
+                    if k in l1_dict_pub[indexes]:
+                        l1_dict_pub[indexes][k].extend(path_templates)
+                    else:
+                        l1_dict_pub[indexes][k] = path_templates
                 else:
-                    l1_dict_pub[indexes] = set([k])
+                    l1_dict_pub[indexes] = {k: path_templates}
         else:
             raise ValueError(
                 f'object supplied to add_key is of type '
@@ -1425,7 +1537,7 @@ class KeyStore:
                     return
                 l1_dict_priv = l0_dict_priv[mfp]
                 if indexes in l1_dict_priv:
-                    l1_dict_priv[indexes].discard(k)
+                    l1_dict_priv[indexes].pop(k)
 
                 if not l1_dict_priv[indexes]:
                     l1_dict_priv.pop(indexes)
@@ -1437,7 +1549,7 @@ class KeyStore:
                     return
                 l1_dict_pub = l0_dict_pub[mfp]
                 if indexes in l1_dict_pub:
-                    l1_dict_pub[indexes].discard(k)
+                    l1_dict_pub[indexes].pop(k)
 
                 if not l1_dict_pub[indexes]:
                     l1_dict_pub.pop(indexes)
@@ -1454,6 +1566,47 @@ class KeyStore:
 
         return (b'', tuple())
 
+    def _enforce_path_templates(
+        self,
+        path_templates: List[BIP32PathTemplate],
+        key_id: bytes, master_fp: bytes,
+        full_path_indexes: Optional[Tuple[int, ...]] = None,
+        partial_path_indexes: Optional[Tuple[int, ...]] = None
+    ) -> None:
+
+        if not path_templates:
+            if self._require_path_templates:
+                raise AssertionError(
+                    'path_templates cannot be empty '
+                    'when require_path_templates is set')
+            return
+
+        full_path: Optional[BIP32Path] = None
+        partial_path: Optional[BIP32Path] = None
+
+        if full_path_indexes is not None:
+            full_path = BIP32Path(full_path_indexes, is_partial=False)
+
+        if partial_path_indexes is not None:
+            partial_path = BIP32Path(partial_path_indexes, is_partial=True)
+
+        if full_path is None and partial_path is None:
+            raise ValueError(
+                'at least one of full_path_indexes or partial_path_indexes '
+                'must be specified')
+
+        for pt in path_templates:
+            if pt.is_partial():
+                if partial_path is not None and pt.match_path(partial_path):
+                    return
+            else:
+                if full_path is not None and pt.match_path(full_path):
+                    return
+
+        raise BIP32PathTemplateViolation(
+            path_templates=path_templates, key_id=key_id, master_fp=master_fp,
+            full_path=full_path, partial_path=partial_path)
+
     # Even if _find_by_derivation_* functions are similar,
     # they had to be separate due to (current?) limitations of mypy typing
     def _find_by_derivation_pub(  # noqa
@@ -1461,25 +1614,21 @@ class KeyStore:
     ) -> Optional[CPubKey]:
         l0_dict = self._xpubkeys
 
-        if not master_fp and not indexes:
-            # derivation was not supplied, check all xkeys without derivation
-            for l1_dict in l0_dict.values():
-                for xpub_set in l1_dict.values():
-                    for xpub in xpub_set:
-                        if xpub.pub.key_id == key_id:
-                            return xpub.pub
-
         if master_fp in l0_dict:
             l1_dict = l0_dict[master_fp]
-            for l1_indexes, xpub_set in l1_dict.items():
+            for l1_indexes, xpub_dict in l1_dict.items():
                 if indexes[:len(l1_indexes)] == l1_indexes:
                     indexes_tail = indexes[len(l1_indexes):]
                     if all(idx < BIP32_HARDENED_KEY_OFFSET
                             for idx in indexes_tail):
-                        for xpub in xpub_set:
+                        for xpub, path_templates in xpub_dict.items():
                             if indexes_tail:
                                 xpub = xpub.derive_path(indexes_tail)
                             if xpub.pub.key_id == key_id:
+                                self._enforce_path_templates(
+                                    path_templates, key_id, master_fp,
+                                    full_path_indexes=indexes,
+                                    partial_path_indexes=indexes_tail)
                                 return xpub.pub
                     break
 
@@ -1490,23 +1639,19 @@ class KeyStore:
     ) -> Optional[CKeyBase]:
         l0_dict = self._xprivkeys
 
-        if not master_fp and not indexes:
-            # derivation was not supplied, check all xkeys without derivation
-            for l1_dict in l0_dict.values():
-                for xkey_set in l1_dict.values():
-                    for xkey in xkey_set:
-                        if xkey.pub.key_id == key_id:
-                            return xkey.priv
-
         if master_fp in l0_dict:
             l1_dict = l0_dict[master_fp]
-            for l1_indexes, xkey_set in l1_dict.items():
+            for l1_indexes, xkey_dict in l1_dict.items():
                 if indexes[:len(l1_indexes)] == l1_indexes:
-                    for xpriv in xkey_set:
+                    for xpriv, path_templates in xkey_dict.items():
                         indexes_tail = indexes[len(l1_indexes):]
                         if indexes_tail:
                             xpriv = xpriv.derive_path(indexes_tail)
                         if xpriv.pub.key_id == key_id:
+                            self._enforce_path_templates(
+                                path_templates, key_id, master_fp,
+                                full_path_indexes=indexes,
+                                partial_path_indexes=indexes_tail)
                             return xpriv.priv
                     break
 

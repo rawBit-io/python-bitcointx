@@ -4,10 +4,21 @@
 
 Breaking changes:
 
+* `KeyStore` now accepts extended keys only with specified path templates by default
+  (as tuple `(xkey, BIP32PathTemplate)` or if `default_path_template` kwarg was
+  specified at `KeyStore` creation. Pass `require_path_templates=False` for KeyStore
+  to accept extended keys without path templates. When no path template is specified
+  for extended key, KeyStore allows derivation for any paths supplied to
+  `get_privkey()`/`get_pubkey()`. Otherwise the path must match one of the templates
+  specified for extended keys. Note that non-extended keys always match their `key_id`.
 * `KeyStore`'s `get_privkey()` and `get_pubkey()` second argument now
   is KeyDerivationInfo, not Dict[bytes, KeyDerivationInfo]. Using dict was a mistake,
   because we always need only one entry, the `key_id` one. If the caller has a dict,
   it can also look up the derivation info itself.
+* Calling `KeyStore`'s `get_privkey()` and `get_pubkey()` without second argument
+  specified will search only for non-extended keys. To get priv/pub of extended keys
+  without derivation, `KeyDerivationInfo` with empty (`BIP32Path('')`
+  or `BIP32Path('m')` has to be specified.
 * KeyDerivationInfo's `master_fingerprint` renamed to `master_fp`,
   and KeyDerivationInfo now does not store pubkeys. Derivation maps in `PSBT_Input`
   and `PSBT_Output` now map from `pubkey` to `PSBT_KeyDerivationInfo`
@@ -22,7 +33,6 @@ Non-breaking changes:
   `is_partial()` method that returns False when if the path is not partal - starts
   from master, 'm/', or False if it is not starts from master. String representations
   also use this property and return results with 'm/' prefix or without.
-* `KeyStore` implementation was improved and tests was added
 * Typing fixes for issues revelead by mypy 0.760
 
 ## v1.0.2.post0
