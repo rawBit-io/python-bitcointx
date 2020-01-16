@@ -35,8 +35,8 @@ from bitcointx.core.psbt import (
 
 class Test_PSBT(unittest.TestCase):
 
-    def test_invalid_psbt(self):
-        def deserialize(hex_data):
+    def test_invalid_psbt(self) -> None:
+        def deserialize(hex_data: str) -> PartiallySignedTransaction:
             return PartiallySignedTransaction.deserialize(x(hex_data))
 
         # Network transaction, not PSBT format
@@ -129,8 +129,8 @@ class Test_PSBT(unittest.TestCase):
                                     'Unexpected data after key type WITNESS_SCRIPT'):
             deserialize('70736274ff0100730200000001301ae986e516a1ec8ac5b4bc6573d32f83b465e23ad76167d68b38e730b4dbdb0000000000ffffffff02747b01000000000017a91403aa17ae882b5d0d54b25d63104e4ffece7b9ea2876043993b0000000017a914b921b1ba6f722e4bfa83b6557a3139986a42ec8387000000000001011f00ca9a3b00000000160014d2d94b64ae08587eefc8eeb187c601e939f9037c00010016001462e9e982fff34dd8239610316b090cd2a3b747cb000100220020876bad832f1d168015ed41232a9ea65a1815d9ef13c0ef8759f64b5b2b278a6521010025512103b7ce23a01c5b4bf00a642537cdfabb315b668332867478ef51309d06d57f8a8751ae00')
 
-    def test_valid_psbt(self):
-        def deserialize(hex_data):
+    def test_valid_psbt(self) -> None:
+        def deserialize(hex_data: str) -> PartiallySignedTransaction:
             data = x(hex_data)
             psbt = PartiallySignedTransaction.deserialize(data)
 
@@ -152,7 +152,7 @@ class Test_PSBT(unittest.TestCase):
         psbt = deserialize('70736274ff0100750200000001268171371edff285e937adeea4b37b78000c0566cbb3ad64641713ca42171bf60000000000feffffff02d3dff505000000001976a914d0c59903c5bac2868760e90fd521a4665aa7652088ac00e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787b32e1300000100fda5010100000000010289a3c71eab4d20e0371bbba4cc698fa295c9463afa2e397f8533ccb62f9567e50100000017160014be18d152a9b012039daf3da7de4f53349eecb985ffffffff86f8aa43a71dff1448893a530a7237ef6b4608bbb2dd2d0171e63aec6a4890b40100000017160014fe3e9ef1a745e974d902c4355943abcb34bd5353ffffffff0200c2eb0b000000001976a91485cff1097fd9e008bb34af709c62197b38978a4888ac72fef84e2c00000017a914339725ba21efd62ac753a9bcd067d6c7a6a39d05870247304402202712be22e0270f394f568311dc7ca9a68970b8025fdd3b240229f07f8a5f3a240220018b38d7dcd314e734c9276bd6fb40f673325bc4baa144c800d2f2f02db2765c012103d2e15674941bad4a996372cb87e1856d3652606d98562fe39c5e9e7e413f210502483045022100d12b852d85dcd961d2f5f4ab660654df6eedcc794c0c33ce5cc309ffb5fce58d022067338a8e0e1725c197fb1a88af59f51e44e4255b20167c8684031c05d1f2592a01210223b72beef0965d10be0778efecd61fcac6f79a4ea169393380734464f84f2ab300000000000000')
         self.assertEqual(len(psbt.inputs), 1)
         self.assertEqual(len(psbt.outputs), 2)
-        self.assertIsInstance(psbt.inputs[0].utxo, CTransaction)
+        assert isinstance(psbt.inputs[0].utxo, CTransaction)
         self.assertEqual(psbt.inputs[0].utxo.serialize(), tx_data)
         self.assertTrue(psbt.outputs[0].is_null())
         self.assertTrue(psbt.outputs[1].is_null())
@@ -163,7 +163,7 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(len(psbt.inputs), 2)
         self.assertEqual(len(psbt.outputs), 2)
         self.assertEqual(psbt.inputs[0].final_script_sig, scriptsig_data)
-        self.assertIsInstance(psbt.inputs[1].utxo, CTxOut)
+        assert isinstance(psbt.inputs[1].utxo, CTxOut)
         self.assertEqual(psbt.inputs[1].utxo.serialize(), txout_data)
         self.assertEqual(psbt.inputs[1].redeem_script, redeem_script_data)
         self.assertTrue(psbt.outputs[0].is_null())
@@ -177,7 +177,7 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(len(psbt.inputs), 1)
         self.assertEqual(len(psbt.outputs), 2)
         self.assertEqual(psbt.inputs[0].sighash_type, SIGHASH_ALL)
-        self.assertIsInstance(psbt.inputs[0].utxo, CTransaction)
+        assert isinstance(psbt.inputs[0].utxo, CTransaction)
         self.assertEqual(psbt.inputs[0].utxo.serialize(), tx_data)
         self.assertTrue(psbt.outputs[0].is_null())
         self.assertTrue(psbt.outputs[1].is_null())
@@ -194,7 +194,8 @@ class Test_PSBT(unittest.TestCase):
 
         self.assertEqual(len(psbt.inputs), 2)
         self.assertEqual(len(psbt.outputs), 2)
-        self.assertIsInstance(psbt.inputs[0].utxo, CTransaction)
+        assert isinstance(psbt.inputs[0].utxo, CTransaction)
+        assert isinstance(psbt.inputs[1].utxo, CTxOut)
         self.assertEqual(psbt.inputs[0].utxo.serialize(), tx_data)
         self.assertEqual(psbt.inputs[1].utxo.serialize(), txout_data)
         self.assertEqual(
@@ -226,7 +227,7 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(len(psbt.inputs), 1)
         self.assertEqual(len(psbt.outputs), 1)
         self.assertTrue(psbt.outputs[0].is_null())
-        self.assertIsInstance(psbt.inputs[0].utxo, CTxOut)
+        assert isinstance(psbt.inputs[0].utxo, CTxOut)
         self.assertEqual(psbt.inputs[0].utxo.serialize(), txout_data)
         self.assertEqual(psbt.inputs[0].redeem_script, redeem_script_data)
         self.assertEqual(psbt.inputs[0].witness_script, witness_script)
@@ -248,7 +249,7 @@ class Test_PSBT(unittest.TestCase):
             psbt = deserialize('70736274ff01005202000000019dfc6628c26c5899fe1bd3dc338665bfd55d7ada10f6220973df2d386dec12760100000000ffffffff01f03dcd1d000000001600147b3a00bfdc14d27795c2b74901d09da6ef133579000000004f01043587cf02da3fd0088000000097048b1ad0445b1ec8275517727c87b4e4ebc18a203ffa0f94c01566bd38e9000351b743887ee1d40dc32a6043724f2d6459b3b5a4d73daec8fbae0472f3bc43e20cd90c6a4fae000080000000804f01043587cf02da3fd00880000001b90452427139cd78c2cff2444be353cd58605e3e513285e528b407fae3f6173503d30a5e97c8adbc557dac2ad9a7e39c1722ebac69e668b6f2667cc1d671c83cab0cd90c6a4fae000080010000800001012b0065cd1d000000002200202c5486126c4978079a814e13715d65f36459e4d6ccaded266d0508645bafa6320105475221029da12cdb5b235692b91536afefe5c91c3ab9473d8e43b533836ab456299c88712103372b34234ed7cf9c1fea5d05d441557927be9542b162eb02e1ab2ce80224c00b52ae2206029da12cdb5b235692b91536afefe5c91c3ab9473d8e43b533836ab456299c887110d90c6a4fae0000800000008000000000220603372b34234ed7cf9c1fea5d05d441557927be9542b162eb02e1ab2ce80224c00b10d90c6a4fae0000800100008000000000002202039eff1f547a1d5f92dfa2ba7af6ac971a4bd03ba4a734b03156a256b8ad3a1ef910ede45cc500000080000000800100008000')
             self.assertEqual(len(psbt.inputs), 1)
             self.assertEqual(len(psbt.outputs), 1)
-            self.assertIsInstance(psbt.inputs[0].utxo, CTxOut)
+            assert isinstance(psbt.inputs[0].utxo, CTxOut)
             self.assertEqual(psbt.inputs[0].utxo.scriptPubKey,
                              witness_script.to_p2wsh_scriptPubKey())
             self.assertEqual(psbt.inputs[0].witness_script, witness_script)
@@ -324,8 +325,8 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].key_data, b'puppy')
         self.assertEqual(psbt.outputs[0].proprietary_fields[b'out_pfx'][1].value, b'drive')
 
-    def test_signer_checks(self):
-        def T(hex_data, expected_regex):
+    def test_signer_checks(self) -> None:
+        def T(hex_data: str, expected_regex: str) -> None:
             data = x(hex_data)
 
             with self.assertRaises(ValueError):
@@ -350,7 +351,7 @@ class Test_PSBT(unittest.TestCase):
         T('70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f00000000000100bb0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f618765000000220202dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d7483045022100f61038b308dc1da865a34852746f015772934208c6d24454393cd99bdf2217770220056e675a675a6d0a02b85b14e5e29074d8a25a9b5760bea2816f661910a006ea01010304010000000104475221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752ae2206029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f10d90c6a4f000000800000008000000080220602dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d710d90c6a4f0000008000000080010000800001012000c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e8872202023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e73473044022065f45ba5998b59a27ffe1a7bed016af1f1f90d54b3aa8f7450aa5f56a25103bd02207f724703ad1edb96680b284b56d4ffcb88f7fb759eabbe08aa30f29b851383d2010103040100000001042200208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028903010547522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ad2206023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7310d90c6a4f000000800000008003000080220603089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc10d90c6a4f00000080000000800200008000220203a9a4c37f5996d3aa25dbac6b570af0650394492942460b354753ed9eeca5877110d90c6a4f000000800000008004000080002202027f6399757d2eff55a136ad02c684b1838b6556e5f1b6b34282a94b6b5005109610d90c6a4f00000080000000800500008000',
           'witness script for p2sh-wrapped segwit p2wpkh input at index 1 does not match the redeem script')
 
-    def test_flow(self):
+    def test_flow(self) -> None:
         # Create
 
         tx = CTransaction(
@@ -455,7 +456,7 @@ class Test_PSBT(unittest.TestCase):
 
             # check signer with keystore that has xpriv, that should sign
             # all the inputs at once.
-            kstore = KeyStore(xpriv)
+            kstore = KeyStore(xpriv, require_path_templates=False)
             pclone3.sign(kstore, finalize=False)
             self.assertEqual(b2x(pclone3.serialize()),
                              b2x(combined_psbt.serialize()))
@@ -473,7 +474,7 @@ class Test_PSBT(unittest.TestCase):
             self.assertEqual(b2x(combined_psbt.extract_transaction().serialize()),
                              '0200000000010258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd7500000000da00473044022074018ad4180097b873323c0015720b3684cc8123891048e7dbcd9b55ad679c99022073d369b740e3eb53dcefa33823c8070514ca55a7dd9544f157c167913261118c01483045022100f61038b308dc1da865a34852746f015772934208c6d24454393cd99bdf2217770220056e675a675a6d0a02b85b14e5e29074d8a25a9b5760bea2816f661910a006ea01475221029583bf39ae0a609747ad199addd634fa6108559d6c5cd39b4c2183f1ab96e07f2102dab61ff49a14db6a7d02b0cd1fbb78fc4b18312b5b4e54dae4dba2fbfef536d752aeffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d01000000232200208c2353173743b595dfb4a07b72ba8e42e3797da74e87fe7d9d7497e3b2028903ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000400473044022062eb7a556107a7c73f45ac4ab5a1dddf6f7075fb1275969a7f383efff784bcb202200c05dbb7470dbf2f08557dd356c7325c1ed30913e996cd3840945db12228da5f01473044022065f45ba5998b59a27ffe1a7bed016af1f1f90d54b3aa8f7450aa5f56a25103bd02207f724703ad1edb96680b284b56d4ffcb88f7fb759eabbe08aa30f29b851383d20147522103089dc10c7ac6db54f91329af617333db388cead0c231f723379d1b99030b02dc21023add904f3d6dcf59ddb906b0dee23529b7ffb9ed50e5e86151926860221f0e7352ae00000000')
 
-    def test_unknown_proprietary_fields_merge(self):
+    def test_unknown_proprietary_fields_merge(self) -> None:
         psbt1 = PartiallySignedTransaction.deserialize(x('70736274ff01003f0200000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000ffffffff010000000000000000036a0100000000000a0f0102030405060708090f0102030405060708090a0b0c0d0e0f000a0f0102030405060708090f0102030405060708090a0b0c0d0e0f000a0f0102030405060708090f0102030405060708090a0b0c0d0e0f00'))
         psbt2 = PartiallySignedTransaction.deserialize(x('70736274ff01003f0200000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000ffffffff010000000000000000036a0100000000000a0f0102030405060708100f0102030405060708090a0b0c0d0e0f000a0f0102030405060708100f0102030405060708090a0b0c0d0e0f000a0f0102030405060708100f0102030405060708090a0b0c0d0e0f00'))
         psbt3 = psbt1.clone()
@@ -534,13 +535,14 @@ class Test_PSBT(unittest.TestCase):
             self.assertEqual(outp.proprietary_fields[prefix][len(outp_clone.proprietary_fields[prefix]):],
                              outp_clone.proprietary_fields[prefix])
 
-    def test_clone(self):
+    def test_clone(self) -> None:
         # Take some PSBT, fill all the fields that we know exist,
         # and check that clone() creates the same PSBT
         psbt = PartiallySignedTransaction.deserialize(x('70736274ff0100550200000001ab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40100000000feffffff018e240000000000001976a9146f4620b553fa095e721b9ee0efe9fa039cca459788ac0000000015fc0a676c6f62616c5f706678016d756c7469706c79056368696566046f616263036465660001012000e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787010416001485d13537f2e265405a34dbafa9e3dda01fb823080ffc06696e5f706678fde80377686174056672616d650afc00fe40420f0061736b077361746f736869046f616263036465660012fc076f75745f706678feffffff01636f726e05746967657213fc076f75745f706678fe000000027075707079056472697665046f6162630364656600'))
         pub = CPubKey(x('039eff1f547a1d5f92dfa2ba7af6ac971a4bd03ba4a734b03156a256b8ad3a1ef9'))
         psbt.inputs[0].witness_script = CScript([1, 2, 3])
         psbt.inputs[0].redeem_script = psbt.inputs[0].witness_script.to_p2wsh_scriptPubKey()
+        assert isinstance(psbt.inputs[0].utxo, CTxOut)
         psbt.inputs[0].utxo = psbt.inputs[0].utxo.to_mutable()
         psbt.inputs[0].utxo.scriptPubKey = psbt.inputs[0].redeem_script.to_p2sh_scriptPubKey()
         psbt.inputs[0].partial_sigs[pub] = b'123'
@@ -573,7 +575,7 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(b2x(psbt.serialize()),
                          b2x(PartiallySignedTransaction.deserialize(psbt.serialize()).serialize()))
 
-    def test_add_input_ouput(self):
+    def test_add_input_ouput(self) -> None:
         psbt = PartiallySignedTransaction.deserialize(x('70736274ff0100a00200000002ab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40000000000feffffffab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40100000000feffffff02603bea0b000000001976a914768a40bbd740cbe81d988e71de2a4d5c71396b1d88ac8e240000000000001976a9146f4620b553fa095e721b9ee0efe9fa039cca459788ac00000000000100df0200000001268171371edff285e937adeea4b37b78000c0566cbb3ad64641713ca42171bf6000000006a473044022070b2245123e6bf474d60c5b50c043d4c691a5d2435f09a34a7662a9dc251790a022001329ca9dacf280bdf30740ec0390422422c81cb45839457aeb76fc12edd95b3012102657d118d3357b8e0f4c2cd46db7b39f6d9c38d9a70abcb9b2de5dc8dbfe4ce31feffffff02d3dff505000000001976a914d0c59903c5bac2868760e90fd521a4665aa7652088ac00e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787b32e13000001012000e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787010416001485d13537f2e265405a34dbafa9e3dda01fb8230800220202ead596687ca806043edc3de116cdf29d5e9257c196cd055cf698c8d02bf24e9910b4a6ba670000008000000080020000800022020394f62be9df19952c5587768aeb7698061ad2c4a25c894f47d8c162b4d7213d0510b4a6ba6700000080010000800200008000'))
         new_psbt = psbt.clone()
         new_psbt.inputs = []
@@ -591,7 +593,7 @@ class Test_PSBT(unittest.TestCase):
 
         self.assertEqual(b2x(new_psbt.serialize()), b2x(psbt.serialize()))
 
-    def test_b64(self):
+    def test_b64(self) -> None:
         data = x('70736274ff0100a00200000002ab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40000000000feffffffab0949a08c5af7c49b8212f417e2f15ab3f5c33dcf153821a8139f877a5b7be40100000000feffffff02603bea0b000000001976a914768a40bbd740cbe81d988e71de2a4d5c71396b1d88ac8e240000000000001976a9146f4620b553fa095e721b9ee0efe9fa039cca459788ac00000000000100df0200000001268171371edff285e937adeea4b37b78000c0566cbb3ad64641713ca42171bf6000000006a473044022070b2245123e6bf474d60c5b50c043d4c691a5d2435f09a34a7662a9dc251790a022001329ca9dacf280bdf30740ec0390422422c81cb45839457aeb76fc12edd95b3012102657d118d3357b8e0f4c2cd46db7b39f6d9c38d9a70abcb9b2de5dc8dbfe4ce31feffffff02d3dff505000000001976a914d0c59903c5bac2868760e90fd521a4665aa7652088ac00e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787b32e13000001012000e1f5050000000017a9143545e6e33b832c47050f24d3eeb93c9c03948bc787010416001485d13537f2e265405a34dbafa9e3dda01fb8230800220202ead596687ca806043edc3de116cdf29d5e9257c196cd055cf698c8d02bf24e9910b4a6ba670000008000000080020000800022020394f62be9df19952c5587768aeb7698061ad2c4a25c894f47d8c162b4d7213d0510b4a6ba6700000080010000800200008000')
         b64_data = base64.b64encode(data).decode('utf-8')
         psbt1 = PartiallySignedTransaction.deserialize(data)

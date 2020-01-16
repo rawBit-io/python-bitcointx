@@ -70,7 +70,7 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
     def __init_subclass__(mcs: Type[T_CoreCoinClassDispatcher], **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
-    def __new__(mcs: Type[T_CoreCoinClassDispatcher], name: str, bases: Tuple[type],
+    def __new__(mcs: Type[T_CoreCoinClassDispatcher], name: str, bases: Tuple[type, ...],
                 namespace: Dict[str, Any],
                 mutable_of: Optional['CoreCoinClassDispatcher'] = None,
                 **kwargs: Any) -> T_CoreCoinClassDispatcher:
@@ -438,7 +438,7 @@ class ReprOrStrMixin():
 class _UintBitVectorMeta(type):
     _UINT_WIDTH_BITS: int
 
-    def __init__(self, name: str, bases: Tuple[type], dct: Dict[str, Any]
+    def __init__(self, name: str, bases: Tuple[type, ...], dct: Dict[str, Any]
                  ) -> None:
         if getattr(self, '_UINT_WIDTH_BITS', None) is not None:
             self._UINT_WIDTH_BYTES = self._UINT_WIDTH_BITS // 8
@@ -510,6 +510,9 @@ class COutPoint(CoreCoinClass, next_dispatch_final=True):
     hash: ReadOnlyField[bytes]
     n: ReadOnlyField[int]
 
+    to_mutable: Callable[['COutPoint'], 'CMutableOutPoint']
+    to_immutable: Callable[['COutPoint'], 'COutPoint']
+
     def __init__(self, hash: Union[bytes, bytearray] = b'\x00'*32,
                  n: int = 0xffffffff):
         ensure_isinstance(hash, (bytes, bytearray), 'hash')
@@ -573,6 +576,9 @@ class CBitcoinOutPoint(COutPoint, CoreBitcoinClass):
     """Bitcoin COutPoint"""
     __slots_: List[str] = []
 
+    to_mutable: Callable[['CBitcoinOutPoint'], 'CBitcoinMutableOutPoint']
+    to_immutable: Callable[['CBitcoinOutPoint'], 'CBitcoinOutPoint']
+
 
 class CBitcoinMutableOutPoint(CBitcoinOutPoint, CMutableOutPoint,
                               mutable_of=CBitcoinOutPoint):
@@ -595,6 +601,9 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
     prevout: ReadOnlyField[COutPoint]
     scriptSig: ReadOnlyField[script.CScript]
     nSequence: ReadOnlyField[int]
+
+    to_mutable: Callable[['CTxIn'], 'CMutableTxIn']
+    to_immutable: Callable[['CTxIn'], 'CTxIn']
 
     def __init__(self, prevout: Optional[COutPoint] = None,
                  scriptSig: Optional[Union[script.CScript, bytes, bytearray]] = None,
@@ -673,6 +682,9 @@ class CBitcoinTxIn(CTxIn, CoreBitcoinClass):
     prevout: ReadOnlyField[CBitcoinOutPoint]  # type: ignore
     scriptSig: ReadOnlyField[script.CBitcoinScript]  # type: ignore
 
+    to_mutable: Callable[['CBitcoinTxIn'], 'CBitcoinMutableTxIn']
+    to_immutable: Callable[['CBitcoinTxIn'], 'CBitcoinTxIn']
+
 
 class CBitcoinMutableTxIn(CBitcoinTxIn,  # type: ignore
                           CMutableTxIn, mutable_of=CBitcoinTxIn):
@@ -695,6 +707,9 @@ class CTxOut(CoreCoinClass, next_dispatch_final=True):
 
     nValue: ReadOnlyField[int]
     scriptPubKey: ReadOnlyField[script.CScript]
+
+    to_mutable: Callable[['CTxOut'], 'CMutableTxOut']
+    to_immutable: Callable[['CTxOut'], 'CTxOut']
 
     def __init__(self, nValue: int = -1,
                  scriptPubKey: Optional[script.CScript] = None):
@@ -758,6 +773,9 @@ class CBitcoinTxOut(CTxOut, CoreBitcoinClass):
 
     scriptPubKey: ReadOnlyField[script.CBitcoinScript]  # type: ignore
 
+    to_mutable: Callable[['CBitcoinTxOut'], 'CBitcoinMutableTxOut']
+    to_immutable: Callable[['CBitcoinTxOut'], 'CBitcoinTxOut']
+
 
 class CBitcoinMutableTxOut(CBitcoinTxOut, CMutableTxOut,
                            mutable_of=CBitcoinTxOut):
@@ -775,6 +793,9 @@ class CTxInWitness(CoreCoinClass, next_dispatch_final=True):
     __slots_: List[str] = ['scriptWitness']
 
     scriptWitness: ReadOnlyField[script.CScriptWitness]
+
+    to_mutable: Callable[['CTxInWitness'], 'CMutableTxInWitness']
+    to_immutable: Callable[['CTxInWitness'], 'CTxInWitness']
 
     def __init__(self, scriptWitness: script.CScriptWitness = script.CScriptWitness()):
         ensure_isinstance(scriptWitness, script.CScriptWitness, 'scriptWitness')
@@ -819,6 +840,9 @@ class CBitcoinTxInWitness(CTxInWitness, CoreBitcoinClass):
     """Immutable Bitcoin witness data for a single transaction input"""
     __slots_: List[str] = []
 
+    to_mutable: Callable[['CBitcoinTxInWitness'], 'CBitcoinMutableTxInWitness']
+    to_immutable: Callable[['CBitcoinTxInWitness'], 'CBitcoinTxInWitness']
+
 
 class CBitcoinMutableTxInWitness(CBitcoinTxInWitness, CMutableTxInWitness,
                                  mutable_of=CBitcoinTxInWitness):
@@ -830,6 +854,9 @@ T_CTxOutWitness = TypeVar('T_CTxOutWitness', bound='CTxOutWitness')
 
 
 class CTxOutWitness(CoreCoinClass, next_dispatch_final=True):
+
+    to_mutable: Callable[['CTxOutWitness'], 'CMutableTxOutWitness']
+    to_immutable: Callable[['CTxOutWitness'], 'CTxOutWitness']
 
     @classmethod
     def from_instance(cls: Type[T_CTxOutWitness], witness: 'CTxOutWitness'
@@ -861,6 +888,9 @@ class CTxWitness(CoreCoinClass, next_dispatch_final=True):
     __slots_: List[str] = ['vtxinwit']
 
     vtxinwit: ReadOnlyField[Tuple[CTxInWitness, ...]]
+
+    to_mutable: Callable[['CTxWitness'], 'CMutableTxWitness']
+    to_immutable: Callable[['CTxWitness'], 'CTxWitness']
 
     def __init__(self, vtxinwit: Iterable[CTxInWitness] = (),
                  vtxoutwit: Iterable[CTxOutWitness] = ()) -> None:
@@ -924,7 +954,10 @@ class CBitcoinTxWitness(CTxWitness, CoreBitcoinClass):
     """Immutable witness data for all inputs to a transaction"""
     __slots_: List[str] = []
 
-    vtxinwit: ReadOnlyField[Tuple[CBitcoinTxInWitness]]  # type: ignore
+    vtxinwit: ReadOnlyField[Tuple[CBitcoinTxInWitness, ...]]  # type: ignore
+
+    to_mutable: Callable[['CBitcoinTxWitness'], 'CBitcoinMutableTxWitness']
+    to_immutable: Callable[['CBitcoinTxWitness'], 'CBitcoinTxWitness']
 
 
 class CBitcoinMutableTxWitness(CBitcoinTxWitness,
@@ -942,12 +975,22 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
     __slots_: List[str] = ['nVersion', 'vin', 'vout', 'nLockTime', 'wit']
 
     nVersion: ReadOnlyField[int]
-    vin: ReadOnlyField[Tuple[CTxIn]]
-    vout: ReadOnlyField[Tuple[CTxOut]]
+    vin: ReadOnlyField[Tuple[CTxIn, ...]]
+    vout: ReadOnlyField[Tuple[CTxOut, ...]]
     nLockTime: ReadOnlyField[int]
     wit: ReadOnlyField[CTxWitness]
 
     CURRENT_VERSION: int = 2
+
+    # Cannot make to_mutable/to_immutable to use generic typing,
+    # because the types are determined at runtime depending on
+    # what class is storred in _mutable_cls/_immutable_cls.
+    # Type of self might be different from return type.
+    #
+    # We have to specify types for these methods manually,
+    # here and in the chain-specific subclasses, too.
+    to_mutable: Callable[['CTransaction'], 'CMutableTransaction']
+    to_immutable: Callable[['CTransaction'], 'CTransaction']
 
     def __init__(self, vin: Iterable[CTxIn] = (), vout: Iterable[CTxOut] = (),
                  nLockTime: int = 0, nVersion: Optional[int] = None,
@@ -987,21 +1030,6 @@ class CTransaction(ReprOrStrMixin, CoreCoinClass, next_dispatch_final=True):
         object.__setattr__(self, 'vout', tuple_or_list(
             CTxOut.from_txout(txout) for txout in vout))
         object.__setattr__(self, 'wit', witness)
-
-    # Cannot make to_mutable/to_immutable to use generic typing,
-    # because the types are determined at runtime depending on
-    # what class is storred in _mutable_cls/_immutable_cls.
-    # Type of self might be different from return type.
-    #
-    # We have to specify types for these methods manually,
-    # here and in the chain-specific subclasses, too.
-    # In addition, subclasses will need to cast the results to
-    # the type they actually return.
-    def to_mutable(self) -> 'CMutableTransaction':
-        return cast('CMutableTransaction', super().to_mutable())
-
-    def to_immutable(self) -> 'CTransaction':
-        return cast('CTransaction', super().to_immutable())
 
     @no_bool_use_as_property
     def is_coinbase(self) -> bool:
@@ -1158,15 +1186,12 @@ class CBitcoinTransaction(CTransaction, CoreBitcoinClass):
     """Bitcoin transaction"""
     __slots_: List[str] = []
 
-    vin: ReadOnlyField[Tuple[CBitcoinTxIn]]  # type: ignore
-    vout: ReadOnlyField[Tuple[CBitcoinTxOut]]  # type: ignore
+    vin: ReadOnlyField[Tuple[CBitcoinTxIn, ...]]  # type: ignore
+    vout: ReadOnlyField[Tuple[CBitcoinTxOut, ...]]  # type: ignore
     wit: ReadOnlyField[CBitcoinTxWitness]  # type: ignore
 
-    def to_mutable(self) -> 'CBitcoinMutableTransaction':
-        return cast('CBitcoinMutableTransaction', super().to_mutable())
-
-    def to_immutable(self) -> 'CBitcoinTransaction':
-        return cast('CBitcoinTransaction', super().to_immutable())
+    to_mutable: Callable[['CBitcoinTransaction'], 'CBitcoinMutableTransaction']
+    to_immutable: Callable[['CBitcoinTransaction'], 'CBitcoinTransaction']
 
 
 class CBitcoinMutableTransaction(CBitcoinTransaction,

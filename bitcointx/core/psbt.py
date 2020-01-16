@@ -403,6 +403,8 @@ class PSBT_Input(Serializable):
             ensure_isinstance(utxo, (CTransaction, CTxOut), descr('utxo'))
             if isinstance(utxo, CTxOut) and not utxo.is_valid():
                 raise ValueError('Invalid CTxOut provided for utxo')
+            if isinstance(utxo, CTransaction) and utxo.is_null():
+                raise ValueError('Empty CTransaction provided for utxo')
 
         self.utxo = utxo
 
@@ -531,15 +533,20 @@ class PSBT_Input(Serializable):
               and isinstance(other.utxo, CTxOut)):
             # The witness utxo wins, but we check consistency first
             for vout in self.utxo.vout:
-                if vout.serialize() == other.serialize():
+                if vout.serialize() == other.utxo.serialize():
                     break
             else:
                 raise ValueError(
                     f'withess utxo (CTxOut) in in merge source at index '
-                    f'{other.index} does not exist in outputs of non-witness '
-                    f'utxo (CTransaction) of the merge destination')
+                    f'{other.index} does not exist in outputs of '
+                    f'non-witness utxo (CTransaction) of the '
+                    f'merge destination')
+
             # The witness utxo wins
-            self.utxo = other.utxo
+            if self.utxo.is_mutable():
+                self.utxo = other.utxo.to_mutable()
+            else:
+                self.utxo = other.utxo.to_immutable()
         elif (isinstance(self.utxo, CTxOut)
               and isinstance(other.utxo, CTransaction)):
             # The witness utxo wins, but we check consistency first
@@ -548,15 +555,20 @@ class PSBT_Input(Serializable):
                     break
             else:
                 raise ValueError(
-                    f'withess utxo (CTxOut) in in merge destination at index '
-                    f'{self.index} does not exist in outputs of non-witness '
-                    f'utxo (CTransaction) of the merge source')
+                    f'withess utxo (CTxOut) in in merge destination '
+                    f'at index {self.index} does not exist in outputs of '
+                    f'non-witness utxo (CTransaction) of the merge source')
         elif (isinstance(self.utxo, CTxOut)
               and isinstance(other.utxo, CTxOut)):
             if self.utxo.serialize() != other.utxo.serialize():
                 raise ValueError(
                     f'witness utxos are different for inputs '
                     f'at index {self.index}')
+        else:
+            assert isinstance(self.utxo, (CTxOut, CTransaction))
+            assert isinstance(other.utxo, (CTxOut, CTransaction))
+            raise AssertionError(
+                'should not happen, all variants of utxo classes was checked')
 
         for pub, sig in other.partial_sigs.items():
             if pub not in self.partial_sigs:
@@ -1033,6 +1045,7 @@ class PSBT_Input(Serializable):
     def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
         if self.utxo is not None:
             if isinstance(self.utxo, CTransaction):
+                assert not self.utxo.is_null()
                 stream_serialize_field(PSBT_InKeyType.NON_WITNESS_UTXO, f,
                                        value=self.utxo.serialize())
             elif isinstance(self.utxo, CTxOut):

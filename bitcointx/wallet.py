@@ -19,7 +19,7 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 # pylama:ignore=E501,E221
 
 from io import BytesIO
-from typing import Type, TypeVar, Union, Optional, List, cast
+from typing import Type, TypeVar, Union, Optional, List, Callable, cast
 
 import bitcointx
 import bitcointx.base58
@@ -673,6 +673,8 @@ class CCoinExtPubKey(CBase58DataDispatched, CExtPubKeyBase,
 
 class CCoinExtKey(CBase58DataDispatched, CExtKeyBase,
                   WalletCoinClass, next_dispatch_final=True):
+
+    neuter: Callable[['CCoinExtKey'], CCoinExtPubKey]
 
     def __init__(self, _s: str) -> None:
         assert isinstance(self, CExtKeyBase)

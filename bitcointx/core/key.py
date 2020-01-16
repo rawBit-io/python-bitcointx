@@ -906,6 +906,8 @@ T_CExtKey = TypeVar('T_CExtKey', bound='CExtKey')
 class CExtKey(bytes, CExtKeyBase):
     "Standalone extended key class"
 
+    neuter: Callable[['CExtKey'], CExtPubKey]
+
     @classmethod
     def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
         # We cannot annotate cls with a bounded type here, because
