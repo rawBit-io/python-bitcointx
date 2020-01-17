@@ -233,7 +233,7 @@ def select_chain_params(params: Union[str, ChainParamsBase,
 
     if params is a string, then it is expected to be a name of
     is one of of the registered chain params, such as
-        'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'
+    'bitcoin', 'bitcoin/testnet', or 'bitcoin/regtest'
 
     params can be an instance of ChainParamsBase.
 

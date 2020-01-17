@@ -172,7 +172,8 @@ def dispatcher_wrap_methods(cls: 'ClassMappingDispatcher',
 
 class ClassMappingDispatcher(ABCMeta):
     """A custom class dispatcher that translates invocations and attribute
-    access of a superclass to a certain subclass according to internal map.
+    access of a superclass to a certain subclass according to internal map
+
     This map is built from the actual superclass-subclass relations between
     the classes, with the help of a few additional flags that control the
     final mapping"""
@@ -193,7 +194,8 @@ class ClassMappingDispatcher(ABCMeta):
         mcs: Type['ClassMappingDispatcher'], identity: Optional[str] = None,
         depends: Iterable[Type['ClassMappingDispatcher']] = ()
     ) -> None:
-        """Initialize the dispatcher metaclass.
+        """Initialize the dispatcher metaclass
+
            Arguments:
                 identity:
                     a string that sets the identity of the mapping:
@@ -282,7 +284,8 @@ class ClassMappingDispatcher(ABCMeta):
                  variant_of: Optional[type] = None) -> None:
         """Build the dispatching map out of the superclass-subclass
         relationships, and wrap the methods of the classes so that appropriate
-        dispatcher is active inside the methods.
+        dispatcher is active inside the methods
+
             Arguments:
                 next_dispatch_final:
                     if True, means that this class should be mapped to

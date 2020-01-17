@@ -1,8 +1,8 @@
 bitcointx
-=======
+=========
 
 :mod:`bitcointx`
---------------
+----------------
 
 .. automodule:: bitcointx
 
@@ -22,7 +22,7 @@ bitcointx
 .. automodule:: bitcointx.rpc
 
 :mod:`segwit_addr`
-----------
+------------------
 
 .. automodule:: bitcointx.segwit_addr
 
@@ -37,6 +37,6 @@ bitcointx
 .. automodule:: bitcointx.wallet
 
 :mod:`util`
--------------
+-----------
 
 .. automodule:: bitcointx.util

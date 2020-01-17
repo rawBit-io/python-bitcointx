@@ -1,5 +1,5 @@
 bitcointx.core
-============
+==============
 
 Everything consensus critical is found in the core subpackage.
 
@@ -37,3 +37,13 @@ Everything consensus critical is found in the core subpackage.
 ----------------
 
 .. automodule:: bitcointx.core.sha256
+
+:mod:`psbt`
+-----------
+
+.. automodule:: bitcointx.core.psbt
+
+:mod:`bitcoinconsensus`
+-----------------------
+
+.. automodule:: bitcointx.core.bitcoinconsensus

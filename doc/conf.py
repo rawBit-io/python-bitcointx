@@ -46,11 +46,11 @@ extensions = [
     'sphinx.ext.viewcode',
 ]
 
-autodoc_default_flags = [
-    'members',
-    'undoc-members',
-    'show-inheritance',
-]
+autodoc_default_options = {
+    'members': None,
+    'undoc-members': None,
+    'show-inheritance': None,
+}
 
 # Include __init__ docstring in class level docs
 autoclass_content = 'both'
