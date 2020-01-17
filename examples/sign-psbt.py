@@ -17,7 +17,7 @@ from typing import Optional, Union
 
 from bitcointx import select_chain_params
 from bitcointx.core import b2x
-from bitcointx.core.key import KeyStore
+from bitcointx.core.key import KeyStore, BIP32PathTemplate
 from bitcointx.core.psbt import PartiallySignedTransaction
 from bitcointx.base58 import Base58Error
 from bitcointx.wallet import CCoinKey, CCoinExtKey
@@ -31,6 +31,12 @@ def parser() -> 'argparse.ArgumentParser':
     parser.add_argument(
         '-k', '--key', nargs='*',
         help='List of private keys or extended private keys (base58 encoding)')
+    parser.add_argument('--path-template',
+                        help='Path template for signing checks')
+    parser.add_argument('--without-path-template-checks',
+                        dest='without_path_template_checks',
+                        action='store_true',
+                        help='Sign without path template checks')
     parser.add_argument('-f', '--finalize', action='store_true',
                         help='Finalize transaction')
     parser.add_argument(
@@ -57,6 +63,17 @@ if __name__ == '__main__':
         with open(args.input_file, 'r') as f:
             psbt_data = f.read()
 
+    path_template = None
+    require_path_templates = True
+    if args.path_template is not None:
+        if args.without_path_template_checks:
+            print('--without-path-template-checks conflicts with '
+                  '--path-template argument')
+            sys.exit(-1)
+        path_template = BIP32PathTemplate(args.path_template)
+    elif args.without_path_template_checks:
+        require_path_templates = False
+
     keys = []
     for key_index, key_data in enumerate(args.key or []):
         k: Optional[Union[CCoinKey, CCoinExtKey]] = None
@@ -76,8 +93,11 @@ if __name__ == '__main__':
         keys.append(k)
 
     psbt = PartiallySignedTransaction.from_base64_or_binary(psbt_data)
-    sign_result = psbt.sign(KeyStore.from_iterable(keys),
-                            finalize=args.finalize)
+    sign_result = psbt.sign(
+        KeyStore.from_iterable(keys,
+                               default_path_template=path_template,
+                               require_path_templates=require_path_templates),
+        finalize=args.finalize)
 
     print("")
     print(f'Transaction has total {len(psbt.inputs)} inputs\n')
