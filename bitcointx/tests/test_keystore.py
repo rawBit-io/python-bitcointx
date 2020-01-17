@@ -150,7 +150,8 @@ class Test_KeyStore(unittest.TestCase):
 
     def test_path_template_enforcement(self) -> None:
         xpriv1 = CCoinExtKey('xprv9s21ZrQH143K4TFwadu5VoGfAChTWXUw49YyTWE8SRqC9ZC9AQpHspzgbAcScTmC4MURiMT7pmCbci5oKbWijJmARiUeRiLXYehCtsoVdYf')
-        xpriv2 = CCoinExtKey('xprv9uZ4jKNZFfGEQTTunEuy2cLQMckzuy5saCmiKuxYJgHX5pGFCx3KQ8mTkSfuLNaWGNQ9LKCg5YzUihxoQv493ErnkcaS3q1udx9X8WZbwZc')
+        xpriv2 = CCoinExtKey('xprv9s21ZrQH143K3QgBvK4tkeHuvuWc6KETTTcgGQ4NmW7g16AtCPV4hZpujiimpLM9ivFPgsMdNNVuVUnDwChutxczNKYHzP1Mo5HuqG7CNYv')
+        assert len(xpriv2.derivation_info.path) == 0
         priv1 = CCoinKey('L27zAtDgjDC34sG5ZSey1wvdZ9JyZsNnvZEwbbZYWUYXXQtgri5R')
         xpub1 = CCoinExtPubKey('xpub69b6hm71WMe1PGpgUmaDPkbxYoTzpmswX8KGeinv7SPRcKT22RdMM4416kqtEUuXqXCAi7oGx7tHwCRTd3JHatE3WX1Zms6Lgj5mrbFyuro')
         xpub2 = xpriv2.derive(333).neuter()
@@ -182,13 +183,12 @@ class Test_KeyStore(unittest.TestCase):
             ks.add_key((pub1, [BIP32PathTemplate('')]))  # type: ignore
         with self.assertRaisesRegex(ValueError, 'path templates list is empty'):
             ks.add_key((pub1, []))  # type: ignore
-        with self.assertRaisesRegex(ValueError, 'path templates list is empty'):
-            # string is an empty iterable, too,
-            # and no way to check for this except explicitly checking for str.
-            # But it will be catched by mypy
+        with self.assertRaisesRegex(ValueError, 'only make sense for extended keys'):
             ks.add_key((pub1, ''))  # type: ignore
-        with self.assertRaisesRegex(TypeError, 'is expected to be an instance of BIP32PathTemplate'):
+        with self.assertRaisesRegex(ValueError, 'index template format is not valid'):
             ks.add_key((xpub1, 'abc'))  # type: ignore
+        with self.assertRaisesRegex(TypeError, 'is expected to be an instance of '):
+            ks.add_key((xpub1, [10]))  # type: ignore
         with self.assertRaisesRegex(ValueError, 'path templates must be specified'):
             ks.add_key(xpriv1)
         with self.assertRaisesRegex(ValueError, 'path templates must be specified'):
@@ -196,10 +196,9 @@ class Test_KeyStore(unittest.TestCase):
 
         # No error when path templates are specified for extended keys
         ks = KeyStore((xpriv1, BIP32PathTemplate('m')),
-                      (xpriv2, BIP32PathTemplate('m/[44,49,84]h/0h/0h/[0-1]h/*')),
-                      (xpub1, BIP32PathTemplate('')),
-                      (xpub2, [BIP32PathTemplate('0/1'),
-                               BIP32PathTemplate('m/333/3/33')]),
+                      (xpriv2, 'm/[44,49,84]h/0h/0h/[0-1]/*'),
+                      (xpub1, ''),  # '' same as BIP32PathTemplate('')
+                      (xpub2, ['0/1', 'm/333/3/33']),
                       (xpub3, BIP32PathTemplate('m/0/0/1')),
                       priv1, pub1)
 
@@ -247,6 +246,85 @@ class Test_KeyStore(unittest.TestCase):
             ks.get_pubkey(xpub3.derive(2).pub.key_id,
                           KeyDerivationInfo(x('abcdef10'), BIP32Path('m/0/0/2')))
 
-        # XXX
-        # test more elaborate paths
-        # test default templates
+        long_path = BIP32Path(
+            "m/43435/646/5677/5892/58885/2774/9943/75532/8888")
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_privkey(xpriv2.derive_path(long_path).pub.key_id,
+                           KeyDerivationInfo(xpriv2.fingerprint, long_path))
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_privkey(xpriv2.derive_path("44'/0'/0'/3/25").pub.key_id,
+                           KeyDerivationInfo(xpriv2.fingerprint,
+                                             BIP32Path('m/44h/0h/0h/3/25')))
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_privkey(xpriv2.derive_path("44'/0'/0'/0/1'").pub.key_id,
+                           KeyDerivationInfo(xpriv2.fingerprint,
+                                             BIP32Path('m/44h/0h/0h/0/1h')))
+
+        self.assertEqual(
+            ks.get_privkey(xpriv2.derive_path("44'/0'/0'/1/25").pub.key_id,
+                           KeyDerivationInfo(xpriv2.fingerprint,
+                                             BIP32Path('m/44h/0h/0h/1/25'))),
+            xpriv2.derive_path("44'/0'/0'/1/25").priv
+        )
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_pubkey(xpub2.derive_path('0').pub.key_id,
+                          KeyDerivationInfo(xpub2.parent_fp,
+                                            BIP32Path('m/333/0')))
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_pubkey(xpub2.derive_path('3/34').pub.key_id,
+                          KeyDerivationInfo(xpub2.parent_fp,
+                                            BIP32Path('m/333/3/34')))
+
+        self.assertEqual(
+            ks.get_pubkey(xpub2.derive_path('3/33').pub.key_id,
+                          KeyDerivationInfo(xpub2.parent_fp,
+                                            BIP32Path('m/333/3/33'))),
+            xpub2.derive_path('3/33').pub
+        )
+
+        xpub49 = xpriv2.derive_path("m/49'/0'/0'/0").neuter()
+
+        with self.assertRaisesRegex(ValueError, 'must specify full path'):
+            ks = KeyStore(xpriv2, xpub49,
+                          default_path_template='[44,49,84]h/0h/0h/[0-1]/[0-50000]')
+
+        ks = KeyStore(xpriv2, xpub49,
+                      default_path_template='m/[44,49,84]h/0h/0h/[0-1]/[0-50000]')
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_privkey(xpriv2.derive_path(long_path).pub.key_id,
+                           KeyDerivationInfo(xpriv2.fingerprint, long_path))
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_privkey(xpriv2.derive_path("44'/0'/0'/1/50001").pub.key_id,
+                           KeyDerivationInfo(xpriv2.fingerprint,
+                                             BIP32Path('m/44h/0h/0h/1/50001')))
+
+        self.assertEqual(
+            ks.get_privkey(xpriv2.derive_path("44'/0'/0'/1/25").pub.key_id,
+                           KeyDerivationInfo(xpriv2.fingerprint,
+                                             BIP32Path('m/44h/0h/0h/1/25'))),
+            xpriv2.derive_path("44'/0'/0'/1/25").priv
+        )
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_pubkey(xpub49.derive_path('50001').pub.key_id,
+                          KeyDerivationInfo(xpriv2.fingerprint,
+                                            BIP32Path('m/49h/0h/0h/0/50001')))
+
+        with self.assertRaises(BIP32PathTemplateViolation):
+            ks.get_pubkey(xpub49.derive_path('50000/3').pub.key_id,
+                          KeyDerivationInfo(xpriv2.fingerprint,
+                                            BIP32Path('m/49h/0h/0h/0/50000/3')))
+
+        self.assertEqual(
+            ks.get_pubkey(xpub49.derive_path('50000').pub.key_id,
+                          KeyDerivationInfo(xpriv2.fingerprint,
+                                            BIP32Path('m/49h/0h/0h/0/50000'))),
+            xpub49.derive_path('50000').pub
+        )

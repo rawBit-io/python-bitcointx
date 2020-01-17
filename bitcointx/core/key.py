@@ -1423,6 +1423,10 @@ class KeyStore:
             if isinstance(default_path_template, str):
                 default_path_template = BIP32PathTemplate(default_path_template)
 
+            if default_path_template.is_partial():
+                raise ValueError(
+                    'default path template must specify full path')
+
         self._default_path_template = default_path_template
 
         for k in args:
@@ -1446,14 +1450,15 @@ class KeyStore:
         path_templates = []
         if isinstance(k, tuple):
             k, pts = k
-            if isinstance(pts, BIP32PathTemplate):
+            if isinstance(pts, (str, BIP32PathTemplate)):
                 # single path template
-                path_templates.append(pts)
+                path_templates.append(BIP32PathTemplate(pts))
             else:
                 # possibly an iterable of templates
                 for pt in pts:
-                    ensure_isinstance(pt, BIP32PathTemplate, 'path template')
-                    path_templates.append(pt)
+                    ensure_isinstance(pt, (str, BIP32PathTemplate),
+                                      'path template')
+                    path_templates.append(BIP32PathTemplate(pt))
 
                 # Note: cannot do `if not pts` because it might be a generator
                 if not path_templates:
