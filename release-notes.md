@@ -1,6 +1,6 @@
 # python-bitcointx release notes
 
-## v1.0.3.dev0
+## v1.0.3
 
 Improvements related to PSBT and BIP32 paths handling.
 
