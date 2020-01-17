@@ -68,7 +68,7 @@ consensus critical and non-consensus-critical.
 
     bitcointx.core            - Basic core definitions, datastructures, and
                                 (context-independent) validation
-    bitcointx.core.key        - ECC pubkeys
+    bitcointx.core.key        - ECC keys, BIP32Paths
     bitcointx.core.script     - Scripts and opcodes
     bitcointx.core.scripteval - Script evaluation/verification
     bitcointx.core.psbt       - BIP174 Partially-signed transactions
