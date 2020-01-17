@@ -2,6 +2,25 @@
 
 ## v1.0.3.dev0
 
+Improvements related to PSBT and BIP32 paths handling.
+
+This version introduces BIP32 path templates and makes `KeyStore` require
+association of extended keys with these templates. Templates are the same as
+BIP32 paths, but indexes can be specified as ranges (`[23-55]`) or wildcards
+(`*`). For exmple, a template that allows BIP44,BIP49 and BIP84 paths with last
+index going up to 50000, will look like `m/[44,49,84]'/0'/0'/[0-1]/[0-50000]`.
+
+In v1.0.2, PSBT support was introduced along with `KeyStore` class that made
+signing PSBT convenient, but checking that derivation paths specified in PSBT
+are sane was not convenient. Now `KeyStore` by default requires that any extended
+key have `BIP32PathTemplate` associated with it (but this can be bypassed via
+`require_path_templates=False` argument). Default path template can be specified
+at `KeyStore` creation with `default_path_template` argument (it can be a string
+or `BIP32PathTemplate`). To specify individual path for certain extended key,
+supply a tuple of `(key, <path_template>)` or `(key, [<tmpl1>, <tmpl2>, ...])`
+to `KeyStore`. Please refer to `bitcointx/tests/test_keystore.py` and
+`examples/sign-psbt.py` for usage examples.
+
 Breaking changes:
 
 * `KeyStore` now accepts extended keys only with specified path templates by default
@@ -18,7 +37,7 @@ Breaking changes:
 * Calling `KeyStore`'s `get_privkey()` and `get_pubkey()` without second argument
   specified will search only for non-extended keys. To get priv/pub of extended keys
   without derivation, `KeyDerivationInfo` with empty (`BIP32Path('')`
-  or `BIP32Path('m')` has to be specified.
+  or `BIP32Path('m')`) has to be specified.
 * KeyDerivationInfo's `master_fingerprint` renamed to `master_fp`,
   and KeyDerivationInfo now does not store pubkeys. Derivation maps in `PSBT_Input`
   and `PSBT_Output` now map from `pubkey` to `PSBT_KeyDerivationInfo`
