@@ -1433,9 +1433,10 @@ class KeyStore:
 
     @classmethod
     def from_iterable(cls: Type[T_KeyStore],
-                      iterable: Iterable[T_KeyStoreKeyArg]
+                      iterable: Iterable[T_KeyStoreKeyArg],
+                      **kwargs
                       ) -> T_KeyStore:
-        kstore = cls()
+        kstore = cls(**kwargs)
         for k in iterable:
             kstore.add_key(k)
         return kstore
