@@ -151,6 +151,7 @@ class Test_KeyStore(unittest.TestCase):
     def test_path_template_enforcement(self) -> None:
         xpriv1 = CCoinExtKey('xprv9s21ZrQH143K4TFwadu5VoGfAChTWXUw49YyTWE8SRqC9ZC9AQpHspzgbAcScTmC4MURiMT7pmCbci5oKbWijJmARiUeRiLXYehCtsoVdYf')
         xpriv2 = CCoinExtKey('xprv9s21ZrQH143K3QgBvK4tkeHuvuWc6KETTTcgGQ4NmW7g16AtCPV4hZpujiimpLM9ivFPgsMdNNVuVUnDwChutxczNKYHzP1Mo5HuqG7CNYv')
+        assert xpriv2.derivation_info
         assert len(xpriv2.derivation_info.path) == 0
         priv1 = CCoinKey('L27zAtDgjDC34sG5ZSey1wvdZ9JyZsNnvZEwbbZYWUYXXQtgri5R')
         xpub1 = CCoinExtPubKey('xpub69b6hm71WMe1PGpgUmaDPkbxYoTzpmswX8KGeinv7SPRcKT22RdMM4416kqtEUuXqXCAi7oGx7tHwCRTd3JHatE3WX1Zms6Lgj5mrbFyuro')

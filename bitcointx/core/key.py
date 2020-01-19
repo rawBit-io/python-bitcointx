@@ -1370,10 +1370,12 @@ class KeyDerivationInfo:
 T_KeyStoreKeyArg = Union[CKeyBase, CPubKey, CExtKeyBase, CExtPubKeyBase,
                          Tuple[CExtKeyBase,
                                Union[BIP32PathTemplate,
-                                     Iterable[BIP32PathTemplate]]],
+                                     Iterable[BIP32PathTemplate],
+                                     str, Iterable[str]]],
                          Tuple[CExtPubKeyBase,
                                Union[BIP32PathTemplate,
-                                     Iterable[BIP32PathTemplate]]]]
+                                     Iterable[BIP32PathTemplate],
+                                     str, Iterable[str]]]]
 T_KeyStore = TypeVar('T_KeyStore', bound='KeyStore')
 
 
@@ -1438,7 +1440,7 @@ class KeyStore:
     @classmethod
     def from_iterable(cls: Type[T_KeyStore],
                       iterable: Iterable[T_KeyStoreKeyArg],
-                      **kwargs
+                      **kwargs: Any
                       ) -> T_KeyStore:
         kstore = cls(**kwargs)
         for k in iterable:
