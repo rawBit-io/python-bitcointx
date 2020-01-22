@@ -1071,6 +1071,10 @@ class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
 
         for pos, elt in enumerate(path.split('/')):
             if elt == '':
+                if path == '':
+                    raise ValueError(
+                        'empty non-partial path must be specified as "m" '
+                        '(without slash)')
                 # m/// is probably a result of the error, where indexes
                 # for some reason was empty strings. Be strict and not allow that.
                 raise ValueError('duplicate slashes are not allowed')
