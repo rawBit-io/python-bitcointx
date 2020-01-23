@@ -1416,6 +1416,23 @@ class KeyStore:
                  ] = None,
                  require_path_templates: bool = True
                  ) -> None:
+        """
+        external_privkey_lookup: if supplied, this callback will be used
+        to lookup privkeys not found in KeyStore. Pubkey lookup will also call
+        this callback, and if privkey is found, will use its pubkey.
+
+        external_pubkey_lookup: if supplied, this callback will be used
+        to lookup pubkeys not found in KeyStore. Privkey lookup will not use
+        this callback.
+
+        default_path_template: if supplied, the will be used as path template
+        for any extended key that does not have its path template specified.
+
+        require_path_templates: default True. If False, then extended keys
+        without path templates will be allowed to be added to KeyStore, and
+        key lookup for these keys will not restrict derivation paths in any way
+        """
+
         self._privkeys = {}
         self._pubkeys = {}
         self._xpubkeys = {}
