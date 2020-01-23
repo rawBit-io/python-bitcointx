@@ -1,5 +1,15 @@
 # python-bitcointx release notes
 
+## v1.0.4.dev0
+
+Breaking changes:
+
+* `satoshi_to_coins` now returns `decimal.Decimal` rather than `float`.
+  This is to prevent rounding errors when CoreParams specify `MAX_MONEY` that
+  is beyond the range that can be safely represented with `float` without loss
+  of precision, or `satoshi_to_coins` is called with `check_range=False` with
+  value outside MoneyRange.
+
 ## v1.0.3
 
 Improvements related to PSBT and BIP32 paths handling.

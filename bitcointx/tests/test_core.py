@@ -51,6 +51,7 @@ class Test_Money(unittest.TestCase):
         self.assertTrue(MoneyRange(0))
         self.assertTrue(MoneyRange(100000))
         max_satoshi = coins_to_satoshi(21000000)
+        self.assertEqual(satoshi_to_coins(max_satoshi), 21000000)
         self.assertTrue(MoneyRange(max_satoshi))  # Maximum money on Bitcoin network
         self.assertFalse(MoneyRange(max_satoshi+1))
         with self.assertRaises(ValueError):
@@ -66,7 +67,7 @@ class Test_Money(unittest.TestCase):
         class CoreHighMaxParams(CoreBitcoinParams, CoreBitcoinClass):
             @classgetter
             def MAX_MONEY(self):
-                return 22000000 * self.COIN
+                return 10**100 * self.COIN
 
         class WalletHighMaxClassDispatcher(WalletBitcoinClassDispatcher):
             ...
@@ -83,8 +84,9 @@ class Test_Money(unittest.TestCase):
                 satoshi_to_coins(-1)
             self.assertTrue(MoneyRange(0))
             self.assertTrue(MoneyRange(100000))
-            max_satoshi = coins_to_satoshi(22000000)
-            self.assertTrue(MoneyRange(max_satoshi))  # Maximum money on Bitcoin network
+            max_satoshi = coins_to_satoshi(10**100)
+            self.assertEqual(satoshi_to_coins(max_satoshi), 10**100)
+            self.assertTrue(MoneyRange(max_satoshi))
             self.assertFalse(MoneyRange(max_satoshi+1))
             with self.assertRaises(ValueError):
                 coins_to_satoshi(max_satoshi+1)

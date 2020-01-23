@@ -270,16 +270,16 @@ def coins_to_satoshi(value: Union[int, float, decimal.Decimal],
                      check_range: bool = True) -> int:
     """Simple utility function to convert from coins amount
     expressed as a possibly fractional value - of type float or Decimal
-    (or int, if the value the value in coins is not fractional),
+    (or int, if the value value in coins is not fractional),
     to integer satoshi amount. essentially multiplies the value
     by CoreCoinParams.COIN with rounding, type conversion,
-    and bounds checking (or without bounds checking, if check_range=False"""
+    and bounds checking (or without bounds checking, if check_range=False)"""
 
     # Sole number of coins can be expressed as int, so we allow int
     # in addition to fractional types
     ensure_isinstance(value, (int, float, decimal.Decimal), 'value in coins')
 
-    result = int(round(float(value) * CoreCoinParams.COIN))
+    result = int(round(decimal.Decimal(value) * CoreCoinParams.COIN))
 
     if check_range:
         if not MoneyRange(result):
@@ -289,7 +289,7 @@ def coins_to_satoshi(value: Union[int, float, decimal.Decimal],
     return result
 
 
-def satoshi_to_coins(value: int, check_range: bool = True) -> float:
+def satoshi_to_coins(value: int, check_range: bool = True) -> decimal.Decimal:
     """Simple utility function to convert from
     integer satoshi amonut to floating-point coins amount.
     does type checks and conversions, as well as bounds checking.
@@ -302,7 +302,8 @@ def satoshi_to_coins(value: int, check_range: bool = True) -> float:
         if not MoneyRange(value):
             raise ValueError('supplied value ({}) is outside MoneyRange'
                              .format(value))
-    return float(float(value) / CoreCoinParams.COIN)
+
+    return decimal.Decimal(value) / CoreCoinParams.COIN
 
 
 def get_size_of_compact_size(size: int) -> int:
