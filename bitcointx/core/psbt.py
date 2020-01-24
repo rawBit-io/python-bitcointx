@@ -834,6 +834,8 @@ class PSBT_Input(Serializable):
                     return self._got_single_sig(key.pub, sig,
                                                 is_witness=True,
                                                 finalize=finalize)
+                return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=1,
+                                          is_final=False)
             elif s.is_witness_v0_scripthash():
                 if not ws:
                     raise ValueError(
@@ -908,6 +910,8 @@ class PSBT_Input(Serializable):
                     return self._got_single_sig(key.pub, sig,
                                                 is_witness=False,
                                                 finalize=finalize)
+                return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=1,
+                                          is_final=False)
             elif spk.is_p2sh():
                 if not rds:
                     raise ValueError(
