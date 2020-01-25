@@ -77,6 +77,18 @@ DEFAULT_USER_AGENT = "AuthServiceProxy/0.1"
 DEFAULT_HTTP_TIMEOUT = 30
 
 
+class DecimalJSONEncoder(json.JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if isinstance(o, decimal.Decimal):
+            r = float(o)
+            if f'{r:.08f}' != f'{o:.08f}':
+                raise TypeError(
+                    f'value {o!r} lost precision beyond acceptable range '
+                    f'when converted to float: {r:.08f} != {o:.08f}')
+            return r
+        return super().default(o)
+
+
 class JSONRPCError(Exception):
     """JSON-RPC protocol error base class
 
@@ -349,7 +361,8 @@ class RPCCaller:
         postdata = json.dumps({'version': '1.1',
                                'method': service_name,
                                'params': args,
-                               'id': self.__id_count})
+                               'id': self.__id_count},
+                              cls=DecimalJSONEncoder)
 
         headers = {
             'Host': self.__url.hostname or '',
@@ -381,7 +394,7 @@ class RPCCaller:
         if self.__conn is None:
             raise RuntimeError('connection is not configured')
 
-        postdata = json.dumps(list(rpc_call_list))
+        postdata = json.dumps(list(rpc_call_list), cls=DecimalJSONEncoder)
 
         headers = {
             'Host': self.__url.hostname or '',
@@ -451,4 +464,5 @@ __all__ = (
     'InWarmupError',
     'RPCCaller',
     'HTTPClient_Type',
+    'DecimalJSONEncoder',
 )

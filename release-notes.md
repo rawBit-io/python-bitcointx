@@ -10,6 +10,14 @@ Breaking changes:
   of precision, or `satoshi_to_coins` is called with `check_range=False` with
   value outside MoneyRange.
 
+Non-breaking changes:
+
+* json encoding in `bitcointx.rpc` now hanles Decimal values while only standard
+  json module is imported (`DecimalJSONEncoder` is added). The conversion
+  routine in this class also checks that conversion did not result in precision
+  loss up to 8 decimal points with `f'{r:.08f}' != f'{o:.08f}'` check, and
+  raises TypeError if the check fails.
+
 ## v1.0.3
 
 Improvements related to PSBT and BIP32 paths handling.
