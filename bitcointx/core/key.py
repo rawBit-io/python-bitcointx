@@ -958,7 +958,7 @@ class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
                     raise ValueError(
                         'is_partial argument is specified, but does not '
                         'match the actual path string (which specifies '
-                        '{} path)'.format('partial' if is_partial else 'full'))
+                        '{} path)'.format('partial' if partial else 'full'))
         elif isinstance(path, BIP32PathGeneric):
             if hardened_marker is None:
                 hardened_marker = path._hardened_marker
