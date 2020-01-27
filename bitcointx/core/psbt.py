@@ -1305,10 +1305,19 @@ class PSBT_Output(Serializable):
                 raise ValueError(
                     f'redeem script is specified for native segwit output '
                     f'at index {self.index}')
-            if not ws:
-                raise ValueError(
-                    f'witness script is not specified for native segwit '
-                    f'output at index {self.index}')
+
+            if spk.is_witness_v0_keyhash():
+                if ws:
+                    raise ValueError(
+                        f'witness script is specified for native segwit '
+                        f'p2wpkh output at index {self.index}')
+            elif spk.is_witness_v0_scripthash():
+                if not ws:
+                    raise ValueError(
+                        f'witness script is not specified for native segwit '
+                        f'p2wsh output at index {self.index}')
+            else:
+                raise ValueError('unsupported scriptPubKey type')
         elif spk.is_p2pkh():
             if rds:
                 raise ValueError(
@@ -1325,15 +1334,25 @@ class PSBT_Output(Serializable):
                     f'at index {self.index}')
 
             if rds.is_witness_scriptpubkey():
-                if not ws:
+                if rds.is_witness_v0_keyhash():
+                    if ws:
+                        raise ValueError(
+                            f'witness script is specified for p2sh-wrapped '
+                            f'p2wpkh segwit output at index {self.index}')
+                elif rds.is_witness_v0_scripthash():
+                    if not ws:
+                        raise ValueError(
+                            f'witness script is not specified for '
+                            f'p2sh-wrapped p2wsh segwit output '
+                            f'at index {self.index}')
+                else:
                     raise ValueError(
-                        f'witness script is not specified for p2sh-wrapped '
-                        f'segwit output at index {self.index}')
-            else:
-                if ws:
-                    raise ValueError(
-                        f'witness script is specified for '
-                        f'non-segwit p2sh output at index {self.index}')
+                        'unsupported scriptPubKey type (that was p2sh-wrapped)'
+                    )
+            elif ws:
+                raise ValueError(
+                    f'witness script is specified for '
+                    f'non-segwit p2sh output at index {self.index}')
         else:
             raise ValueError('unsupported scriptPubKey type')
 
