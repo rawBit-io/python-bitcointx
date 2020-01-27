@@ -370,6 +370,7 @@ class PSBT_Input(Serializable):
 
     def __init__(
         self, *,
+        unsigned_tx: Optional[CTransaction] = None,
         utxo: Optional[Union[CTransaction, CTxOut]] = None,
         partial_sigs: Optional[Dict[CPubKey, bytes]] = None,
         sighash_type: Optional[int] = None,
@@ -385,6 +386,7 @@ class PSBT_Input(Serializable):
         unknown_fields: Optional[List[PSBT_UnknownTypeData]] = None,
 
         allow_unknown_sighash_types: bool = False,
+        allow_convert_to_witness_utxo: bool = False,
         index: Optional[int] = None,
     ) -> None:
         def descr(msg: str) -> str:
@@ -397,6 +399,10 @@ class PSBT_Input(Serializable):
             if index < 0:
                 raise ValueError('index is invalid or unspecified')
 
+            if unsigned_tx and index >= len(unsigned_tx.vin):
+                raise ValueError(
+                    'index is beyond length of inputs of unsigned_tx')
+
         self.index = index
 
         if utxo is not None:
@@ -405,8 +411,6 @@ class PSBT_Input(Serializable):
                 raise ValueError('Invalid CTxOut provided for utxo')
             if isinstance(utxo, CTransaction) and utxo.is_null():
                 raise ValueError('Empty CTransaction provided for utxo')
-
-        self.utxo = utxo
 
         if partial_sigs is None:
             partial_sigs = OrderedDict()
@@ -433,11 +437,32 @@ class PSBT_Input(Serializable):
         ensure_isinstance(redeem_script, CScript, descr('redeem script'))
         self.redeem_script = redeem_script
 
-        if witness_script:
-            if not utxo or not isinstance(utxo, CTxOut):
+        def convert_to_witness_utxo(utxo: CTransaction) -> CTxOut:
+            assert isinstance(utxo, CTransaction)
+            assert self.index is not None
+            prevout_index = utxo.vin[self.index].prevout.n
+            if prevout_index >= len(utxo.vout):
                 raise ValueError(
-                    f'witness script is supplied, but utxo is '
-                    f'{"not supplied" if not utxo else "not a witness utxo"}')
+                    'prevout index in unsigned_tx is beyond the '
+                    'length of utxo.vout')
+            return utxo.vout[prevout_index]
+
+        if witness_script:
+            if not utxo:
+                raise ValueError(
+                    f'witness script is supplied, but utxo is not supplied')
+            if not isinstance(utxo, CTxOut):
+                if allow_convert_to_witness_utxo and unsigned_tx and \
+                        self.index is not None:
+                    utxo = convert_to_witness_utxo(utxo)
+                elif allow_convert_to_witness_utxo:
+                    raise ValueError(
+                        'cannot convert non-witness utxo to witness utxo, '
+                        'either usnigned_tx or input index is not supplied')
+                else:
+                    raise ValueError(
+                        'witness script is supplied, but utxo is '
+                        'not a witness utxo')
 
         ensure_isinstance(witness_script, CScript, descr('witness script'))
         self.witness_script = witness_script
@@ -458,10 +483,21 @@ class PSBT_Input(Serializable):
         self.final_script_sig = final_script_sig
 
         if final_script_witness:
-            if not utxo or not isinstance(utxo, CTxOut):
-                raise ValueError(
-                    f'final_script_witness is supplied, but utxo is '
-                    f'{"not supplied" if not utxo else "not a witness utxo"}')
+            if not utxo:
+                raise ValueError('final_script_witness is supplied, '
+                                 'but utxo is not supplied')
+            if not isinstance(utxo, CTxOut):
+                if allow_convert_to_witness_utxo and unsigned_tx and \
+                        self.index is not None:
+                    utxo = convert_to_witness_utxo(utxo)
+                elif allow_convert_to_witness_utxo:
+                    raise ValueError(
+                        'cannot convert non-witness utxo to witness utxo, '
+                        'either usnigned_tx or input index is not supplied')
+                else:
+                    raise ValueError(
+                        'final_script_witness is supplied, but utxo is '
+                        'not a witness utxo')
 
         ensure_isinstance(final_script_witness, CScriptWitness,
                           descr('final script witness'))
@@ -491,6 +527,8 @@ class PSBT_Input(Serializable):
             ensure_isinstance(u_field, PSBT_UnknownTypeData,
                               descr('contents of unkown type'))
         self.unknown_fields = unknown_fields
+
+        self.utxo = utxo
 
     @classmethod
     def from_instance(cls: Type[T_PSBT_Input],
@@ -641,6 +679,7 @@ class PSBT_Input(Serializable):
 
     def _got_single_sig(self, pub: CPubKey, sig: bytes, *,
                         is_witness: bool = True,
+                        script_sig_for_witness: Optional[CScript] = None,
                         finalize: bool = True
                         ) -> PSBT_InputSignInfo:
         if self.final_script_sig or self.final_script_witness:
@@ -654,7 +693,8 @@ class PSBT_Input(Serializable):
                     f'input {self.index} does not match the '
                     f'last byte of the signature')
             if is_witness:
-                self.final_script_sig = CScript()
+                assert script_sig_for_witness is not None
+                self.final_script_sig = script_sig_for_witness
                 self.final_script_witness = CScriptWitness([sig, pub])
             else:
                 self.final_script_sig = CScript([sig, pub])
@@ -731,12 +771,18 @@ class PSBT_Input(Serializable):
             "unspecified sighash_type must be represented by None"
 
         if self.final_script_witness:
-            assert isinstance(self.utxo, CTxOut)
-            self._check_nonfinal_fields_empty()
-            if self.final_script_sig and \
-                    self.utxo.scriptPubKey.is_witness_scriptpubkey():
+            if not isinstance(self.utxo, CTxOut):
                 raise ValueError(
-                    'final_script_sig is present for native segwit input')
+                    'final_script_witness is present for non-segwit input')
+            self._check_nonfinal_fields_empty()
+            if self.final_script_sig:
+                if self.utxo.scriptPubKey.is_witness_scriptpubkey():
+                    raise ValueError(
+                        'final_script_sig is present for native segwit input')
+            elif self.utxo.scriptPubKey.is_p2sh():
+                raise ValueError(
+                    'final_script_sig is not present for p2sh-wrapped '
+                    'segwit input')
             return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=0,
                                       is_final=True)
 
@@ -822,18 +868,18 @@ class PSBT_Input(Serializable):
                             f'the pubkey in partial_sigs for p2wpkh input '
                             f'at index {self.index} does not match the '
                             f'keyhash for the input')
-                    return self._got_single_sig(pub, self.partial_sigs[pub],
-                                                is_witness=True,
-                                                finalize=finalize)
+                    return self._got_single_sig(
+                        pub, self.partial_sigs[pub], is_witness=True,
+                        script_sig_for_witness=script_sig, finalize=finalize)
 
                 key_id = s.pubkey_hash()
                 derinfo = self._get_derinfo_by_key_id(key_id)
                 key = key_store.get_privkey(key_id, derinfo)
                 if key:
                     sig = key.sign(sighash) + bytes([sighash_type])
-                    return self._got_single_sig(key.pub, sig,
-                                                is_witness=True,
-                                                finalize=finalize)
+                    return self._got_single_sig(
+                        key.pub, sig, is_witness=True,
+                        script_sig_for_witness=script_sig, finalize=finalize)
                 return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=1,
                                           is_final=False)
             elif s.is_witness_v0_scripthash():
@@ -900,6 +946,7 @@ class PSBT_Input(Serializable):
                             f'at index {self.index} does not match the '
                             f'keyhash for the input')
                     return self._got_single_sig(pub, self.partial_sigs[pub],
+                                                is_witness=False,
                                                 finalize=finalize)
 
                 key_id = spk.pubkey_hash()
@@ -945,7 +992,6 @@ class PSBT_Input(Serializable):
 
     @classmethod
     def stream_deserialize(cls: Type[T_PSBT_Input], f: ByteStream_Type,
-                           allow_unknown_sighash_types: bool = False,
                            index: Optional[int] = None,
                            **kwargs: Any) -> T_PSBT_Input:
 
@@ -1043,8 +1089,7 @@ class PSBT_Input(Serializable):
                    proof_of_reserves_commitment=proof_of_reserves_commitment,
                    proprietary_fields=proprietary_fields,
                    unknown_fields=unknown_fields,
-                   allow_unknown_sighash_types=allow_unknown_sighash_types,
-                   index=index)
+                   index=index, **kwargs)
 
     def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
         if self.utxo is not None:
@@ -1644,7 +1689,7 @@ class PartiallySignedTransaction(Serializable):
     @classmethod
     def from_base64_or_binary(
         cls: Type[T_PartiallySignedTransaction], data: Union[bytes, str],
-        validate: bool = True
+        validate: bool = True, **kwargs: Any
     ) -> T_PartiallySignedTransaction:
         if isinstance(data, str):
             if data[:len(PSBT_MAGIC_HEADER_BASE64)] != \
@@ -1659,25 +1704,28 @@ class PartiallySignedTransaction(Serializable):
             raise TypeError('type of data is not str or bytes')
 
         if data_b[:len(PSBT_MAGIC_HEADER_BYTES)] == PSBT_MAGIC_HEADER_BYTES:
-            return cls.from_binary(bytes(data_b))
+            return cls.from_binary(bytes(data_b), **kwargs)
         elif (data_b[:len(PSBT_MAGIC_HEADER_BASE64)] ==
               PSBT_MAGIC_HEADER_BASE64.encode('ascii')):
             return cls.deserialize(base64.b64decode(data_b.decode('ascii'),
-                                                    validate=validate))
+                                                    validate=validate),
+                                   **kwargs)
         else:
             raise ValueError(
                 'magic bytes at the start do not match PSBT magic bytes')
 
     @classmethod
-    def from_binary(cls: Type[T_PartiallySignedTransaction], data: bytes
+    def from_binary(cls: Type[T_PartiallySignedTransaction], data: bytes,
+                    **kwargs: Any
                     ) -> T_PartiallySignedTransaction:
-        return cls.deserialize(data)
+        return cls.deserialize(data, **kwargs)
 
     @classmethod
     def from_base64(cls: Type[T_PartiallySignedTransaction], b64_data: str,
-                    validate: bool = True
+                    validate: bool = True, **kwargs: Any
                     ) -> T_PartiallySignedTransaction:
-        return cls.deserialize(base64.b64decode(b64_data, validate=validate))
+        return cls.deserialize(base64.b64decode(b64_data, validate=validate),
+                               **kwargs)
 
     def to_base64(self) -> str:
         return base64.b64encode(self.serialize()).decode('ascii')
@@ -1749,7 +1797,7 @@ class PartiallySignedTransaction(Serializable):
         for input_index in range(len(unsigned_tx.vin)):
             inputs.append(
                 PSBT_Input.stream_deserialize(
-                    f, index=input_index, **kwargs))
+                    f, index=input_index, unsigned_tx=unsigned_tx, **kwargs))
 
         outputs = []
         for output_index in range(len(unsigned_tx.vout)):

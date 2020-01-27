@@ -2,6 +2,12 @@
 
 ## v1.0.4.dev0
 
+Fixes:
+
+* While finalizing p2sh-p2wpkh PSBT input, `final_script_sig` was not set
+* Sanity checks for `PSBT_Output` incorrectly expected witness script to
+  be present for p2wpkh/p2sh-p2wpkh outputs
+
 Breaking changes:
 
 * `satoshi_to_coins` now returns `decimal.Decimal` rather than `float`.
@@ -17,6 +23,9 @@ Non-breaking changes:
   routine in this class also checks that conversion did not result in precision
   loss up to 8 decimal points with `f'{r:.08f}' != f'{o:.08f}'` check, and
   raises TypeError if the check fails.
+* PSBT deserialization code can now convert non-witness UTXO to witness UTXO
+  if `allow_convert_to_witness_utxo=True` is passed to `deserialize()`
+  (or `from_base64()`, `from_binary()`, `from_base64_or_binary()`)
 
 ## v1.0.3
 
