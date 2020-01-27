@@ -920,6 +920,11 @@ class PSBT_Input(Serializable):
             prevout_index = unsigned_tx.vin[self.index].prevout.n
             spk = self.utxo.vout[prevout_index].scriptPubKey
 
+            if spk.is_witness_scriptpubkey():
+                raise ValueError(
+                    f'witness scritpubkey is found for non-witness UTXO '
+                    f'at index {self.index}')
+
             def calc_sighash(script_for_sighash: CScript) -> bytes:
                 assert self.index is not None
                 return script_for_sighash.sighash(
@@ -984,7 +989,7 @@ class PSBT_Input(Serializable):
                 return None
         else:
             raise AssertionError(
-                f'type of utxo in PSBT input at index {self.index} '
+                f'type of UTXO in PSBT input at index {self.index} '
                 f'is expected to be CTxOut or CTransaction, '
                 f'but is actually {self.utxo.__class__.name}')
 
