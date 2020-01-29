@@ -26,6 +26,9 @@ Non-breaking changes:
 * PSBT deserialization code can now convert non-witness UTXO to witness UTXO
   if `allow_convert_to_witness_utxo=True` is passed to `deserialize()`
   (or `from_base64()`, `from_binary()`, `from_base64_or_binary()`)
+* `KeyStore` got `replace_external_privkey_lookup()` and 
+  `replace_external_pubkey_lookup()` methods to set key lookup callbacks on
+  existing KeyStore instance. The methods return previous callback value.
 
 ## v1.0.3
 

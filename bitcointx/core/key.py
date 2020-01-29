@@ -1458,6 +1458,26 @@ class KeyStore:
         self._external_privkey_lookup = external_privkey_lookup
         self._external_pubkey_lookup = external_pubkey_lookup
 
+    def replace_external_privkey_lookup(
+        self,
+        callback: Optional[Callable[[bytes, Optional[KeyDerivationInfo]],
+                                    Optional[CKeyBase]]] = None
+    ) -> Optional[Callable[[bytes, Optional[KeyDerivationInfo]],
+                           Optional[CKeyBase]]]:
+        prev_cb = self._external_privkey_lookup
+        self._external_privkey_lookup = callback
+        return prev_cb
+
+    def replace_external_pubkey_lookup(
+        self,
+        callback: Optional[Callable[[bytes, Optional[KeyDerivationInfo]],
+                                    Optional[CPubKey]]] = None
+    ) -> Optional[Callable[[bytes, Optional[KeyDerivationInfo]],
+                           Optional[CPubKey]]]:
+        prev_cb = self._external_pubkey_lookup
+        self._external_pubkey_lookup = callback
+        return prev_cb
+
     @classmethod
     def from_iterable(cls: Type[T_KeyStore],
                       iterable: Iterable[T_KeyStoreKeyArg],
