@@ -27,7 +27,7 @@ from .serialize import (
 )
 from . import (
     CTransaction, CTxIn, CTxOut, CTxInWitness, CTxWitness, b2x,
-    CMutableTxIn, CMutableTxOut
+    CMutableTxIn, CMutableTxOut, CheckTransaction
 )
 from .key import CPubKey, BIP32Path, KeyDerivationInfo, KeyStore
 from .script import (
@@ -1931,7 +1931,11 @@ class PartiallySignedTransaction(Serializable):
 
         tx.wit = CTxWitness(txin_witnesses)
 
-        return tx.to_immutable()
+        tx_immutable = tx.to_immutable()
+
+        CheckTransaction(tx_immutable)
+
+        return tx_immutable
 
     def get_input_amounts(self) -> Tuple[int, ...]:
         return tuple(inp.get_amount(self.unsigned_tx) for inp in self.inputs)
