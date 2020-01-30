@@ -1920,7 +1920,7 @@ class PartiallySignedTransaction(Serializable):
         sign_result = self.sign(KeyStore())
         if not sign_result.is_final:
             raise ValueError(
-                'not all inputs are have required signatures')
+                'not all inputs have required signatures')
 
         tx = self.unsigned_tx.to_mutable()
 
