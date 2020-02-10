@@ -83,7 +83,7 @@ consensus critical and non-consensus-critical.
                                 verification function, with interface compatible
                                 with VerifyScript from bitcointx.core.scripteval
 
-Note that this code is does not aim to be fully consensus-compatible with current
+Note that this code does not aim to be fully consensus-compatible with current
 bitcoin core codebase. Corner cases that is not relevant to creating valid bitcoin
 transactions is unlikely to be considered. See also note on VerifyScript usage below.
 
