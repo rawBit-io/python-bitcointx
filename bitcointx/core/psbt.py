@@ -27,7 +27,8 @@ from .serialize import (
 )
 from . import (
     CTransaction, CTxIn, CTxOut, CTxInWitness, CTxWitness, b2x,
-    CMutableTxIn, CMutableTxOut, CheckTransaction
+    CMutableTxIn, CMutableTxOut, CheckTransaction, MoneyRange,
+    CheckTransactionError
 )
 from .key import CPubKey, BIP32Path, KeyDerivationInfo, KeyStore
 from .script import (
@@ -815,6 +816,10 @@ class PSBT_Input(Serializable):
         ws = self.witness_script
 
         if isinstance(self.utxo, CTxOut):  # witness UTXO
+            if not MoneyRange(self.utxo.nValue):
+                raise ValueError(
+                    f'prevout for input at index {self.index} has value '
+                    f'out of valid range')
             spk = self.utxo.scriptPubKey
             if spk.is_witness_scriptpubkey():
                 input_descr = 'segwit native'
@@ -918,7 +923,19 @@ class PSBT_Input(Serializable):
                     f'at index {self.index}')
 
             prevout_index = unsigned_tx.vin[self.index].prevout.n
-            spk = self.utxo.vout[prevout_index].scriptPubKey
+
+            if prevout_index >= len(self.utxo.vout):
+                raise ValueError(
+                    'prevout index in unsigned_tx is beyond the '
+                    'length of utxo.vout')
+
+            prev_txout = self.utxo.vout[prevout_index]
+            if not MoneyRange(prev_txout.nValue):
+                raise ValueError(
+                    f'prevout for input at index {self.index} has value '
+                    f'out of valid range')
+
+            spk = prev_txout.scriptPubKey
 
             if spk.is_witness_scriptpubkey():
                 raise ValueError(
@@ -1165,7 +1182,14 @@ class PSBT_Input(Serializable):
             raise ValueError('index field is not set on PSBT_Input, '
                              ' cannot know which CTxIn to access')
 
-        return self.utxo.vout[unsigned_tx.vin[self.index].prevout.n].nValue
+        prevout_index = unsigned_tx.vin[self.index].prevout.n
+
+        if prevout_index >= len(self.utxo.vout):
+            raise ValueError(
+                'prevout index in unsigned_tx is beyond the '
+                'length of utxo.vout')
+
+        return self.utxo.vout[prevout_index].nValue
 
     def __repr__(self) -> str:
         partial_sigs = (', '.join(f"x('{b2x(k)}'): x('{b2x(v)}')"
@@ -1299,11 +1323,17 @@ class PSBT_Output(Serializable):
             raise ValueError(
                 'index is not set for this instance of PSBT_Output')
 
+        vout = unsigned_tx.vout[self.index]
+
+        if not MoneyRange(vout.nValue):
+            raise ValueError(
+                f'Value of output at index {self.index} is out of valid range')
+
         if not rds and not ws:
             # No information to check the outputs is supplied, that's OK
             return
 
-        spk = unsigned_tx.vout[self.index].scriptPubKey
+        spk = vout.scriptPubKey
 
         if spk.is_witness_scriptpubkey():
             if rds:
@@ -1562,8 +1592,24 @@ class PartiallySignedTransaction(Serializable):
             self._check_sanity()
 
     def _check_sanity(self) -> None:
+
+        if self.unsigned_tx.is_null():
+            return
+
+        try:
+            CheckTransaction(self.unsigned_tx)
+        except CheckTransactionError as e:
+            raise ValueError(str(e))
+
+        inputs_sum = 0
         for inp in self.inputs:
             inp._check_sanity(self.unsigned_tx)
+            if inp.utxo is not None:
+                inputs_sum += inp.get_amount(self.unsigned_tx)
+
+        if not MoneyRange(inputs_sum):
+            raise ValueError('sum of input amounts is out of valid range')
+
         for outp in self.outputs:
             outp._check_sanity(self.unsigned_tx)
 

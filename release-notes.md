@@ -1,5 +1,10 @@
 # python-bitcointx release notes
 
+## v1.0.5.dev0
+
+* Additional sanity checks for PSBT: check that input and output amounts
+  and prevout indexes are always in valid range
+
 ## v1.0.4
 
 Fixes and improvements in PSBT processing, use Decimal for coin values

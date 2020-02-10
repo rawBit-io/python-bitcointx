@@ -129,6 +129,21 @@ class Test_PSBT(unittest.TestCase):
                                     'Unexpected data after key type WITNESS_SCRIPT'):
             deserialize('70736274ff0100730200000001301ae986e516a1ec8ac5b4bc6573d32f83b465e23ad76167d68b38e730b4dbdb0000000000ffffffff02747b01000000000017a91403aa17ae882b5d0d54b25d63104e4ffece7b9ea2876043993b0000000017a914b921b1ba6f722e4bfa83b6557a3139986a42ec8387000000000001011f00ca9a3b00000000160014d2d94b64ae08587eefc8eeb187c601e939f9037c00010016001462e9e982fff34dd8239610316b090cd2a3b747cb000100220020876bad832f1d168015ed41232a9ea65a1815d9ef13c0ef8759f64b5b2b278a6521010025512103b7ce23a01c5b4bf00a642537cdfabb315b668332867478ef51309d06d57f8a8751ae00')
 
+        with self.assertRaisesRegex(ValueError, 'Invalid CTxOut provided for utxo'):
+            PartiallySignedTransaction.from_base64('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgD5ApUAAAAAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8AgIFq49AHABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
+
+        with self.assertRaisesRegex(ValueError, 'txout.nValue too high'):
+            PartiallySignedTransaction.from_base64('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgCAgWrj0AcAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8A8gUqAQAAABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
+
+        with self.assertRaisesRegex(ValueError, 'prevout index in unsigned_tx is beyond the length of utxo.vout'):
+            PartiallySignedTransaction.from_base64('cHNidP8BAJoCAAAAAkvEW8NnDtdNtDpsmze+Ht2LH35IJcKv00jKAlUs21RrAwAAAAD/////S8Rbw2cO1020OmybN74e3Ysffkglwq/TSMoCVSzbVGsBAAAAAP7///8CwLYClQAAAAAWABSNJKzjaUb3uOxixsvh1GGE3fW7zQD5ApUAAAAAFgAUKNw0x8HRctAgmvoevm4u1SbN7XIAAAAAAAEAnQIAAAACczMa321tVHuN4GKWKRncycI22aX3uXgwSFUKM2orjRsBAAAAAP7///9zMxrfbW1Ue43gYpYpGdzJwjbZpfe5eDBIVQozaiuNGwAAAAAA/v///wIA+QKVAAAAABl2qRT9zXUVA8Ls5iVqynLHe5/vSe1XyYisQM0ClQAAAAAWABRmWQUcjSjghQ8/uH4Bn/zkakwLtAAAAAAAAQEfQM0ClQAAAAAWABRmWQUcjSjghQ8/uH4Bn/zkakwLtAAAAA==')
+
+        with self.assertRaisesRegex(ValueError, 'sum of input amounts is out of valid range'):
+            PartiallySignedTransaction.from_base64('cHNidP8BAJoCAAAAAvA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////8DTQEWACbq2nzpGjDAfoEwiZA0vnNdRxNP3tegsbPQEBAAAAAP////8CAPkClQAAAAAWABQo3DTHwdFy0CCa+h6+bi7VJs3tcvztApUAAAAAFgAU9yTiAXuIvg0vjC19EAqBBuCGJNQAAAAAAAEBHwAAu8VkQwQAFgAU1EyyBQKdNymMjX5teAIUYQ+kIc0AAQEfAAC7xWRDBAAWABSSuJ3ylxfvTwYlM3tgxCBvDoOVXgAAAA==')
+
+        with self.assertRaisesRegex(ValueError, 'CheckTransaction\\(\\) : txout total out of range'):
+            PartiallySignedTransaction.from_base64('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgAAu8VkQwQAFgAUKNw0x8HRctAgmvoevm4u1SbN7XIAALvFZEMEABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR+AsU8BAAAAABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
+
     def test_valid_psbt(self) -> None:
         def deserialize(hex_data: str) -> PartiallySignedTransaction:
             data = x(hex_data)
