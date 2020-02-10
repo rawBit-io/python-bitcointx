@@ -64,17 +64,25 @@ class Test_Money(unittest.TestCase):
         class CoreHighMaxClassDispatcher(CoreBitcoinClassDispatcher):
             ...
 
-        class CoreHighMaxParams(CoreBitcoinParams, CoreBitcoinClass):
+        class CoreHighMaxClass(CoreBitcoinClass,
+                               metaclass=CoreHighMaxClassDispatcher):
+            ...
+
+        class CoreHighMaxParams(CoreBitcoinParams, CoreHighMaxClass):
             @classgetter
             def MAX_MONEY(self):
                 return 10**100 * self.COIN
 
-        class WalletHighMaxClassDispatcher(WalletBitcoinClassDispatcher):
+        class WalletHighMaxClassDispatcher(WalletBitcoinClassDispatcher,
+                                           depends=[CoreHighMaxClassDispatcher]):
             ...
 
         class HighMaxParams(BitcoinMainnetParams):
             NAME = 'high_maxmoney'
             WALLET_DISPATCHER = WalletHighMaxClassDispatcher
+
+        with self.assertRaises(ValueError):
+            coins_to_satoshi(10**100)
 
         with ChainParams(HighMaxParams):
             self.assertFalse(MoneyRange(-1))

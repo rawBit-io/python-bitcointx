@@ -200,7 +200,7 @@ class CoreBitcoinClass(CoreCoinClass, metaclass=CoreBitcoinClassDispatcher):
     ...
 
 
-class CoreCoinParams(CoreCoinClass):
+class CoreCoinParams(CoreCoinClass, next_dispatch_final=True):
     COIN = 100000000
     MAX_BLOCK_WEIGHT = 4000000
     WITNESS_SCALE_FACTOR = 4
