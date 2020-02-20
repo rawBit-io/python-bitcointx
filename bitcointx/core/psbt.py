@@ -915,8 +915,9 @@ class PSBT_Input(Serializable):
         elif isinstance(self.utxo, CTransaction):  # non-witness UTXO
             if self.utxo.GetTxid() != unsigned_tx.vin[self.index].prevout.hash:
                 raise ValueError(
-                    f'hash for transaction provided in utxo field for '
-                    f'non-segwit output at index {self.index}')
+                    f'txid of the transaction provided in utxo field for '
+                    f'non-segwit input at index {self.index} does not match '
+                    f'prevout hash of the input')
             if ws:
                 raise ValueError(
                     f'witness script is specified for non-segwit input '
