@@ -1639,7 +1639,7 @@ class PartiallySignedTransaction(Serializable):
             tx_assigned = True
         elif other.unsigned_tx.is_null():
             pass
-        elif self.unsigned_tx.GetHash() != other.unsigned_tx.GetHash():
+        elif self.unsigned_tx.GetTxid() != other.unsigned_tx.GetTxid():
             raise ValueError('unsigned_tx txids do not match')
 
         if not self.inputs and other.inputs:
