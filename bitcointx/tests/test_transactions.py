@@ -200,7 +200,7 @@ class Test_CTxWitness(unittest.TestCase):
             actual = repr(txout)
             self.assertEqual(actual, expected)
         T(CTxWitness([CTxInWitness(CScriptWitness([1]))]),
-            "CBitcoinTxWitness([CBitcoinTxInWitness(CScriptWitness([x('51')]))])")
+            "CBitcoinTxWitness([CBitcoinTxInWitness(CScriptWitness([x('01')]))])")
 
     def test_immutable(self):
         wit = CTxWitness([CTxInWitness(CScriptWitness([1]))])
@@ -218,7 +218,7 @@ class Test_CMutableTxWitness(unittest.TestCase):
             actual = repr(txout)
             self.assertEqual(actual, expected)
         T(CMutableTxWitness([CTxInWitness(CScriptWitness([1]))]),
-            "CBitcoinMutableTxWitness([CBitcoinMutableTxInWitness(CScriptWitness([x('51')]))])")
+            "CBitcoinMutableTxWitness([CBitcoinMutableTxInWitness(CScriptWitness([x('01')]))])")
 
     def test_clone(self):
         wit = CMutableTxWitness([CTxInWitness(CScriptWitness([1]))])
@@ -231,7 +231,7 @@ class Test_CTxInWitness(unittest.TestCase):
             actual = repr(txout)
             self.assertEqual(actual, expected)
         T(CTxInWitness(CScriptWitness([1])),
-            "CBitcoinTxInWitness(CScriptWitness([x('51')]))")
+            "CBitcoinTxInWitness(CScriptWitness([x('01')]))")
 
     def test_immutable(self):
         wit = CTxInWitness(CScriptWitness([1]))
@@ -249,7 +249,7 @@ class Test_CMutableTxInWitness(unittest.TestCase):
             actual = repr(txout)
             self.assertEqual(actual, expected)
         T(CMutableTxInWitness(CScriptWitness([1])),
-            "CBitcoinMutableTxInWitness(CScriptWitness([x('51')]))")
+            "CBitcoinMutableTxInWitness(CScriptWitness([x('01')]))")
 
     def test_clone(self):
         txinwit = CMutableTxInWitness(CScriptWitness([1]))

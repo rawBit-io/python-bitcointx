@@ -1121,8 +1121,14 @@ class CScriptWitness(ImmutableSerializable):
     stack: Tuple[bytes, ...]
 
     def __init__(self, stack: Iterable[ScriptElement_Type] = ()):
+        stack_int_adjusted = (
+            bitcointx.core._bignum.bn2vch(item)
+            if (isinstance(item, int) and not isinstance(item, CScriptOp))
+            else item
+            for item in stack
+        )
         coerced_stack = []
-        for (opcode, data, sop_idx) in CScript(stack).raw_iter():
+        for (opcode, data, sop_idx) in CScript(stack_int_adjusted).raw_iter():
             if data is not None:
                 coerced_stack.append(data)
             else:

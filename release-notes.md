@@ -2,6 +2,12 @@
 
 ## v1.0.5.dev0
 
+* Fix CScriptWitness initialization: previously, it converted small ints
+  to `OP_1`..`OP_16` opcodes, which is wrong: the witness should include
+  data as-is (encoded with bn2vch), because this is not a script.
+  But to allow to specify opcodes in the witness, `CScriptWitness.__init__`
+  now checks if the item is an instance of `CScriptOp`,
+  and if it is, places a one-byte opcode in the witness.
 * Additional sanity checks for PSBT: check that input and output amounts
   and prevout indexes are always in valid range
 
