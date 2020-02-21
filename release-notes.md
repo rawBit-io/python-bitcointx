@@ -8,6 +8,15 @@
   But to allow to specify opcodes in the witness, `CScriptWitness.__init__`
   now checks if the item is an instance of `CScriptOp`,
   and if it is, places a one-byte opcode in the witness.
+
+  Note that this might be a breaking change, because `CScriptWitness([1])`
+  previously gave `[x('51')]`, and now it gives `[x(01)]`.
+  Previous behavior was incorrect, and would lead to script execution
+  failures due to incorrect witnesses, which would be quickly noticed in
+  develpment. No github issues were raised related to this problem.
+  python-bitcoinlib did not allow to specify `int`s in a CScriptWitness,
+  so legacy code is not affected.
+
 * Additional sanity checks for PSBT: check that input and output amounts
   and prevout indexes are always in valid range
 
