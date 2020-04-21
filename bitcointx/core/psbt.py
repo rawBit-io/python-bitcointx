@@ -838,6 +838,8 @@ class PSBT_Input(Serializable):
                         f'the scriptPubKey')
                 script_sig = CScript([rds])
                 s = rds
+            elif spk.is_p2sh() and not rds:
+                return None  # redeem script is not specified, cannot sign.
             else:
                 raise ValueError(
                     f'input at index {self.index} specified as '
@@ -984,9 +986,7 @@ class PSBT_Input(Serializable):
                                           is_final=False)
             elif spk.is_p2sh():
                 if not rds:
-                    raise ValueError(
-                        f'redeem script is not specified for p2sh input '
-                        f'at index {self.index}')
+                    return None  # redeem script is not specified, cannot sign.
 
                 if rds.to_p2sh_scriptPubKey() != spk:
                     raise ValueError(

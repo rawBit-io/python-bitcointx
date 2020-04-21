@@ -20,6 +20,12 @@
 * Additional sanity checks for PSBT: check that input and output amounts
   and prevout indexes are always in valid range
 
+* Do not raise ValueError when signing PSBTs where some inputs contain
+  p2sh scriptPubKeys without specified redeem scripts.
+  This is 'cannot sign' situation rather than 'invalid structure', because
+  there is legitimate situations where redeem scripts might not be known
+  for some of the inputs at the time we want to sign other inputs.
+
 ## v1.0.4
 
 Fixes and improvements in PSBT processing, use Decimal for coin values
