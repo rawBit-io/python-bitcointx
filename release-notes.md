@@ -1,5 +1,7 @@
 # python-bitcointx release notes
 
+## v1.0.6.dev0
+
 ## v1.0.5
 
 * Fix CScriptWitness initialization: previously, it converted small ints
