@@ -1,6 +1,6 @@
 # python-bitcointx release notes
 
-## v1.0.5.dev0
+## v1.0.5
 
 * Fix CScriptWitness initialization: previously, it converted small ints
   to `OP_1`..`OP_16` opcodes, which is wrong: the witness should include
