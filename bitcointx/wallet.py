@@ -94,6 +94,8 @@ class CCoinAddress(WalletCoinClass):
     _data_length: int
     _scriptpubkey_type: str
 
+    __bytes__: Callable[[T_CCoinAddress], bytes]
+
     def __new__(cls: Type[T_CCoinAddress], s: str) -> T_CCoinAddress:
         ensure_isinstance(s, str, 'address string')
         recognized_encoding = []
