@@ -12,12 +12,13 @@
 
 # pylama:ignore=E501
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import json
 import os
 import unittest
 import logging
+import ctypes
+
+from typing import List, Iterator, Tuple, Set, Optional
 
 from binascii import unhexlify
 
@@ -33,7 +34,7 @@ from bitcointx.core.script import (
 )
 from bitcointx.core.scripteval import (
     VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH,
-    SCRIPT_VERIFY_WITNESS
+    SCRIPT_VERIFY_WITNESS, ScriptVerifyFlag_Type
 )
 from bitcointx.core.bitcoinconsensus import (
     ConsensusVerifyScript, BITCOINCONSENSUS_ACCEPTED_FLAGS,
@@ -41,11 +42,11 @@ from bitcointx.core.bitcoinconsensus import (
 )
 
 
-def parse_script(s):
-    def ishex(s):
+def parse_script(s: str) -> CScript:
+    def ishex(s: str) -> bool:
         return set(s).issubset(set('0123456789abcdefABCDEF'))
 
-    r = []
+    r: List[bytes] = []
 
     # Create an opcodes_by_name table with both OP_ prefixed names and
     # shortened ones with the OP_ dropped.
@@ -70,7 +71,12 @@ def parse_script(s):
     return CScript(b''.join(r))
 
 
-def load_test_vectors(name, skip_fixme=True):
+def load_test_vectors(
+    name: str, skip_fixme: bool = True
+) -> Iterator[
+    Tuple[CScript, CScript, CScriptWitness, int, Set[ScriptVerifyFlag_Type],
+          str, str, str]
+]:
     logging.basicConfig()
     log = logging.getLogger("Test_EvalScript")
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
@@ -114,10 +120,10 @@ def load_test_vectors(name, skip_fixme=True):
 
             assert len(to_unpack) == 5, "unexpected test data format: {}".format(to_unpack)
 
-            scriptSig, scriptPubKey, flags, expected_result, comment = to_unpack
+            scriptSig_str, scriptPubKey_str, flags, expected_result, comment = to_unpack
 
-            scriptSig = parse_script(scriptSig)
-            scriptPubKey = parse_script(scriptPubKey)
+            scriptSig = parse_script(scriptSig_str)
+            scriptPubKey = parse_script(scriptPubKey_str)
 
             flag_set = set()
             for flag in flags.split(','):
@@ -140,7 +146,10 @@ def load_test_vectors(name, skip_fixme=True):
 
 
 class Test_EvalScript(unittest.TestCase):
-    def create_test_txs(self, scriptSig, scriptPubKey, witness, nValue):
+    def create_test_txs(
+        self, scriptSig: CScript, scriptPubKey: CScript,
+        witness: CScriptWitness, nValue: int
+    ) -> Tuple[CTransaction, CTransaction]:
         txCredit = CTransaction([CTxIn(COutPoint(), CScript([OP_0, OP_0]), nSequence=0xFFFFFFFF)],
                                 [CTxOut(nValue, scriptPubKey)],
                                 witness=CTxWitness(),
@@ -151,7 +160,7 @@ class Test_EvalScript(unittest.TestCase):
                                witness=CTxWitness([CTxInWitness(witness)]))
         return (txCredit, txSpend)
 
-    def test_script(self):
+    def test_script(self) -> None:
         for t in load_test_vectors('script_tests.json'):
             (scriptSig, scriptPubKey, witness, nValue,
              flags, expected_result, comment, test_case) = t
@@ -167,7 +176,7 @@ class Test_EvalScript(unittest.TestCase):
             if expected_result != 'OK':
                 self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
 
-    def test_script_bitcoinconsensus(self):
+    def test_script_bitcoinconsensus(self) -> None:
         try:
             handle = load_bitcoinconsensus_library()
         except ImportError:
@@ -176,7 +185,7 @@ class Test_EvalScript(unittest.TestCase):
             log.warning("libbitcoinconsensus library is not avaliable, not testing bitcoinconsensus module")
             return
 
-        def do_test_bicoinconsensus(handle):
+        def do_test_bicoinconsensus(handle: Optional[ctypes.CDLL]) -> None:
             for t in load_test_vectors('script_tests.json', skip_fixme=False):
                 (scriptSig, scriptPubKey, witness, nValue,
                  flags, expected_result, comment, test_case) = t
@@ -202,8 +211,8 @@ class Test_EvalScript(unittest.TestCase):
         do_test_bicoinconsensus(handle)  # test with supplied handle
         do_test_bicoinconsensus(None)  # test with default-loaded handle
 
-    def test_p2sh_redeemscript(self):
-        def T(required, total, alt_total=None):
+    def test_p2sh_redeemscript(self) -> None:
+        def T(required: int, total: int, alt_total: Optional[int] = None) -> None:
             amount = 10000
             keys = [CKey.from_secret_bytes(os.urandom(32))
                     for _ in range(total)]
@@ -255,7 +264,7 @@ class Test_EvalScript(unittest.TestCase):
 
             witness_stack = standard_multisig_witness_stack(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([])
-            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness_stack))
+            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness_stack)).to_mutable()
 
             VerifyScript(tx.vin[0].scriptSig, scriptPubKey, tx, 0,
                          flags=(SCRIPT_VERIFY_WITNESS, SCRIPT_VERIFY_P2SH),
@@ -280,7 +289,7 @@ class Test_EvalScript(unittest.TestCase):
 
             witness_stack = standard_multisig_witness_stack(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([scriptPubKey])
-            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness_stack))
+            tx.wit.vtxinwit[0] = CTxInWitness(CScriptWitness(witness_stack)).to_mutable()
 
             VerifyScript(tx.vin[0].scriptSig,
                          scriptPubKey.to_p2sh_scriptPubKey(), tx, 0,

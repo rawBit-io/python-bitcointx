@@ -20,8 +20,10 @@ from bitcointx.core.secp256k1 import secp256k1_has_pubkey_negate
 
 
 class Test_CPubKey(unittest.TestCase):
-    def test(self):
-        def T(hex_pubkey, is_nonempty, is_fullyvalid, is_compressed):
+    def test(self) -> None:
+        def T(hex_pubkey: str,
+              is_nonempty: bool, is_fullyvalid: bool, is_compressed: bool
+              ) -> None:
             key = CPubKey(x(hex_pubkey))
             self.assertEqual(key.is_nonempty(), is_nonempty)
             self.assertEqual(key.is_fullyvalid(), is_fullyvalid)
@@ -45,7 +47,7 @@ class Test_CPubKey(unittest.TestCase):
 
 
 class Test_CKey(unittest.TestCase):
-    def test(self):
+    def test(self) -> None:
         data = x('5586e3531b857c5a3d7af6d512ec84161f4531b66daf2ad72a6f647e4164c8ae')
         k = CKey(data)
         self.assertEqual(k, data)
@@ -55,7 +57,7 @@ class Test_CKey(unittest.TestCase):
         k = CKey(data, compressed=False)
         self.assertEqual(k.pub, expected_uncompressed_pub)
 
-    def test_add_sub(self):
+    def test_add_sub(self) -> None:
         k1 = CKey(x('5586e3531b857c5a3d7af6d512ec84161f4531b66daf2ad72a6f647e4164c8ae'))
         k2 = CKey(x('9e77dd4f6693461578e32e60e9c095023e1fc98ae3eaf0c53f645d53a5ead91e'))
         k_sum = CKey.add(k1, k2)
@@ -105,7 +107,7 @@ class Test_CKey(unittest.TestCase):
                         'You should use newer version of secp256k1 library. '
                         'Tests that involve key substraction are skipped')
 
-    def test_invalid_key(self):
+    def test_invalid_key(self) -> None:
         with self.assertRaises(ValueError):
             CKey(b'\x00'*32)
 

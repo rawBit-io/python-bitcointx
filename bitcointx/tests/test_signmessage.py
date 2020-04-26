@@ -11,16 +11,19 @@
 
 import unittest
 
+from typing import Iterator, Dict, Any
+
 from bitcointx.core.secp256k1 import secp256k1_has_pubkey_recovery
-from bitcointx.wallet import CBitcoinKey
+from bitcointx.wallet import CBitcoinKey, P2PKHCoinAddress
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
 import os
 import json
 
 
-def load_test_vectors(name):
+def load_test_vectors(name: str) -> Iterator[Dict[str, Any]]:
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
-        return json.load(fd)
+        for testcase in json.load(fd):
+            yield testcase
 
 
 class Test_SignVerifyMessage(unittest.TestCase):
@@ -29,25 +32,25 @@ class Test_SignVerifyMessage(unittest.TestCase):
         not secp256k1_has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
-    def test_verify_message_simple(self):
-        address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
-        message = address
+    def test_verify_message_simple(self) -> None:
+        address = P2PKHCoinAddress("1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G")
+        message = str(address)
         signature = ("H85WKpqtNZDrajOnYDgUY+abh0KCAcOsAIOQwx2PftAbLEPRA7mzXA"
                      "/CjXRxzz0MC225pR/hx02Vf2Ag2x33kU4=")
 
-        message = BitcoinMessage(message)
+        message_to_verify = BitcoinMessage(message)
 
-        self.assertTrue(VerifyMessage(address, message, signature))
+        self.assertTrue(VerifyMessage(address, message_to_verify, signature))
 
     @unittest.skipIf(
         not secp256k1_has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
-    def test_verify_message_vectors(self):
+    def test_verify_message_vectors(self) -> None:
         for vector in load_test_vectors('signmessage.json'):
             message = BitcoinMessage(vector['address'])
             self.assertTrue(VerifyMessage(
-                vector['address'],
+                P2PKHCoinAddress(vector['address']),
                 message,
                 vector['signature']
             ))
@@ -56,24 +59,24 @@ class Test_SignVerifyMessage(unittest.TestCase):
         not secp256k1_has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
-    def test_sign_message_simple(self):
+    def test_sign_message_simple(self) -> None:
 
         key = CBitcoinKey(
             "L4vB5fomsK8L95wQ7GFzvErYGht49JsCPJyJMHpB4xGM6xgi2jvG")
-        address = "1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G"
-        message = address
+        address = P2PKHCoinAddress("1F26pNMrywyZJdr22jErtKcjF8R3Ttt55G")
+        message = str(address)
 
-        message = BitcoinMessage(message)
-        signature = SignMessage(key, message)
+        message_to_sign = BitcoinMessage(message)
+        signature = SignMessage(key, message_to_sign)
 
         self.assertTrue(signature)
-        self.assertTrue(VerifyMessage(address, message, signature))
+        self.assertTrue(VerifyMessage(address, message_to_sign, signature))
 
     @unittest.skipIf(
         not secp256k1_has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
-    def test_sign_message_vectors(self):
+    def test_sign_message_vectors(self) -> None:
         for vector in load_test_vectors('signmessage.json'):
             key = CBitcoinKey(vector['wif'])
             message = BitcoinMessage(vector['address'])

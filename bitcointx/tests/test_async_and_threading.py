@@ -17,6 +17,8 @@ import threading
 import asyncio
 import ctypes
 
+from typing import Dict, Union
+
 from bitcointx import (
     select_chain_params, get_current_chain_params, BitcoinMainnetParams
 )
@@ -37,9 +39,10 @@ from bitcointx.base58 import CBase58Data
 
 class Test_Threading(unittest.TestCase):
 
-    def test_addresses(self):
+    def test_addresses(self) -> None:
         pub = CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))
 
+        events: Dict[str, Union[threading.Event, asyncio.Event]]
         events = {
             'mainnet': threading.Event(),
             'testnet': threading.Event(),
@@ -49,20 +52,24 @@ class Test_Threading(unittest.TestCase):
         # list append is thread-safe, can use just the list.
         finished_successfully = []
 
-        def wait(name):
-            not_timed_out = events[name].wait(timeout=5.0)
+        def wait(name: str) -> None:
+            evt = events[name]
+            assert isinstance(evt, threading.Event)
+            not_timed_out = evt.wait(timeout=5.0)
             assert not_timed_out
 
-        async def wait_async(name):
-            await asyncio.wait_for(events[name].wait(), 5.0)
+        async def wait_async(name: str) -> None:
+            evt = events[name]
+            assert isinstance(evt, asyncio.Event)
+            await asyncio.wait_for(evt.wait(), 5.0)
 
-        def ready(name):
+        def ready(name: str) -> None:
             events[name].set()
 
-        def finish(name):
+        def finish(name: str) -> None:
             finished_successfully.append(name)
 
-        def check_core_modules():
+        def check_core_modules() -> None:
             # check that mutable/immutable thread-local context works
             CTransaction().to_mutable().to_immutable()
 
@@ -75,7 +82,7 @@ class Test_Threading(unittest.TestCase):
             assert err['type'] == 'illegal_argument'
             assert 'message' in err
 
-        def mainnet():
+        def mainnet() -> None:
             select_chain_params('bitcoin/mainnet')
             wait('testnet')
             a = P2PKHCoinAddress.from_pubkey(pub)
@@ -85,7 +92,7 @@ class Test_Threading(unittest.TestCase):
             finish('mainnet')
             self.assertEqual(get_current_chain_params().NAME, 'bitcoin')
 
-        async def async_mainnet():
+        async def async_mainnet() -> None:
             select_chain_params('bitcoin/mainnet')
             await wait_async('testnet')
             a = P2PKHCoinAddress.from_pubkey(pub)
@@ -95,7 +102,7 @@ class Test_Threading(unittest.TestCase):
             finish('mainnet')
             self.assertEqual(get_current_chain_params().NAME, 'bitcoin')
 
-        def testnet():
+        def testnet() -> None:
             select_chain_params('bitcoin/testnet')
             wait('regtest')
             a = P2SHCoinAddress.from_redeemScript(
@@ -108,7 +115,7 @@ class Test_Threading(unittest.TestCase):
                              'bitcoin/testnet')
             finish('testnet')
 
-        async def async_testnet():
+        async def async_testnet() -> None:
             select_chain_params('bitcoin/testnet')
             await wait_async('regtest')
             a = P2SHCoinAddress.from_redeemScript(
@@ -121,10 +128,10 @@ class Test_Threading(unittest.TestCase):
                              'bitcoin/testnet')
             finish('testnet')
 
-        def regtest():
+        def regtest() -> None:
             select_chain_params('bitcoin/regtest')
             a = P2WPKHCoinAddress.from_pubkey(pub)
-            witver, data = bitcointx.bech32.decode(
+            witver, data = bitcointx.segwit_addr.decode(
                 P2WPKHBitcoinRegtestAddress.bech32_hrp, str(a))
             assert witver == 0
             assert data == Hash160(pub)
@@ -136,10 +143,10 @@ class Test_Threading(unittest.TestCase):
                              'bitcoin/regtest')
             finish('regtest')
 
-        async def async_regtest():
+        async def async_regtest() -> None:
             select_chain_params('bitcoin/regtest')
             a = P2WPKHCoinAddress.from_pubkey(pub)
-            witver, data = bitcointx.bech32.decode(
+            witver, data = bitcointx.segwit_addr.decode(
                 P2WPKHBitcoinRegtestAddress.bech32_hrp, str(a))
             assert witver == 0
             assert data == Hash160(pub)
@@ -187,7 +194,7 @@ class Test_Threading(unittest.TestCase):
             'regtest': asyncio.Event(),
         }
 
-        async def go():
+        async def go() -> None:
             f1 = asyncio.ensure_future(async_mainnet())
             f2 = asyncio.ensure_future(async_testnet())
             f3 = asyncio.ensure_future(async_regtest())

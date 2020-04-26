@@ -27,5 +27,5 @@ from bitcointx.util import *
 
 
 class Test_Imports(unittest.TestCase):
-    def test_all_imports_dummy(self):
+    def test_all_imports_dummy(self) -> None:
         pass

@@ -2,6 +2,11 @@
 
 ## v1.0.6.dev0
 
+Typing change: pubkeys list for `standard_multisig_redeem_script` is now
+`List[CPubKey]`. Previously it was `List[Union[CPubKey, bytes, bytearray]]`,
+but it was less safe. This is only typing, though -- the function does
+not validate the pubkeys nor checks the types at runtime.
+
 ## v1.0.5
 
 * Fix CScriptWitness initialization: previously, it converted small ints

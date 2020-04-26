@@ -187,7 +187,7 @@ class Test_KeyStore(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'only make sense for extended keys'):
             ks.add_key((pub1, ''))  # type: ignore
         with self.assertRaisesRegex(ValueError, 'index template format is not valid'):
-            ks.add_key((xpub1, 'abc'))  # type: ignore
+            ks.add_key((xpub1, 'abc'))
         with self.assertRaisesRegex(TypeError, 'is expected to be an instance of '):
             ks.add_key((xpub1, [10]))  # type: ignore
         with self.assertRaisesRegex(ValueError, 'path templates must be specified'):

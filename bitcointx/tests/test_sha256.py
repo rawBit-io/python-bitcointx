@@ -22,7 +22,7 @@ from bitcointx.core.sha256 import CSHA256
 
 
 class Test_CSHA256(unittest.TestCase):
-    def test_transform(self):
+    def test_transform(self) -> None:
         hasher = CSHA256()
         in1 = b'\x80'+b'\x00'*63
         in2 = bytes([
@@ -51,7 +51,7 @@ class Test_CSHA256(unittest.TestCase):
 
         self.assertEqual(hasher.s, out2)
 
-    def test_randomhash(self):
+    def test_randomhash(self) -> None:
 
         sample_data = [
             x('13f0f62bb370b1581e0b05e4ca25e482bdd79bd1f46dca986c33ba8a6d587be5c0c4a8f68efe7eaa42e3614c2b1116543899378ba15583c018c901dcc9ad2e96df1ad1d3b4aa141949ca62c7b7d8c0107a132f15fd8026a654f9a39fb567bdf3c5da003f031aef59fabbda5f365349dcce0e59a13ad97eebadc529df9d22d259d3988247c68b0e693d2ef49c3331e6954384221fd3d8747ae99e2392d600cf040211de53c0bb03871231be6522265ef31a7efaf7d683267b225c74a1116c1df058aed85ac23c35540554e2c2c54fdc17be6c5d6cfdc27c60fe601c82f26d248dce748a96207c5a37f31759318758a9a0b2b3bc113b280e4c6e8e99f0c5b718444fa09ff7779c1e375941cf8b8700bbdddf7f3f9bfcddb14bfdd5960eaaa305867acce45a388d602dc19bd0b0d7fea1d22af3f4296d41aa9d1e084fa4afefb4b9c9db49c5ede30e91f22939d0db111e8990d8277fe0edd98f8a42e6b44b1be744b7beef2d0995e27c7644cd6fcfb749aa0152b1e55b14a696caaed1e927b698786f05c8f7fca80a14b9b3c3e0a7e3764ba2b576e5f704c6a709b3586d3b7fdc3ac7b2e5b01fe74d952732b2086c0b6106575b6d3e4ed3ddbec9082cf838f8236d20fdde9eac4ef4bf307ee4b57769c857a5961146'),

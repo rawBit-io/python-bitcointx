@@ -938,15 +938,27 @@ class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
     _hardened_marker: str
     _is_partial_path: bool  # True if path does not start from master (no 'm/')
 
-    def __init__(self, path: Union[str, 'BIP32PathGeneric[T_BIP32PathIndex]',  # noqa
-                                   Sequence[T_BIP32PathIndex]],
-                 is_partial: Optional[bool] = None,
-                 hardened_marker: Optional[str] = None):
+    def __init__(
+        self, path: Union[
+            str, 'BIP32PathGeneric[T_BIP32PathIndex]',  # noqa
+            Sequence[T_BIP32PathIndex],
+            # See comment for BIP32PathTemplateIndex for the
+            # reason to include this here (python 3.6 typechecking quirks)
+            Sequence[Sequence[Tuple[int, int]]]
+        ],
+        is_partial: Optional[bool] = None,
+        hardened_marker: Optional[str] = None
+    ) -> None:
         if hardened_marker is not None:
             if hardened_marker not in self.__class__.HARDENED_MARKERS:
                 raise ValueError('unsupported hardened_marker')
 
-        indexes: Sequence[T_BIP32PathIndex]
+        indexes: Union[
+            Sequence[T_BIP32PathIndex],
+            # See comment for BIP32PathTemplateIndex for the
+            # reason to include this here (python 3.6 typechecking quirks)
+            Sequence[Sequence[Tuple[int, int]]]
+        ]
 
         if isinstance(path, str):
             indexes, hardened_marker, partial = self._parse_string(

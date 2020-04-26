@@ -14,23 +14,28 @@ import random
 
 from binascii import unhexlify
 
+from typing import Any
+
 from bitcointx.core.serialize import (
     Serializable, VarIntSerializer, BytesSerializer, SerializationError,
     SerializationTruncationError, DeserializationExtraDataError,
-    DeserializationValueBoundsError, uint256_from_bytes, uint256_to_bytes
+    DeserializationValueBoundsError, uint256_from_bytes, uint256_to_bytes,
+    ByteStream_Type
 )
 
 
 class Test_Serializable(unittest.TestCase):
-    def test_extra_data(self):
+    def test_extra_data(self) -> None:
         """Serializable.deserialize() fails if extra data is present"""
 
         class FooSerializable(Serializable):
             @classmethod
-            def stream_deserialize(cls, f):
+            def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any
+                                   ) -> 'FooSerializable':
                 return cls()
 
-            def stream_serialize(self, f):
+            def stream_serialize(self, f: ByteStream_Type, **kwargs: Any
+                                 ) -> None:
                 pass
 
         try:
@@ -46,8 +51,8 @@ class Test_Serializable(unittest.TestCase):
 
 
 class Test_VarIntSerializer(unittest.TestCase):
-    def test(self):
-        def T(value, expected):
+    def test(self) -> None:
+        def T(value: int, expected: bytes) -> None:
             expected = unhexlify(expected)
             expected_int = VarIntSerializer.deserialize(expected)
             self.assertEqual(value, expected_int)
@@ -89,8 +94,8 @@ class Test_VarIntSerializer(unittest.TestCase):
         with self.assertRaises(DeserializationValueBoundsError):
             T(0x123456789abcdef, b'ffefcdab8967452301')
 
-    def test_truncated(self):
-        def T(serialized):
+    def test_truncated(self) -> None:
+        def T(serialized: bytes) -> None:
             serialized = unhexlify(serialized)
             with self.assertRaises(SerializationTruncationError):
                 VarIntSerializer.deserialize(serialized)
@@ -106,8 +111,8 @@ class Test_VarIntSerializer(unittest.TestCase):
 
 
 class Test_BytesSerializer(unittest.TestCase):
-    def test(self):
-        def T(value, expected):
+    def test(self) -> None:
+        def T(value: bytes, expected: bytes) -> None:
             value = unhexlify(value)
             expected = unhexlify(expected)
             actual = BytesSerializer.serialize(value)
@@ -118,8 +123,9 @@ class Test_BytesSerializer(unittest.TestCase):
         T(b'00', b'0100')
         T(b'00'*0xffff, b'fdffff' + b'00'*0xffff)
 
-    def test_truncated(self):
-        def T(serialized, ex_cls=SerializationTruncationError):
+    def test_truncated(self) -> None:
+        def T(serialized: bytes, ex_cls: type = SerializationTruncationError
+              ) -> None:
             serialized = unhexlify(serialized)
             with self.assertRaises(ex_cls):
                 BytesSerializer.deserialize(serialized)
@@ -130,7 +136,7 @@ class Test_BytesSerializer(unittest.TestCase):
 
 
 class Test_Uint256_Serialize(unittest.TestCase):
-    def test_fixed(self):
+    def test_fixed(self) -> None:
         values = []
         values.append(0)
         values.append(

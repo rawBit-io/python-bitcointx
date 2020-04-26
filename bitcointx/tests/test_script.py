@@ -14,6 +14,8 @@
 import os
 import unittest
 
+from typing import List, Any, Union
+
 from bitcointx.core import (
     x, b2x,
     CTxOut, CTxIn, CTransaction, COutPoint
@@ -34,10 +36,10 @@ from bitcointx.wallet import P2PKHCoinAddress, P2WPKHCoinAddress
 
 
 class Test_CScriptOp(unittest.TestCase):
-    def test_pushdata(self):
-        def T(data, expected):
-            data = x(data)
-            expected = x(expected)
+    def test_pushdata(self) -> None:
+        def T(data_hex: str, expected_hex: str) -> None:
+            data = x(data_hex)
+            expected = x(expected_hex)
             serialized_data = CScriptOp.encode_op_pushdata(data)
             self.assertEqual(serialized_data, expected)
 
@@ -52,7 +54,7 @@ class Test_CScriptOp(unittest.TestCase):
         T('ff'*0xffff, '4dffff' + 'ff'*0xffff)
         T('ff'*0x10000, '4e00000100' + 'ff'*0x10000)
 
-    def test_is_singleton(self):
+    def test_is_singleton(self) -> None:
         self.assertTrue(OP_0 is CScriptOp(0x00))
         self.assertTrue(OP_1 is CScriptOp(0x51))
         self.assertTrue(OP_16 is CScriptOp(0x60))
@@ -61,15 +63,15 @@ class Test_CScriptOp(unittest.TestCase):
         for i in range(0x0, 0x100):
             self.assertTrue(CScriptOp(i) is CScriptOp(i))
 
-    def test_encode_decode_op_n(self):
-        def t(n, op):
-            actual = CScriptOp.encode_op_n(n)
-            self.assertEqual(actual, op)
-            self.assertTrue(isinstance(actual, CScriptOp))
+    def test_encode_decode_op_n(self) -> None:
+        def t(n: int, op: CScriptOp) -> None:
+            actual_op = CScriptOp.encode_op_n(n)
+            self.assertEqual(actual_op, op)
+            self.assertTrue(isinstance(actual_op, CScriptOp))
 
-            actual = op.decode_op_n()
-            self.assertEqual(actual, n)
-            self.assertTrue(isinstance(actual, int))
+            actual_int = op.decode_op_n()
+            self.assertEqual(actual_int, n)
+            self.assertTrue(isinstance(actual_int, int))
 
         t(0, OP_0)
         t(1, OP_1)
@@ -98,7 +100,7 @@ class Test_CScriptOp(unittest.TestCase):
 
 
 class Test_CScript(unittest.TestCase):
-    def test_sighash(self):
+    def test_sighash(self) -> None:
         spent_amount = 1100
         pub = CKey.from_secret_bytes(os.urandom(32)).pub
         spk_legacy = P2PKHCoinAddress.from_pubkey(pub).to_scriptPubKey()
@@ -121,7 +123,7 @@ class Test_CScript(unittest.TestCase):
             # unknown sigversion
             spk_segwit.sighash(tx, 0, SIGHASH_ALL,
                                amount=spent_amount,
-                               sigversion=SIGVERSION_WITNESS_V0 + 1)
+                               sigversion=SIGVERSION_WITNESS_V0 + 1)  # type: ignore
 
         assert spk_segwit.is_witness_scriptpubkey()
         with self.assertRaises(ValueError):
@@ -137,11 +139,11 @@ class Test_CScript(unittest.TestCase):
                                amount=spent_amount,
                                sigversion=SIGVERSION_BASE)
 
-    def test_parse_standard_multisig_redeem_script(self):
-        def T(script):
+    def test_parse_standard_multisig_redeem_script(self) -> None:
+        def T(script: CScript) -> StandardMultisigScriptInfo:
             return parse_standard_multisig_redeem_script(script)
 
-        def T2(script, result):
+        def T2(script: CScript, result: StandardMultisigScriptInfo) -> None:
             info = T(script)
             self.assertEqual(info.total, result.total)
             self.assertEqual(info.required, result.required)
@@ -154,10 +156,15 @@ class Test_CScript(unittest.TestCase):
         T2(CScript([1, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]),
            StandardMultisigScriptInfo(total=2, required=1,
                                       pubkeys=pubkeys[:2]))
-        T2(CScript([11] + pubkeys[:12] + [12, OP_CHECKMULTISIG]),
+
+        # "list-any" - to workaround to
+        # 'Unsupported operand types for + (List[int] and List[CPubKey])
+        la: List[Any] = []
+
+        T2(CScript(la + [11] + pubkeys[:12] + [12, OP_CHECKMULTISIG]),
            StandardMultisigScriptInfo(total=12, required=11,
                                       pubkeys=pubkeys[:12]))
-        T2(CScript([15] + pubkeys + [15, OP_CHECKMULTISIG]),
+        T2(CScript(la + [15] + pubkeys + [15, OP_CHECKMULTISIG]),
            StandardMultisigScriptInfo(total=15, required=15, pubkeys=pubkeys))
 
         with self.assertRaises(ValueError):
@@ -176,25 +183,26 @@ class Test_CScript(unittest.TestCase):
         with self.assertRaises(ValueError):
             T(CScript([16, pubkeys[0], pubkeys[1], 2, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [b'\x0c', OP_CHECKMULTISIG]))
+            T(CScript(la + [11] + pubkeys[:12] + [b'\x0c', OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys + [14, OP_CHECKMULTISIG]))
+            T(CScript(la + [11] + pubkeys + [14, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys + pubkeys + [15, OP_CHECKMULTISIG]))
+            T(CScript(la + [11] + pubkeys + pubkeys + [15, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
             T(CScript([1, pubkeys[0], pubkeys[1], 1, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKMULTISIG]))
+            T(CScript(la + [11] + pubkeys[:12] + [11, OP_CHECKMULTISIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [11, OP_CHECKSIG]))
+            T(CScript(la + [11] + pubkeys[:12] + [11, OP_CHECKSIG]))
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12]))  # short script 1
+            T(CScript(la + [11] + pubkeys[:12]))  # short script 1
         with self.assertRaises(ValueError):
-            T(CScript([11] + pubkeys[:12] + [11]))  # short script 2
+            T(CScript(la + [11] + pubkeys[:12] + [11]))  # short script 2
 
-    def test_tokenize_roundtrip(self):
-        def T(serialized_script, expected_tokens, test_roundtrip=True):
-            serialized_script = x(serialized_script)
+    def test_tokenize_roundtrip(self) -> None:
+        def T(serialized_script_str: str, expected_tokens: List[Union[bytes, int]],
+              test_roundtrip: bool = True) -> None:
+            serialized_script = x(serialized_script_str)
             script_obj = CScript(serialized_script)
             actual_tokens = list(script_obj)
             self.assertEqual(actual_tokens, expected_tokens)
@@ -251,8 +259,8 @@ class Test_CScript(unittest.TestCase):
            2,
            OP_CHECKMULTISIG])
 
-    def test_invalid_scripts(self):
-        def T(serialized):
+    def test_invalid_scripts(self) -> None:
+        def T(serialized: str) -> None:
             with self.assertRaises(CScriptInvalidError):
                 list(CScript(x(serialized)))
 
@@ -270,10 +278,10 @@ class Test_CScript(unittest.TestCase):
         T('4effffff')
         T('4effffffff' + 'ff'*0xfffe)  # not going to test with 4GiB-1...
 
-    def test_equality(self):
+    def test_equality(self) -> None:
         # Equality is on the serialized script, not the logical meaning.
         # This is important for P2SH.
-        def T(serialized1, serialized2, are_equal):
+        def T(serialized1: str, serialized2: str, are_equal: bool) -> None:
             script1 = CScript(x(serialized1))
             script2 = CScript(x(serialized2))
             if are_equal:
@@ -293,7 +301,7 @@ class Test_CScript(unittest.TestCase):
         T('4e', '4e', True)
         T('4e', '4e00', False)
 
-    def test_add(self):
+    def test_add(self) -> None:
         script = CScript()
         script2 = script + 1
 
@@ -323,19 +331,19 @@ class Test_CScript(unittest.TestCase):
 
         # some stuff we can't add
         with self.assertRaises(TypeError):
-            script += None
+            script += None  # type: ignore
         self.assertEqual(script, b'\x09\x00\x00\x00\x00\x00\x00\x00\x00\x01')
 
         with self.assertRaises(TypeError):
-            script += [1, 2, 3]
+            script += [1, 2, 3]  # type: ignore
         self.assertEqual(script, b'\x09\x00\x00\x00\x00\x00\x00\x00\x00\x01')
 
         with self.assertRaises(TypeError):
-            script = script + None
+            script = script + None  # type: ignore
         self.assertEqual(script, b'\x09\x00\x00\x00\x00\x00\x00\x00\x00\x01')
 
-    def test_repr(self):
-        def T(script, expected_repr):
+    def test_repr(self) -> None:
+        def T(script: CScript, expected_repr: str) -> None:
             actual_repr = repr(script)
             self.assertEqual(actual_repr, expected_repr)
 
@@ -367,8 +375,8 @@ class Test_CScript(unittest.TestCase):
         T(CScript(x('614c0200')),
           "CBitcoinScript([OP_NOP, x('00')...<ERROR: PUSHDATA1: truncated data>])")
 
-    def test_is_p2sh(self):
-        def T(serialized, b):
+    def test_is_p2sh(self) -> None:
+        def T(serialized: str, b: bool) -> None:
             script = CScript(x(serialized))
             self.assertEqual(script.is_p2sh(), b)
 
@@ -378,8 +386,8 @@ class Test_CScript(unittest.TestCase):
         # NOT a P2SH txout due to the non-optimal PUSHDATA encoding
         T('a94c146567e91196c49e1dffd09d5759f6bbc0c6d4c2e587', False)
 
-    def test_is_push_only(self):
-        def T(serialized, b):
+    def test_is_push_only(self) -> None:
+        def T(serialized: str, b: bool) -> None:
             script = CScript(x(serialized))
             self.assertEqual(script.is_push_only(), b)
 
@@ -414,8 +422,8 @@ class Test_CScript(unittest.TestCase):
 
         T('61', False)
 
-    def test_is_push_only_on_invalid_pushdata(self):
-        def T(hex_script):
+    def test_is_push_only_on_invalid_pushdata(self) -> None:
+        def T(hex_script: str) -> None:
             invalid_script = CScript(x(hex_script))
             self.assertFalse(invalid_script.is_push_only())
 
@@ -431,8 +439,8 @@ class Test_CScript(unittest.TestCase):
         T('4e01000000')
         T('4e02000000ff')
 
-    def test_has_canonical_pushes(self):
-        def T(hex_script, expected_result):
+    def test_has_canonical_pushes(self) -> None:
+        def T(hex_script: str, expected_result: bool) -> None:
             script = CScript(x(hex_script))
             self.assertEqual(script.has_canonical_pushes(), expected_result)
 
@@ -480,8 +488,8 @@ class Test_CScript(unittest.TestCase):
         T('4eFFFF0000' + 'FF'*0xFFFF, False)
         T('4e00000100' + 'FF'*0x10000, True)
 
-    def test_has_canonical_pushes_with_invalid_truncated_script(self):
-        def T(hex_script):
+    def test_has_canonical_pushes_with_invalid_truncated_script(self) -> None:
+        def T(hex_script: str) -> None:
             script = CScript(x(hex_script))
             self.assertEqual(script.has_canonical_pushes(), False)
 
@@ -497,8 +505,8 @@ class Test_CScript(unittest.TestCase):
         T('4e01000000')
         T('4e02000000ff')
 
-    def test_is_unspendable(self):
-        def T(serialized, b):
+    def test_is_unspendable(self) -> None:
+        def T(serialized: str, b: bool) -> None:
             script = CScript(x(serialized))
             self.assertEqual(script.is_unspendable(), b)
 
@@ -509,8 +517,8 @@ class Test_CScript(unittest.TestCase):
         T('6a6a', True)
         T('6a51', True)
 
-    def test_is_valid(self):
-        def T(serialized, b):
+    def test_is_valid(self) -> None:
+        def T(serialized: str, b: bool) -> None:
             script = CScript(x(serialized))
             self.assertEqual(script.is_valid(), b)
 
@@ -521,9 +529,10 @@ class Test_CScript(unittest.TestCase):
         # invalid opcodes do not by themselves make a script invalid
         T('ff', True)
 
-    def test_to_p2sh_scriptPubKey(self):
-        def T(redeemScript, expected_hex_bytes):
-            redeemScript = CScript(redeemScript)
+    def test_to_p2sh_scriptPubKey(self) -> None:
+        def T(redeemScript_ops: List[Union[int, bytes]], expected_hex_bytes: str
+              ) -> None:
+            redeemScript = CScript(redeemScript_ops)
             actual_script = redeemScript.to_p2sh_scriptPubKey()
             self.assertEqual(b2x(actual_script), expected_hex_bytes)
 
@@ -540,22 +549,22 @@ class Test_CScript(unittest.TestCase):
         with self.assertRaises(ValueError):
             CScript([b'a' * 518]).to_p2sh_scriptPubKey()
 
-    def test_guards(self):
+    def test_guards(self) -> None:
         bt = b'a'
         nr = 42
         op = OP_1
         with self.assertRaises(TypeError):
-            CScript([DATA(nr)])
+            CScript([DATA(nr)])  # type: ignore
         with self.assertRaises(TypeError):
-            CScript([DATA(op)])
+            CScript([DATA(op)])  # type: ignore
         with self.assertRaises(TypeError):
-            CScript([NUMBER(bt)])
+            CScript([NUMBER(bt)])  # type: ignore
         with self.assertRaises(TypeError):
             CScript([NUMBER(op)])
         with self.assertRaises(TypeError):
-            CScript([OPCODE(bt)])
+            CScript([OPCODE(bt)])  # type: ignore
         with self.assertRaises(TypeError):
-            CScript([OPCODE(nr)])
+            CScript([OPCODE(nr)])  # type: ignore
 
         self.assertEqual(CScript([DATA(bt)]), CScript([bt]))
         self.assertEqual(CScript([NUMBER(nr)]), CScript([nr]))
@@ -563,10 +572,10 @@ class Test_CScript(unittest.TestCase):
 
 
 class Test_IsLowDERSignature(unittest.TestCase):
-    def test_high_s_value(self):
+    def test_high_s_value(self) -> None:
         sig = x('3046022100820121109528efda8bb20ca28788639e5ba5b365e0a84f8bd85744321e7312c6022100a7c86a21446daa405306fe10d0a9906e37d1a2c6b6fdfaaf6700053058029bbe')
         self.assertFalse(IsLowDERSignature(sig))
 
-    def test_low_s_value(self):
+    def test_low_s_value(self) -> None:
         sig = x('3045022100b135074e08cc93904a1712b2600d3cb01899a5b1cc7498caa4b8585bcf5f27e7022074ab544045285baef0a63f0fb4c95e577dcbf5c969c0bf47c7da8e478909d669')
         self.assertTrue(IsLowDERSignature(sig))

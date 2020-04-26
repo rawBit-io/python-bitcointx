@@ -13,6 +13,8 @@
 import unittest
 import base64
 
+from typing import Tuple, Optional
+
 from bitcointx import ChainParams
 from bitcointx.rpc import RPCCaller, split_hostport
 
@@ -29,8 +31,8 @@ class Test_RPC(unittest.TestCase):
     # For now, just test that we can create the instance.
     RPCCaller(service_url='http://user:pass@host')
 
-    def test_split_hostport(self):
-        def T(hostport, expected_pair):
+    def test_split_hostport(self) -> None:
+        def T(hostport: str, expected_pair: Tuple[str, Optional[int]]) -> None:
             (host, port) = split_hostport(hostport)
             self.assertEqual((host, port), expected_pair)
 
@@ -50,7 +52,7 @@ class Test_RPC(unittest.TestCase):
         T('[local:host].:491', ('[local:host].:491', None))
         T('[local:host]:p491', ('[local:host]:p491', None))
 
-    def test_parse_config(self):
+    def test_parse_config(self) -> None:
         conf_file_contents = """
             listen=1
             server=1

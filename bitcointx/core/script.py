@@ -1507,7 +1507,7 @@ def standard_multisig_redeem_script(
     *,
     total: int,
     required: int,
-    pubkeys: List[Union['bitcointx.core.key.CPubKey', bytes, bytearray]],
+    pubkeys: List['bitcointx.core.key.CPubKey'],
 ) -> CScript:
     """Construct multisignature redeem script.
     We require to supply total number of pubkeys as separate argument

@@ -24,8 +24,8 @@ from bitcointx.util import classgetter
 
 
 class Test_str_value(unittest.TestCase):
-    def test(self):
-        def T(value, expected):
+    def test(self) -> None:
+        def T(value: int, expected: str) -> None:
             actual = str_money_value(value)
             self.assertEqual(actual, expected)
 
@@ -42,7 +42,7 @@ class Test_str_value(unittest.TestCase):
 
 
 class Test_Money(unittest.TestCase):
-    def test_MoneyRange(self):
+    def test_MoneyRange(self) -> None:
         self.assertFalse(MoneyRange(-1))
         with self.assertRaises(ValueError):
             coins_to_satoshi(-1)
@@ -59,7 +59,7 @@ class Test_Money(unittest.TestCase):
         with self.assertRaises(ValueError):
             satoshi_to_coins(max_satoshi+1)
 
-    def test_MoneyRangeCustomParams(self):
+    def test_MoneyRangeCustomParams(self) -> None:
 
         class CoreHighMaxClassDispatcher(CoreBitcoinClassDispatcher):
             ...
@@ -70,7 +70,7 @@ class Test_Money(unittest.TestCase):
 
         class CoreHighMaxParams(CoreBitcoinParams, CoreHighMaxClass):
             @classgetter
-            def MAX_MONEY(self):
+            def MAX_MONEY(self) -> int:
                 return 10**100 * self.COIN
 
         class WalletHighMaxClassDispatcher(WalletBitcoinClassDispatcher,
