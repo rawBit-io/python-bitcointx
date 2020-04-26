@@ -223,7 +223,7 @@ T_CBase58DataDispatched = TypeVar('T_CBase58DataDispatched',
 
 class CBase58DataDispatched(bitcointx.base58.CBase58Data):
 
-    def __init__(self, _s: bytes) -> None:
+    def __init__(self, _s: str) -> None:
         if not self.base58_prefix:
             raise TypeError(
                 f'{self.__class__.__name__} must not be instantiated directly')
@@ -248,7 +248,7 @@ T_CBech32DataDispatched = TypeVar('T_CBech32DataDispatched',
 
 class CBech32DataDispatched(bitcointx.bech32.CBech32Data):
 
-    def __init__(self, _s: bytes) -> None:
+    def __init__(self, _s: str) -> None:
         if self.__class__.bech32_witness_version < 0:
             raise TypeError(
                 f'{self.__class__.__name__} must not be instantiated directly')
