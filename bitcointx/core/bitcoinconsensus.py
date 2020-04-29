@@ -133,7 +133,8 @@ def _add_function_definitions(handle: ctypes.CDLL) -> None:
     handle.bitcoinconsensus_version.argtypes = []
 
 
-def load_bitcoinconsensus_library(library_name: str = 'bitcoinconsensus'
+def load_bitcoinconsensus_library(library_name: Optional[str] = None,
+                                  path: Optional[str] = None
                                   ) -> ctypes.CDLL:
     """load libsbitcoinconsenssus via ctypes, add default function definitions
     to the library handle, and return this handle.
@@ -148,13 +149,20 @@ def load_bitcoinconsensus_library(library_name: str = 'bitcoinconsensus'
     ABI-compatible with libbitcoinconsensus.
 
     """
+    if path:
+        if library_name is not None:
+            raise ValueError(
+                'Either path or library_name must be supplied, but not both')
+    else:
+        if library_name is None:
+            library_name = 'bitcoinconsensus'
 
-    lib_path = ctypes.util.find_library(library_name)
-    if lib_path is None:
-        raise ImportError('consensus library not found')
+        path = ctypes.util.find_library(library_name)
+        if path is None:
+            raise ImportError('consensus library not found')
 
     try:
-        handle = ctypes.cdll.LoadLibrary(lib_path)
+        handle = ctypes.cdll.LoadLibrary(path)
     except Exception as e:
         raise ImportError('Cannot import consensus library: {}'.format(e))
 
