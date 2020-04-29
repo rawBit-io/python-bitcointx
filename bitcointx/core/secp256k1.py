@@ -217,7 +217,7 @@ def secp256k1_create_and_init_context(_secp256k1: ctypes.CDLL, flags: int
     return cast(_secp256k1_context, ctx)
 
 
-def load_secp256k1_library() -> ctypes.CDLL:
+def load_secp256k1_library(path: Optional[str] = None) -> ctypes.CDLL:
     """load libsecp256k1 via ctypes, add default function definitions
     to the library handle, and return this handle.
 
@@ -235,12 +235,13 @@ def load_secp256k1_library() -> ctypes.CDLL:
     mild API breakage and should be communicated via release notes.
     """
 
-    lib_path = ctypes.util.find_library('secp256k1')
-    if lib_path is None:
-        raise ImportError('secp256k1 library not found')
+    if path is None:
+        path = ctypes.util.find_library('secp256k1')
+        if path is None:
+            raise ImportError('secp256k1 library not found')
 
     try:
-        handle = ctypes.cdll.LoadLibrary(lib_path)
+        handle = ctypes.cdll.LoadLibrary(path)
     except Exception as e:
         raise ImportError('Cannot load secp256k1 library: {}'.format(e))
 
