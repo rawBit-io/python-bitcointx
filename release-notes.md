@@ -10,6 +10,10 @@ before importing any other modules except `bitcointx` and `bitcointx.util`
 `load_secp256k1_library()` from `bitcointx.core.secp256k1` now accepts
 ecplicit path, `load_secp256k1_library(path='/path/to/library')`
 
+`load_bitcoinconsensus_library()`
+from `bitcointx.core.bitcoinconsensus` now accepts ecplicit path,
+`load_bitcoinconsensus_library(path='/path/to/library')`
+
 Typing change: pubkeys list for `standard_multisig_redeem_script` is now
 `List[CPubKey]`. Previously it was `List[Union[CPubKey, bytes, bytearray]]`,
 but it was less safe. This is only typing, though -- the function does
