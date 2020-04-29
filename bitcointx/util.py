@@ -26,6 +26,8 @@ from typing import (
     TypeVar, Generic, cast
 )
 
+_secp256k1_library_path: Optional[str] = None
+
 _attributes_of_ABC = dir(ABC)
 
 T_Callable = TypeVar('T_Callable', bound=Callable[..., Any])

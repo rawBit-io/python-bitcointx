@@ -13,17 +13,15 @@
 import os
 import platform
 
+import types
 from abc import ABCMeta
 from contextlib import contextmanager
 from collections import OrderedDict
 from typing import (
     Dict, List, Tuple, Union, Optional, Type, Any, Generator, cast,
-    TypeVar
+    TypeVar, Callable
 )
 
-import bitcointx.core
-import bitcointx.core.script
-import bitcointx.wallet
 import bitcointx.util
 
 # Note that setup.py can break if __init__.py imports any external
@@ -41,12 +39,6 @@ T_ChainParamsMeta = TypeVar('T_ChainParamsMeta', bound='ChainParamsMeta')
 
 
 class ChainParamsMeta(ABCMeta):
-    _required_attributes = (
-        ('NAME', isinstance, str),
-        ('RPC_PORT', isinstance, int),
-        ('WALLET_DISPATCHER', issubclass,
-         bitcointx.wallet.WalletCoinClassDispatcher),
-    )
     _registered_classes: Dict[str, Type['ChainParamsBase']] = OrderedDict()
     _common_base_cls: Optional[Type['ChainParamsBase']] = None
 
@@ -68,15 +60,16 @@ class ChainParamsMeta(ABCMeta):
                 raise TypeError(
                     '{} must be a subclass of {}'.format(
                         cls_name, cls._common_base_cls.__name__))
-            for attr_name, checkfn, checkarg in cls._required_attributes:
-                if attr_name not in dct:
-                    # Attribute will be inherited from the base class
-                    continue
-                if not checkfn(dct[attr_name], checkarg):
-                    raise TypeError(
-                        '{}.{} failed {} check against {}'
-                        .format(cls_name, attr_name, checkfn.__name__,
-                                checkarg.__name__))
+
+            if name is None:
+                if 'NAME' in dct and not isinstance(dct['NAME'], str):
+                    raise TypeError(f'{cls_name}: NAME is not a string')
+
+            if 'RPC_PORT' in dct and not isinstance(dct['RPC_PORT'], int):
+                raise TypeError(f'{cls_name}: RPC_PORT is not an int')
+
+            # Cannot check the type of WALLET_DISPATCHER without
+            # importing bitcointx.wallet, this check has to be done at runtime
 
             if name is not None:
                 if isinstance(name, str):
@@ -125,7 +118,10 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
 
     NAME: str
     RPC_PORT: int
-    WALLET_DISPATCHER: Type[bitcointx.wallet.WalletCoinClassDispatcher]
+    WALLET_DISPATCHER: Union[
+        Type['bitcointx.wallet.WalletCoinClassDispatcher'],
+        Callable[[object], Type['bitcointx.wallet.WalletCoinClassDispatcher']]
+    ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -184,12 +180,23 @@ class ChainParamsBase(metaclass=ChainParamsMeta):
 class BitcoinMainnetParams(ChainParamsBase,
                            name=('bitcoin', 'bitcoin/mainnet')):
     RPC_PORT = 8332
-    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinClassDispatcher
+
+    # We want WALLET_DISPATCHER to be a proper class property
+    # to not confuse mypy, but at the same time to be resolved at runtime.
+    # This way we effectively make it a method, but allow descendant classes
+    # to set this as property and still pass mypy strict checks
+    WALLET_DISPATCHER: Union[
+        Type['bitcointx.wallet.WalletCoinClassDispatcher'],
+        Callable[[object], Type['bitcointx.wallet.WalletCoinClassDispatcher']]
+    ] = lambda _: bitcointx.wallet.WalletBitcoinClassDispatcher
 
 
 class BitcoinTestnetParams(BitcoinMainnetParams, name='bitcoin/testnet'):
     RPC_PORT = 18332
-    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinTestnetClassDispatcher
+    WALLET_DISPATCHER: Union[
+        Type['bitcointx.wallet.WalletCoinClassDispatcher'],
+        Callable[[object], Type['bitcointx.wallet.WalletCoinClassDispatcher']]
+    ] = lambda _: bitcointx.wallet.WalletBitcoinTestnetClassDispatcher
 
     def get_datadir_extra_name(self) -> str:
         return "testnet3"
@@ -200,12 +207,18 @@ class BitcoinTestnetParams(BitcoinMainnetParams, name='bitcoin/testnet'):
 
 class BitcoinRegtestParams(BitcoinMainnetParams, name='bitcoin/regtest'):
     RPC_PORT = 18443
-    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinRegtestClassDispatcher
+    WALLET_DISPATCHER: Union[
+        Type['bitcointx.wallet.WalletCoinClassDispatcher'],
+        Callable[[object], Type['bitcointx.wallet.WalletCoinClassDispatcher']]
+    ] = lambda _: bitcointx.wallet.WalletBitcoinRegtestClassDispatcher
 
 
 class BitcoinSignetParams(BitcoinMainnetParams, name='bitcoin/signet'):
     RPC_PORT = 38332
-    WALLET_DISPATCHER = bitcointx.wallet.WalletBitcoinSignetClassDispatcher
+    WALLET_DISPATCHER: Union[
+        Type['bitcointx.wallet.WalletCoinClassDispatcher'],
+        Callable[[object], Type['bitcointx.wallet.WalletCoinClassDispatcher']]
+    ] = lambda _: bitcointx.wallet.WalletBitcoinSignetClassDispatcher
 
 
 def get_current_chain_params() -> ChainParamsBase:
@@ -268,9 +281,40 @@ def select_chain_params(params: Union[str, ChainParamsBase,
     prev_params = _chain_params_context.params
     _chain_params_context.params = params
 
-    bitcointx.util.activate_class_dispatcher(params.WALLET_DISPATCHER)
+    # It might not be imported yet
+    import bitcointx.wallet
+
+    wd = params.WALLET_DISPATCHER
+    if isinstance(wd, types.MethodType):
+        wd_cls = wd()
+    else:
+        assert isinstance(wd, type)
+        wd_cls = wd
+
+    assert issubclass(wd_cls, bitcointx.wallet.WalletCoinClassDispatcher)
+
+    bitcointx.util.activate_class_dispatcher(wd_cls)
 
     return prev_params, params
+
+
+def set_custom_secp256k1_path(path: str) -> None:
+    """Set the custom path that will be used to load secp256k1 library
+    by bitcointx.core.secp256k1 module. For the calling of this
+    function to have any effect, it has to be called before importing
+    any other modules except 'bitcointx' and 'bitcointx.util'."""
+
+    if not os.path.isfile(path):
+        raise ValueError('supplied path does not point to a file')
+
+    bitcointx.util._secp256k1_library_path = path
+
+
+def get_custom_secp256k1_path() -> Optional[str]:
+    """Return the path set earlier by set_custom_secp256k1_path().
+    If custom path was not set, None is returned."""
+
+    return bitcointx.util._secp256k1_library_path
 
 
 class ChainParamsContextVar(bitcointx.util.ContextVarsCompat):
@@ -291,4 +335,6 @@ __all__ = (
     'get_current_chain_params',
     'get_registered_chain_params',
     'find_chain_params',
+    'set_custom_secp256k1_path',
+    'get_custom_secp256k1_path',
 )

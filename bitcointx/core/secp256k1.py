@@ -253,7 +253,7 @@ def load_secp256k1_library(path: Optional[str] = None) -> ctypes.CDLL:
 # the handle is not exported purposefully: ctypes interface is low-level,
 # you are basically calling the C functions directly.
 # Anyone that uses it directly should know that they are doing.
-_secp256k1 = load_secp256k1_library()
+_secp256k1 = load_secp256k1_library(bitcointx.util._secp256k1_library_path)
 
 secp256k1_context_sign = secp256k1_create_and_init_context(_secp256k1, SECP256K1_CONTEXT_SIGN)
 secp256k1_context_verify = secp256k1_create_and_init_context(_secp256k1, SECP256K1_CONTEXT_VERIFY)

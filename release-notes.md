@@ -2,6 +2,11 @@
 
 ## v1.0.6.dev0
 
+Add `set_custom_secp256k1_path()` to set custom path to load secp256k1
+library, and `get_custom_secp256k1_path()` to get the path set earlier.
+For `set_custom_secp256k1_path()` to have any effect, it has to be called
+before importing any other modules except `bitcointx` and `bitcointx.util`
+
 `load_secp256k1_library()` from `bitcointx.core.secp256k1` now accepts
 ecplicit path, `load_secp256k1_library(path='/path/to/library')`
 
