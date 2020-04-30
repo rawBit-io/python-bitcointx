@@ -125,7 +125,7 @@ Note: only public API changes is listed here
 * `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtestAddress` directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.
 * `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`, but `btc_conf_file` kwarg renamed to just `conf_file`). If old rpc.Proxy functionality is desired, it should be implemented as a separate library.
 * `CTransaction` default version changed to 2
-* `CPubKey.is_valid`, `CPubKey.is_fullyvalid` and `CPubKey.is_compressed` should now be called as methods: `pub.is_valid()`, not `pub.is_valid`. `CPubKey.is_valid()` is also deprecated, and `CKey.is_nonempty()` should be used instead, to avoid possible confusion `is_valid()`/`is_fullyvalid()`.
+* `CPubKey.is_valid`, `CPubKey.is_fullyvalid` and `CPubKey.is_compressed` should now be called as methods: `pub.is_valid()`, not `pub.is_valid`. `CPubKey.is_valid()` is also deprecated, and `CPubKey.is_nonempty()` should be used instead, to avoid possible confusion `is_valid()`/`is_fullyvalid()`.
 * `CBitcoinAddressError` is removed, `CCoinAddressError` should be used instead
 * Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet', 'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
 * `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
