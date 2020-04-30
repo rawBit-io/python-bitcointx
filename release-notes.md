@@ -13,10 +13,10 @@ Also, `set_custom_openssl_path()`, `set_custom_openssl_path()` are added,
 analogous to the ones for secp256k1
 
 `load_secp256k1_library()` from `bitcointx.core.secp256k1` now accepts
-ecplicit path, `load_secp256k1_library(path='/path/to/library')`
+explicit path, `load_secp256k1_library(path='/path/to/library')`
 
 `load_bitcoinconsensus_library()`
-from `bitcointx.core.bitcoinconsensus` now accepts ecplicit path,
+from `bitcointx.core.bitcoinconsensus` now accepts explicit path,
 `load_bitcoinconsensus_library(path='/path/to/library')`
 
 Typing change: pubkeys list for `standard_multisig_redeem_script` is now
