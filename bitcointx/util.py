@@ -27,6 +27,7 @@ from typing import (
 )
 
 _secp256k1_library_path: Optional[str] = None
+_openssl_library_path: Optional[str] = None
 
 _attributes_of_ABC = dir(ABC)
 

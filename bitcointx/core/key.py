@@ -32,7 +32,9 @@ from typing import (
 )
 
 import bitcointx.core
-from bitcointx.util import no_bool_use_as_property, ensure_isinstance
+from bitcointx.util import (
+    no_bool_use_as_property, ensure_isinstance, _openssl_library_path
+)
 from bitcointx.core.secp256k1 import (
     _secp256k1, secp256k1_context_sign, secp256k1_context_verify,
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
@@ -50,12 +52,7 @@ T_CExtKeyBase = TypeVar('T_CExtKeyBase', bound='CExtKeyBase')
 T_CExtPubKeyBase = TypeVar('T_CExtPubKeyBase', bound='CExtPubKeyBase')
 T_unbounded = TypeVar('T_unbounded')
 
-try:
-    _ssl: Optional[ctypes.CDLL] = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
-    if not getattr(_ssl, 'EC_KEY_new_by_curve_name', None):
-        _ssl = None
-except OSError:
-    _ssl = None
+_openssl_library_handle: Optional[ctypes.CDLL] = None
 
 
 class OpenSSLException(EnvironmentError):
@@ -70,6 +67,7 @@ class KeyDerivationFailException(RuntimeError):
 # be applied to every OpenSSL call whose return type is a pointer?)
 def _check_res_openssl_void_p(val, func, args): # type: ignore
     if val == 0:
+        _ssl = _openssl_library_handle
         assert _ssl is not None
         errno = _ssl.ERR_get_error()
         errmsg = ctypes.create_string_buffer(120)
@@ -79,31 +77,47 @@ def _check_res_openssl_void_p(val, func, args): # type: ignore
     return ctypes.c_void_p(val)
 
 
-if _ssl:
-    _ssl.EC_KEY_new_by_curve_name.errcheck = _check_res_openssl_void_p  # type: ignore
-    _ssl.EC_KEY_new_by_curve_name.restype = ctypes.c_void_p
-    _ssl.EC_KEY_new_by_curve_name.argtypes = [ctypes.c_int]
+def load_openssl_library(path: Optional[str] = None) -> Optional[ctypes.CDLL]:
 
-    _ssl.ECDSA_SIG_free.restype = None
-    _ssl.ECDSA_SIG_free.argtypes = [ctypes.c_void_p]
+    if path is None:
+        path = ctypes.util.find_library('ssl') or 'libeay32'
 
-    _ssl.ERR_error_string_n.restype = None
-    _ssl.ERR_error_string_n.argtypes = [ctypes.c_ulong, ctypes.c_char_p, ctypes.c_size_t]
+    try:
+        handle: Optional[ctypes.CDLL] = ctypes.cdll.LoadLibrary(path)
+        if handle and not getattr(handle, 'EC_KEY_new_by_curve_name', None):
+            handle = None
+    except OSError:
+        handle = None
 
-    _ssl.ERR_get_error.restype = ctypes.c_ulong
-    _ssl.ERR_get_error.argtypes = []
+    if not handle:
+        return None
 
-    _ssl.d2i_ECDSA_SIG.restype = ctypes.c_void_p
-    _ssl.d2i_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
+    handle.EC_KEY_new_by_curve_name.errcheck = _check_res_openssl_void_p  # type: ignore
+    handle.EC_KEY_new_by_curve_name.restype = ctypes.c_void_p
+    handle.EC_KEY_new_by_curve_name.argtypes = [ctypes.c_int]
 
-    _ssl.i2d_ECDSA_SIG.restype = ctypes.c_int
-    _ssl.i2d_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    handle.ECDSA_SIG_free.restype = None
+    handle.ECDSA_SIG_free.argtypes = [ctypes.c_void_p]
+
+    handle.ERR_error_string_n.restype = None
+    handle.ERR_error_string_n.argtypes = [ctypes.c_ulong, ctypes.c_char_p, ctypes.c_size_t]
+
+    handle.ERR_get_error.restype = ctypes.c_ulong
+    handle.ERR_get_error.argtypes = []
+
+    handle.d2i_ECDSA_SIG.restype = ctypes.c_void_p
+    handle.d2i_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
+
+    handle.i2d_ECDSA_SIG.restype = ctypes.c_int
+    handle.i2d_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 
     # this specifies the curve used with ECDSA.
     _NIDsecp256k1 = 714 # from openssl/obj_mac.h
 
     # test that OpenSSL supports secp256k1
-    _ssl.EC_KEY_new_by_curve_name(_NIDsecp256k1)
+    handle.EC_KEY_new_by_curve_name(_NIDsecp256k1)
+
+    return handle
 
 
 class CKeyBase:
@@ -467,6 +481,13 @@ class CPubKey(bytes):
 
     def verify_nonstrict(self, hash: bytes, sig: bytes) -> bool:
         """Verify a non-strict DER signature"""
+
+        global _openssl_library_handle
+
+        if not _openssl_library_handle:
+            _openssl_library_handle = load_openssl_library(_openssl_library_path)
+
+        _ssl = _openssl_library_handle
 
         if not _ssl:
             raise RuntimeError('openssl library is not available. verify_nonstrict is not functional.')

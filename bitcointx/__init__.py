@@ -317,6 +317,26 @@ def get_custom_secp256k1_path() -> Optional[str]:
     return bitcointx.util._secp256k1_library_path
 
 
+def set_custom_openssl_path(path: str) -> None:
+    """Set the custom path that will be used to load openssl library
+    by bitcointx.core.key module (used only for non-strict signature checking).
+    For the calling of this function to have any effect, it has to be called
+    before importing any other modules except 'bitcointx' and 'bitcointx.util'
+    """
+
+    if not os.path.isfile(path):
+        raise ValueError('supplied path does not point to a file')
+
+    bitcointx.util._openssl_library_path = path
+
+
+def get_custom_openssl_path() -> Optional[str]:
+    """Return the path set earlier by set_custom_openssl_path().
+    If custom path was not set, None is returned."""
+
+    return bitcointx.util._openssl_library_path
+
+
 class ChainParamsContextVar(bitcointx.util.ContextVarsCompat):
     params: ChainParamsBase
 
