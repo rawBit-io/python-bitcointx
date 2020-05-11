@@ -341,11 +341,31 @@ class VectorSerializer(Serializer[Sequence[Serializable]]):
             return
         inner_cls = type(obj_seq[0])
         for inst in obj_seq:
-            if type(inst) is not inner_cls:
-                raise ValueError(
-                    'supplied objects are of different types, '
-                    'first object is of type {}, but there is also an object '
-                    'of type {}'.format(inner_cls.__name__, type(inst).__name__))
+            cur_cls = type(inst)
+            if cur_cls is not inner_cls:
+                imm_cls = getattr(cur_cls, '_immutable_cls', None)
+                if imm_cls and imm_cls is getattr(inner_cls,
+                                                  '_immutable_cls', None):
+                    # The special-case of mutable/immutable classes is
+                    # allowed. Twin classes are OK if they only differ
+                    # by their mutability.
+                    #
+                    # Note that this bypass uses bitcointx-specific convention
+                    # of _immutable_cls attribute, and this serialization
+                    # method can be called with non-bitcointx objects.
+                    # But this is OK because this is only a relaxation of
+                    # the check in a very specific circumstance,
+                    # and the meaning of the check is only 'extra precaution'.
+                    # Additional ergonomics justify this bypass, while
+                    # supermajority of erroneous cases are still restricted
+                    pass
+                else:
+                    raise ValueError(
+                        f'supplied objects are of different types, '
+                        f'first object is of type {inner_cls.__name__}, '
+                        f'but there is also an object '
+                        f'of type {cur_cls.__nam__}')
+
             inner_cls.stream_serialize(inst, f, **kwargs)
 
     @classmethod
