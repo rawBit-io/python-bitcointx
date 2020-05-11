@@ -86,7 +86,7 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
             cls._mutable_cls = None
         else:
             if not issubclass(mutable_of, CoreCoinClass):
-                raise TypeError('mutable_if must be subclass of CoreCoinClass')
+                raise TypeError('mutable_of must be subclass of CoreCoinClass')
 
             make_mutable(cast(Type[CoreCoinClass], cls))
 
@@ -121,11 +121,14 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         if _mutable_context.mutable_context_enabled:
+            # In the mutable context, new instances created should be mutable
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super().__call__(*args, **kwargs)
 
     def __getattribute__(cls, name: str) -> Any:
-        if _mutable_context.mutable_context_enabled:
+        if _mutable_context.mutable_context_enabled \
+                and name == '_from_instance':
+            # In the mutable context, new instances created should be mutable
             cls = type.__getattribute__(cls, '_mutable_cls') or cls
         return super().__getattribute__(name)
 
