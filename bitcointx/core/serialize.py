@@ -364,7 +364,7 @@ class VectorSerializer(Serializer[Sequence[Serializable]]):
                         f'supplied objects are of different types, '
                         f'first object is of type {inner_cls.__name__}, '
                         f'but there is also an object '
-                        f'of type {cur_cls.__nam__}')
+                        f'of type {cur_cls.__name__}')
 
             inner_cls.stream_serialize(inst, f, **kwargs)
 
