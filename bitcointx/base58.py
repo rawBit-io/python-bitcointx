@@ -114,6 +114,7 @@ class CBase58Data(bytes):
     """
 
     base58_prefix = b''
+    _data_length: int
 
     def __new__(cls: Type[T_CBase58Data], s: str) -> T_CBase58Data:
         k = decode(s)
