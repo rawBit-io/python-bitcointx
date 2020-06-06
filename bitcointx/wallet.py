@@ -227,6 +227,9 @@ class CBase58DataDispatched(bitcointx.base58.CBase58Data):
         if not self.base58_prefix:
             raise TypeError(
                 f'{self.__class__.__name__} must not be instantiated directly')
+        if len(self) != self.__class__._data_length:
+            raise TypeError(
+                f'lengh of the data is not {self.__class__._data_length}')
 
     @classmethod
     def base58_get_match_candidates(cls: Type[T_CBase58DataDispatched]
