@@ -17,7 +17,8 @@ import base64
 from bitcointx import ChainParams
 from bitcointx.wallet import CCoinExtKey, CCoinExtPubKey
 from bitcointx.core import (
-    x, lx, b2x, CTransaction, CTxOut, CTxIn, COutPoint, coins_to_satoshi
+    x, lx, b2x, CTransaction, CTxOut, CMutableTxOut, CTxIn, COutPoint,
+    coins_to_satoshi
 )
 from bitcointx.core.key import CPubKey, KeyStore, BIP32Path
 from bitcointx.core.script import (
@@ -168,6 +169,8 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(len(psbt.inputs), 1)
         self.assertEqual(len(psbt.outputs), 2)
         assert isinstance(psbt.inputs[0].utxo, CTransaction)
+        self.assertIsInstance(psbt.inputs[0].non_witness_utxo, CTransaction)
+        self.assertEqual(psbt.inputs[0].witness_utxo, None)
         self.assertEqual(psbt.inputs[0].utxo.serialize(), tx_data)
         self.assertTrue(psbt.outputs[0].is_null())
         self.assertTrue(psbt.outputs[1].is_null())
@@ -369,16 +372,21 @@ class Test_PSBT(unittest.TestCase):
     def test_convert_to_witness_utxo(self) -> None:
         # PSBT with inputs[0].utxo given as CTransaction, but it has
         # final_script_witness set
-        psbt_data = x('70736274ff0100530200000001dd0f87b0f831f6a0ab1dff6237ecaf75ddc92732dac0a13bfc21af64f251aec40000000000ffffffff01b0bae4000000000017a9143e671da50a3a36d43bb3853f29e207fb48d44c738700000000000100f9020000000001017d65d832d5b1851b80b715160854baac04e21ad1aeefce921fb39b916f5ad6590100000017160014239bb89dbd96d490b58cf18efcf02958f3055b1dffffffff02c0e1e400000000001976a914c4b614bcb6ea61aaf96d51729c34d430b5dc820e88aca0780f050000000017a9143e671da50a3a36d43bb3853f29e207fb48d44c7387024730440220327afb49285b8b6aa1dfa8827bfecd5e8545d9b6e41a45dcc84e3b3439c23c71022018abb15599eadad23a197490b242873a9be93b9b208e91e62b5349e1b47e6a290121037abd691a39c0c0f1a7d71a66f13cb6c38a98d2a7aa2a73c3a0b7509d197839980000000001086c02483045022100a294dd2256fdea194a562fa52323ce0c0b14becf114340f477536c3f21002cda022016e471407800f93ecc90c9f46c9f738dd26bd9c4871f4bd38eb314bd1bb77bf4012103ffc7c28a070af755a0ae991cf86b8d29741f47941ad83df69f1c8a62993a8f890000')
+        psbt_data = x('70736274ff0100530200000001dd0f87b0f831f6a0ab1dff6237ecaf75ddc92732dac0a13bfc21af64f251aec40100000000ffffffff01b0bae4000000000017a9143e671da50a3a36d43bb3853f29e207fb48d44c738700000000000100f9020000000001017d65d832d5b1851b80b715160854baac04e21ad1aeefce921fb39b916f5ad6590100000017160014239bb89dbd96d490b58cf18efcf02958f3055b1dffffffff02c0e1e400000000001976a914c4b614bcb6ea61aaf96d51729c34d430b5dc820e88aca0780f050000000017a9143e671da50a3a36d43bb3853f29e207fb48d44c7387024730440220327afb49285b8b6aa1dfa8827bfecd5e8545d9b6e41a45dcc84e3b3439c23c71022018abb15599eadad23a197490b242873a9be93b9b208e91e62b5349e1b47e6a290121037abd691a39c0c0f1a7d71a66f13cb6c38a98d2a7aa2a73c3a0b7509d197839980000000001086c02483045022100a294dd2256fdea194a562fa52323ce0c0b14becf114340f477536c3f21002cda022016e471407800f93ecc90c9f46c9f738dd26bd9c4871f4bd38eb314bd1bb77bf4012103ffc7c28a070af755a0ae991cf86b8d29741f47941ad83df69f1c8a62993a8f890000')
 
-        with self.assertRaisesRegex(ValueError, 'final_script_witness is supplied, but utxo is not a witness utxo'):
-            PartiallySignedTransaction.deserialize(psbt_data)
+        psbt = PartiallySignedTransaction.deserialize(psbt_data,
+                                                      relaxed_sanity_checks=True)
+
+        self.assertIsInstance(psbt.inputs[0].utxo, CTransaction)
+        self.assertIsInstance(psbt.inputs[0].witness_utxo, CTxOut)
+        self.assertEqual(psbt.inputs[0].non_witness_utxo, None)
 
         psbt = PartiallySignedTransaction.deserialize(psbt_data,
                                                       allow_convert_to_witness_utxo=True,
                                                       relaxed_sanity_checks=True)
         # check that non-witness utxo was converted to witness utxo
         self.assertIsInstance(psbt.inputs[0].utxo, CTxOut)
+        self.assertEqual(psbt.inputs[0].utxo, psbt.inputs[0].witness_utxo)
 
         # but it is still not strictly valid, because it must supply
         # final_script_sig, too, if it is a p2sh-wrapped segwit input
@@ -418,8 +426,9 @@ class Test_PSBT(unittest.TestCase):
                 psbt.inputs[1].witness_script)
             prev_tx0 = CTransaction.deserialize(x('0200000000010158e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd7501000000171600145f275f436b09a8cc9a2eb2a2f528485c68a56323feffffff02d8231f1b0100000017a914aed962d6654f9a2b36608eb9d64d2b260db4f1118700c2eb0b0000000017a914b7f5faf40e3d40a5a459b1db3535f2b72fa921e88702483045022100a22edcc6e5bc511af4cc4ae0de0fcd75c7e04d8c1c3a8aa9d820ed4b967384ec02200642963597b9b1bc22c75e9f3e117284a962188bf5e8a74c895089046a20ad770121035509a48eb623e10aace8bfd0212fdb8a8e5af3c94b0b133b95e114cab89e4f7965000000'))
             prev_tx1 = CTransaction.deserialize(x('0200000001aad73931018bd25f84ae400b68848be09db706eac2ac18298babee71ab656f8b0000000048473044022058f6fc7c6a33e1b31548d481c826c015bd30135aad42cd67790dab66d2ad243b02204a1ced2604c6735b6393e5b41691dd78b00f0c5942fb9f751856faa938157dba01feffffff0280f0fa020000000017a9140fb9463421696b82c833af241c78c17ddbde493487d0f20a270100000017a91429ca74f8a08f81999428185c97b5d852e4063f618765000000'))
-            psbt.inputs[0].utxo = prev_tx1
-            psbt.inputs[1].utxo = prev_tx0.vout[tx.vin[1].prevout.n]
+            psbt.inputs[0].set_utxo(prev_tx1, psbt.unsigned_tx)
+            psbt.inputs[1].set_utxo(prev_tx0.vout[tx.vin[1].prevout.n],
+                                    psbt.unsigned_tx)
 
             self.assertEqual(msig0.pubkeys[0], xpriv.derive_path("m/0'/0'/0'").pub)
             self.assertEqual(msig0.pubkeys[1], xpriv.derive_path("m/0'/0'/1'").pub)
@@ -582,7 +591,8 @@ class Test_PSBT(unittest.TestCase):
         psbt.inputs[0].witness_script = CScript([1, 2, 3])
         psbt.inputs[0].redeem_script = psbt.inputs[0].witness_script.to_p2wsh_scriptPubKey()
         assert isinstance(psbt.inputs[0].utxo, CTxOut)
-        psbt.inputs[0].utxo = psbt.inputs[0].utxo.to_mutable()
+        psbt.inputs[0].set_utxo(psbt.inputs[0].utxo.to_mutable(), psbt.unsigned_tx)
+        assert isinstance(psbt.inputs[0].utxo, CMutableTxOut)
         psbt.inputs[0].utxo.scriptPubKey = psbt.inputs[0].redeem_script.to_p2sh_scriptPubKey()
         psbt.inputs[0].partial_sigs[pub] = b'123'
         psbt.inputs[0].sighash_type = SIGHASH_ALL

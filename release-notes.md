@@ -1,28 +1,50 @@
 # python-bitcointx release notes
 
-## v1.0.6.dev0
+## v1.1.0.dev0
 
-Add `set_custom_secp256k1_path()` to set custom path to load secp256k1
-library, and `get_custom_secp256k1_path()` to get the path set earlier.
-For `set_custom_secp256k1_path()` to have any effect, it has to be called
-before importing any other modules except `bitcointx` and `bitcointx.util`
+Breaking changes:
 
-Openssl library is now only attempted to be imported if
-`CPubKey.verify_nonstrict()` is called, and not on import of `core.key`.
-Also, `set_custom_openssl_path()`, `set_custom_openssl_path()` are added,
-analogous to the ones for secp256k1
+    PSBT: allow full CTransaction to be stored in `PSBT_Input` for segwit inputs.
+    This will allows protection workaround for potential large-fee-ransom attacks
+    against autonomous singners of segwit transactions
+    (details: https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2017-August/014843.html
+     and https://twitter.com/FreedomIsntSafe/status/1268572922911887360)
 
-`load_secp256k1_library()` from `bitcointx.core.secp256k1` now accepts
-explicit path, `load_secp256k1_library(path='/path/to/library')`
+    `PSBT_Input.utxo` field cannot be set directly anymore, only via
+    `input.set_utxo(unsigned_tx)` method, that takes `unsigned_tx` as parameter.
+    It will automatically set `witness_utxo` field of the input. The value of
+    `witness_utxo` field will depend on other fields of the input, and the supplied
+    `unsigned_tx` (which can be None)
 
-`load_bitcoinconsensus_library()`
-from `bitcointx.core.bitcoinconsensus` now accepts explicit path,
-`load_bitcoinconsensus_library(path='/path/to/library')`
+    Checking `isinstance(inp.utxo, CTxOut)` becomes unreliable, because it can be segwit
+    input, but still contain `CTransaction`. `inp.witness_utxo` should be checked instead.
+    It will be None for non-segwit input, and `CTxOut` instance for segwit input.
+    Conversely, `inp.non_witness_utxo` It will be None for segwit input,
+    and `CTransaction` instance for non-segwit input.
 
-Typing change: pubkeys list for `standard_multisig_redeem_script` is now
-`List[CPubKey]`. Previously it was `List[Union[CPubKey, bytes, bytearray]]`,
-but it was less safe. This is only typing, though -- the function does
-not validate the pubkeys nor checks the types at runtime.
+Non-breaking changes:
+
+    Add `set_custom_secp256k1_path()` to set custom path to load secp256k1
+    library, and `get_custom_secp256k1_path()` to get the path set earlier.
+    For `set_custom_secp256k1_path()` to have any effect, it has to be called
+    before importing any other modules except `bitcointx` and `bitcointx.util`
+
+    Openssl library is now only attempted to be imported if
+    `CPubKey.verify_nonstrict()` is called, and not on import of `core.key`.
+    Also, `set_custom_openssl_path()`, `set_custom_openssl_path()` are added,
+    analogous to the ones for secp256k1
+
+    `load_secp256k1_library()` from `bitcointx.core.secp256k1` now accepts
+    explicit path, `load_secp256k1_library(path='/path/to/library')`
+
+    `load_bitcoinconsensus_library()`
+    from `bitcointx.core.bitcoinconsensus` now accepts explicit path,
+    `load_bitcoinconsensus_library(path='/path/to/library')`
+
+    Typing change: pubkeys list for `standard_multisig_redeem_script` is now
+    `List[CPubKey]`. Previously it was `List[Union[CPubKey, bytes, bytearray]]`,
+    but it was less safe. This is only typing, though -- the function does
+    not validate the pubkeys nor checks the types at runtime.
 
 ## v1.0.5
 
