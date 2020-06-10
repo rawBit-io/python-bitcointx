@@ -2088,7 +2088,7 @@ class PartiallySignedTransaction(Serializable):
         if fee < 0:
             raise ValueError(f'Calculated fee is negative: '
                              f'sum of input amounts {inputs_sum}, '
-                             f'sum of output amounts {outputs_sum}, ')
+                             f'sum of output amounts {outputs_sum}')
         return fee
 
     def __repr__(self) -> str:
