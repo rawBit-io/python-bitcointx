@@ -11,10 +11,12 @@ Breaking changes:
      and https://twitter.com/FreedomIsntSafe/status/1268572922911887360)
 
     `PSBT_Input.utxo` field cannot be set directly anymore, only via
-    `input.set_utxo(unsigned_tx)` method, that takes `unsigned_tx` as parameter.
+    `input.set_utxo(utxo, unsigned_tx)` method, that takes `unsigned_tx` as parameter.
     It will automatically set `witness_utxo` field of the input. The value of
     `witness_utxo` field will depend on other fields of the input, and the supplied
     `unsigned_tx` (which can be None)
+    There's also `psbt.set_utxo(utxo, index)`, which is equivalent to
+    `psbt.inputs[index].set_utxo(utxo, psbt.unsigned_tx)`
 
     Checking `isinstance(inp.utxo, CTxOut)` becomes unreliable, because it can be segwit
     input, but still contain `CTransaction`. `inp.witness_utxo` should be checked instead.
