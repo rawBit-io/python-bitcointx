@@ -2078,6 +2078,9 @@ class PartiallySignedTransaction(Serializable):
     def get_input_amounts(self) -> Tuple[int, ...]:
         return tuple(inp.get_amount(self.unsigned_tx) for inp in self.inputs)
 
+    def get_output_amounts(self) -> Tuple[int, ...]:
+        return tuple(outp.nValue for outp in self.unsigned_tx.vout)
+
     def __repr__(self) -> str:
         xpubs = (
             ', '.join(

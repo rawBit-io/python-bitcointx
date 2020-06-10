@@ -46,6 +46,8 @@ Non-breaking changes:
     but it was less safe. This is only typing, though -- the function does
     not validate the pubkeys nor checks the types at runtime.
 
+    New convenience method for `PartiallySignedTransaction`: `get_output_amounts()`
+
 ## v1.0.5
 
 * Fix CScriptWitness initialization: previously, it converted small ints
