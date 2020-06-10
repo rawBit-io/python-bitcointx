@@ -570,6 +570,10 @@ class PSBT_Input(Serializable):
         new_utxo: Optional[Union[CTransaction, CTxOut]],
         unsigned_tx: Optional[CTransaction]
     ) -> None:
+        if new_utxo:
+            ensure_isinstance(new_utxo, (CTransaction, CTxOut), 'new_utxo')
+        if unsigned_tx:
+            ensure_isinstance(unsigned_tx, CTransaction, 'unsigned_tx')
         self._utxo = new_utxo
         self._update_witness_utxo_info(unsigned_tx)
 
@@ -1847,6 +1851,14 @@ class PartiallySignedTransaction(Serializable):
 
         object.__setattr__(self.unsigned_tx, 'vout', tuple_or_list(vout))
         self.outputs.append(outp)
+
+    def set_utxo(
+        self,
+        new_utxo: Optional[Union[CTransaction, CTxOut]],
+        index: int
+    ) -> None:
+        ensure_isinstance(index, int, 'index')
+        self.inputs[index].set_utxo(new_utxo, self.unsigned_tx)
 
     @classmethod
     def from_base64_or_binary(

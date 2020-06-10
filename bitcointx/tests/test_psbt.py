@@ -591,7 +591,7 @@ class Test_PSBT(unittest.TestCase):
         psbt.inputs[0].witness_script = CScript([1, 2, 3])
         psbt.inputs[0].redeem_script = psbt.inputs[0].witness_script.to_p2wsh_scriptPubKey()
         assert isinstance(psbt.inputs[0].utxo, CTxOut)
-        psbt.inputs[0].set_utxo(psbt.inputs[0].utxo.to_mutable(), psbt.unsigned_tx)
+        psbt.set_utxo(psbt.inputs[0].utxo.to_mutable(), index=0)
         assert isinstance(psbt.inputs[0].utxo, CMutableTxOut)
         psbt.inputs[0].utxo.scriptPubKey = psbt.inputs[0].redeem_script.to_p2sh_scriptPubKey()
         psbt.inputs[0].partial_sigs[pub] = b'123'
