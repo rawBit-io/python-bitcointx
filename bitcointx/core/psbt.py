@@ -2081,6 +2081,16 @@ class PartiallySignedTransaction(Serializable):
     def get_output_amounts(self) -> Tuple[int, ...]:
         return tuple(outp.nValue for outp in self.unsigned_tx.vout)
 
+    def get_fee(self) -> int:
+        inputs_sum = sum(self.get_input_amounts())
+        outputs_sum = sum(self.get_output_amounts())
+        fee = inputs_sum - outputs_sum
+        if fee < 0:
+            raise ValueError(f'Calculated fee is negative: '
+                             f'sum of input amounts {inputs_sum}, '
+                             f'sum of output amounts {outputs_sum}, ')
+        return fee
+
     def __repr__(self) -> str:
         xpubs = (
             ', '.join(

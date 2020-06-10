@@ -46,7 +46,8 @@ Non-breaking changes:
     but it was less safe. This is only typing, though -- the function does
     not validate the pubkeys nor checks the types at runtime.
 
-    New convenience method for `PartiallySignedTransaction`: `get_output_amounts()`
+    New convenience methods for `PartiallySignedTransaction`: `get_output_amounts()`
+    and `get_fee()`
 
 ## v1.0.5
 
