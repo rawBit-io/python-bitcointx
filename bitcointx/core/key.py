@@ -1252,8 +1252,13 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
             return BIP32PathTemplateIndex(
                 [(offset, BIP32_HARDENED_KEY_OFFSET - 1 + offset)])
 
+        bad_format_error = ValueError('index template format is not valid')
+
+        if len(index_str) < 3:
+            raise bad_format_error
+
         if '[' != index_str[0] or ']' != index_str[-1]:
-            raise ValueError('index template format is not valid')
+            raise bad_format_error
 
         index_str = index_str[1:-1]
 
@@ -1265,13 +1270,13 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
                 n_left = parse_index(left, is_hardened=False)
                 n_right = parse_index(right, is_hardened=False)
                 if n_left is None or n_right is None:
-                    raise ValueError('index template format is not valid')
+                    raise bad_format_error
 
                 index_bounds_list.append((n_left + offset, n_right + offset))
             else:
                 idx = parse_index(index_substr, is_hardened=False)
                 if idx is None:
-                    raise ValueError('index template format is not valid')
+                    raise bad_format_error
                 index_bounds_list.append((idx + offset, idx + offset))
 
         return BIP32PathTemplateIndex(index_bounds_list)
