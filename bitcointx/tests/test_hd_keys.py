@@ -11,9 +11,11 @@
 
 # pylama:ignore=E501
 
+import os
+import json
 import unittest
 
-from typing import List, Tuple
+from typing import List, Tuple, Iterator
 
 from bitcointx.core import b2x, x
 from bitcointx.core.key import (
@@ -76,6 +78,13 @@ BIP32_TEST_VECTORS: List[List[Tuple[str, str, int]]] = [
          0)
     ]
 ]
+
+
+def load_path_teplate_test_vectors(name: str) -> Iterator[
+    Tuple[str, str, Tuple]
+]:
+    with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
+        return json.load(fd)
 
 
 class Test_CBitcoinExtKey(unittest.TestCase):
@@ -352,8 +361,8 @@ class Test_BIP32Path(unittest.TestCase):
     def test_tempate_as_list(self) -> None:
         self.assertEqual(list(BIP32PathTemplate('m/0')), [((0, 0),)])
         self.assertEqual(list(BIP32PathTemplate('0')), [((0, 0),)])
-        self.assertEqual(list(BIP32PathTemplate('[0-10,11,59]/*')),
-                         [((0, 10), (11, 11), (59, 59)),
+        self.assertEqual(list(BIP32PathTemplate('[0-10,12,59]/*')),
+                         [((0, 10), (12, 12), (59, 59)),
                           ((0, BIP32_HARDENED_KEY_OFFSET-1),)])
 
         self.assertEqual(
@@ -511,9 +520,9 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertEqual(str(BIP32PathTemplate(p, hardened_marker='h')),
                          "m/4h/5h/*/4")
         p = BIP32PathTemplate("4'/5'/1/[3,4,5-10]")
-        self.assertEqual(str(BIP32PathTemplate(p)), "4'/5'/1/[3,4,5-10]")
+        self.assertEqual(str(BIP32PathTemplate(p)), "4'/5'/1/[3-10]")
         self.assertEqual(str(BIP32PathTemplate(p, hardened_marker='h')),
-                         "4h/5h/1/[3,4,5-10]")
+                         "4h/5h/1/[3-10]")
 
     def test_random_access(self) -> None:
         p = BIP32Path("m/4h/5h/1/4")
@@ -524,7 +533,7 @@ class Test_BIP32Path(unittest.TestCase):
         p = BIP32Path([0xFFFFFFFF-n for n in range(255)])
         self.assertEqual(p[254], 0xFFFFFF01)
 
-        pt = BIP32PathTemplate("m/4h/5h/[1-2]/[4,5]")
+        pt = BIP32PathTemplate("m/4h/5h/[1-2]/[4,7]")
         self.assertEqual(pt[0][0][0], 4+BIP32_HARDENED_KEY_OFFSET)
         self.assertEqual(pt[0][0][1], 4+BIP32_HARDENED_KEY_OFFSET)
         self.assertEqual(pt[1][0][0], 5+BIP32_HARDENED_KEY_OFFSET)
@@ -533,8 +542,8 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertEqual(pt[2][0][1], 2)
         self.assertEqual(pt[3][0][0], 4)
         self.assertEqual(pt[3][0][1], 4)
-        self.assertEqual(pt[3][1][0], 5)
-        self.assertEqual(pt[3][1][1], 5)
+        self.assertEqual(pt[3][1][0], 7)
+        self.assertEqual(pt[3][1][1], 7)
         pt = BIP32PathTemplate([[(0xFFFFFFFF-n, 0xFFFFFFFF-n)]
                                for n in range(255)])
         self.assertEqual(pt[254][0][0], 0xFFFFFF01)
@@ -587,3 +596,47 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertTrue(
             BIP32PathTemplate('/'.join(str(v) for v in range(255))).match_path(
                 BIP32Path('/'.join(str(v) for v in range(255)))))
+
+    def test_BIP32PathTemplate_with_generated_data(self) -> None:
+        test_dict = load_path_teplate_test_vectors('bip32_template.json')
+        for status, data in test_dict.items():
+            if status == "normal_finish":
+                for tmpl_str, tmpl in data:
+                    tmpl_tuple = tuple(tuple(tuple(range) for range in section)
+                                       for section in json.loads(tmpl))
+                    pt = BIP32PathTemplate(tmpl_str)
+                    self.assertEqual(tuple(pt), tmpl_tuple)
+            else:
+                for tmpl_str in data:
+                    try:
+                        pt = BIP32PathTemplate(tmpl_str)
+                    except ValueError as e:
+                        if str(e).startswith("incorrect path template index bound"):
+                            assert(status in ["error_range_start_equals_end",
+                                              "error_ranges_intersect",
+                                              "error_range_order_bad"]), (tmpl_str, status)
+                        elif str(e).startswith("index range equals wildcard range"):
+                            assert(status == "error_range_equals_wildcard"), (tmpl_str, status)
+                        elif str(e).startswith("index template format is not valid"):
+                            assert(status in ["error_unexpected_char",
+                                              "error_invalid_char",
+                                              "error_unexpected_finish",
+                                              "error_digit_expected"]), (tmpl_str, status)
+                        elif str(e).startswith("leading zeroes are not allowed"):
+                            assert(status == "error_index_has_leading_zero"), (tmpl_str, status)
+                        elif str(e).startswith("index_from cannot be larger than index_to in an index tuple"):
+                            assert(status == "error_range_order_bad"), (tmpl_str, status)
+                        elif str(e).startswith('derivation path must not end with "/"'):
+                            assert(status == "error_unexpected_slash"), (tmpl_str, status)
+                        elif str(e).startswith('partial derivation path must not start with "/"'):
+                            assert(status == "error_unexpected_slash"), (tmpl_str, status)
+                        elif str(e).startswith('duplicate slashes are not allowed'):
+                            assert(status == "error_unexpected_slash"), (tmpl_str, status)
+                        elif str(e).startswith('Unexpected hardened marker'):
+                            assert(status == "error_unexpected_hardened_marker"), (tmpl_str, status)
+                        elif str(e).startswith('whitespace found'):
+                            assert(status == "error_unexpected_space"), (tmpl_str, status)
+                        elif str(e).startswith('derivation index string cannot represent value > 2147483647'):
+                            assert(status == "error_index_too_big"), (tmpl_str, status)
+                        else:
+                            raise
