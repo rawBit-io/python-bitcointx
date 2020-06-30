@@ -24,6 +24,8 @@ Breaking changes:
     Conversely, `inp.non_witness_utxo` It will be None for segwit input,
     and `CTransaction` instance for non-segwit input.
 
+    More strict BIP32Template parser: no whitespace allowed, no leading zeroes in indexes
+
 Non-breaking changes:
 
     Add `set_custom_secp256k1_path()` to set custom path to load secp256k1

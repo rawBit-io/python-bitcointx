@@ -1082,6 +1082,9 @@ class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
 
         assert isinstance(path, str)
 
+        if path.strip() != path or len(path.split()) > 1:
+            raise ValueError('whitespace found in path')
+
         if path == '':
             return [], hardened_marker, True
         elif path == 'm':
@@ -1138,6 +1141,13 @@ class BIP32Path(BIP32PathGeneric[int]):
 
     @classmethod
     def _index_from_str(cls, s: str, *, is_hardened: bool) -> int:
+
+        if s.strip() != s or len(s.split()) > 1:
+            raise ValueError('whitespace found in BIP32 index')
+
+        if len(s) > 1 and s.startswith('0'):
+            raise ValueError('leading zeroes are not allowed in BIP32 index')
+
         n = int(s)
 
         if n < 0:
@@ -1230,29 +1240,34 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
     def _index_from_str(cls, index_str: str, *, is_hardened: bool
                         ) -> BIP32PathTemplateIndex:
 
-        if len(index_str.split()) > 1:
+        if index_str.strip() != index_str or len(index_str.split()) > 1:
             raise ValueError('whitespace found in index template')
 
+        bad_format_error = ValueError(f'index template format is not valid: "{index_str}"')
+
         def parse_index(s: str, *, is_hardened: bool) -> Optional[int]:
+            if not s.isdigit():
+                return None, bad_format_error
+
             try:
                 n_int = BIP32Path._index_from_str(s, is_hardened=is_hardened)
-            except ValueError:
-                return None
+            except ValueError as e:
+                return None, e
 
-            return n_int
+            return n_int, None
 
-        n_int = parse_index(index_str, is_hardened=is_hardened)
+        n_int, err = parse_index(index_str, is_hardened=is_hardened)
 
         if n_int is not None:
             return BIP32PathTemplateIndex([(n_int, n_int)])
+        elif index_str.isdigit():
+            raise err
 
         offset = BIP32_HARDENED_KEY_OFFSET if is_hardened else 0
 
         if index_str == '*':
             return BIP32PathTemplateIndex(
                 [(offset, BIP32_HARDENED_KEY_OFFSET - 1 + offset)])
-
-        bad_format_error = ValueError('index template format is not valid')
 
         if len(index_str) < 3:
             raise bad_format_error
@@ -1267,17 +1282,31 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
             maybe_range = index_substr.split('-', maxsplit=1)
             if len(maybe_range) > 1:
                 left, right = maybe_range
-                n_left = parse_index(left, is_hardened=False)
-                n_right = parse_index(right, is_hardened=False)
-                if n_left is None or n_right is None:
-                    raise bad_format_error
+                n_left, err = parse_index(left, is_hardened=False)
+                if n_left is None:
+                    raise err
+                n_right, err = parse_index(right, is_hardened=False)
+                if n_right is None:
+                    raise err
 
-                index_bounds_list.append((n_left + offset, n_right + offset))
+                if n_left == 0 and n_right == BIP32_HARDENED_KEY_OFFSET-1:
+                    raise ValueError(
+                        "index range equals wildcard range, should be "
+                        "specified as \"*\"")
+
+                range_tuple = (n_left + offset, n_right + offset)
             else:
-                idx = parse_index(index_substr, is_hardened=False)
+                idx, err = parse_index(index_substr, is_hardened=False)
                 if idx is None:
-                    raise bad_format_error
-                index_bounds_list.append((idx + offset, idx + offset))
+                    raise err
+                range_tuple = (idx + offset, idx + offset)
+
+            if index_bounds_list and \
+                    index_bounds_list[-1][1] + 1 == range_tuple[0]:
+                index_bounds_list[-1] = (index_bounds_list[-1][0],
+                                         range_tuple[1])
+            else:
+                index_bounds_list.append(range_tuple)
 
         return BIP32PathTemplateIndex(index_bounds_list)
 
