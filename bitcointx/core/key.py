@@ -1245,7 +1245,8 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
 
         bad_format_error = ValueError(f'index template format is not valid: "{index_str}"')
 
-        def parse_index(s: str, *, is_hardened: bool) -> Optional[int]:
+        def parse_index(s: str, *, is_hardened: bool
+                        ) -> Tuple[Optional[int], Optional[ValueError]]:
             if not s.isdigit():
                 return None, bad_format_error
 
@@ -1261,6 +1262,7 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
         if n_int is not None:
             return BIP32PathTemplateIndex([(n_int, n_int)])
         elif index_str.isdigit():
+            assert err is not None
             raise err
 
         offset = BIP32_HARDENED_KEY_OFFSET if is_hardened else 0
@@ -1277,16 +1279,18 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
 
         index_str = index_str[1:-1]
 
-        index_bounds_list = []
+        index_bounds_list: List[Tuple[int, int]] = []
         for index_substr in index_str.split(','):
             maybe_range = index_substr.split('-', maxsplit=1)
             if len(maybe_range) > 1:
                 left, right = maybe_range
                 n_left, err = parse_index(left, is_hardened=False)
                 if n_left is None:
+                    assert err is not None
                     raise err
                 n_right, err = parse_index(right, is_hardened=False)
                 if n_right is None:
+                    assert err is not None
                     raise err
 
                 if n_left == 0 and n_right == BIP32_HARDENED_KEY_OFFSET-1:
@@ -1298,6 +1302,7 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
             else:
                 idx, err = parse_index(index_substr, is_hardened=False)
                 if idx is None:
+                    assert err is not None
                     raise err
                 range_tuple = (idx + offset, idx + offset)
 

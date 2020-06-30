@@ -15,7 +15,7 @@ import os
 import json
 import unittest
 
-from typing import List, Tuple, Iterator
+from typing import List, Tuple, Dict, Union
 
 from bitcointx.core import b2x, x
 from bitcointx.core.key import (
@@ -80,11 +80,11 @@ BIP32_TEST_VECTORS: List[List[Tuple[str, str, int]]] = [
 ]
 
 
-def load_path_teplate_test_vectors(name: str) -> Iterator[
-    Tuple[str, str, Tuple]
+def load_path_teplate_test_vectors(name: str) -> Dict[
+    str, List[Union[str, List[str]]]
 ]:
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
-        return json.load(fd)
+        return json.load(fd)  # type: ignore
 
 
 class Test_CBitcoinExtKey(unittest.TestCase):
@@ -601,13 +601,17 @@ class Test_BIP32Path(unittest.TestCase):
         test_dict = load_path_teplate_test_vectors('bip32_template.json')
         for status, data in test_dict.items():
             if status == "normal_finish":
-                for tmpl_str, tmpl in data:
+                for elt in data:
+                    assert isinstance(elt, list)
+                    tmpl_str, tmpl = elt
                     tmpl_tuple = tuple(tuple(tuple(range) for range in section)
                                        for section in json.loads(tmpl))
                     pt = BIP32PathTemplate(tmpl_str)
                     self.assertEqual(tuple(pt), tmpl_tuple)
             else:
-                for tmpl_str in data:
+                for elt in data:
+                    assert isinstance(elt, str)
+                    tmpl_str = elt
                     try:
                         pt = BIP32PathTemplate(tmpl_str)
                     except ValueError as e:

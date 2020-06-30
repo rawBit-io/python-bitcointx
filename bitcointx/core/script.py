@@ -106,7 +106,7 @@ class SIGHASH_Type(int):
     def __or__(self,  # type: ignore
                other: 'SIGHASH_Bitflag_Type'
                ) -> 'SIGHASH_Type':
-        if self != SIGHASH_ANYONECANPAY and other != SIGHASH_ANYONECANPAY:
+        if self != int(SIGHASH_ANYONECANPAY) and other != SIGHASH_ANYONECANPAY:
             raise ValueError(
                 'combining SIGHASH_* values only make sense with '
                 'SIGHASH_ANYONECANPAY, other values are not a bit flags')
