@@ -1454,8 +1454,8 @@ def parse_standard_multisig_redeem_script(script: CScript
     try:
         last_op = next(si)
     except StopIteration:
-            raise ValueError('script is too short, ended before we gan get '
-                             'last opcode')
+            raise ValueError('script is too short, ended before we could get '
+                             'the last opcode')
 
     if last_op != OP_CHECKMULTISIG:
         raise ValueError('script is not a p2sh script, last opcode '
@@ -1515,7 +1515,7 @@ def standard_multisig_redeem_script(
     If the callers do not care about the possibility of such bug, they
     can just supply total=len(pubkeys).
 
-    For '1-of-1' case the function raise ValueError exception,
+    For '1-of-1' case the function raises ValueError exception,
     because this case is ambiguous - can be done via CHECKSIG or CHECKMULTISIG,
     and is not really a multisig.
 
