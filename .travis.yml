@@ -12,6 +12,8 @@ os:
   - linux
   - osx
 
+osx_image: xcode12
+
 branches:
   only:
   - gh-pages
