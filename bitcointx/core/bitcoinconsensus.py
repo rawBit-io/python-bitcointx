@@ -194,7 +194,10 @@ def ConsensusVerifyScript(
     The arguments are compatible with `VerifyScript()` from
     `bitcointx.core.scripteval`
 
-    scriptSig    - Signature
+    scriptSig    - Signature. Must be present in the transaction input at
+                   inIdx. Redundant, but is there for compatibility of
+                   arguments with VerifyScript() that allow to supply
+                   different scriptSig than the one in the input
     scriptPubKey - PubKey
     txTo         - Spending transaction
     inIdx        - Index of the transaction input containing scriptSig
@@ -222,6 +225,16 @@ def ConsensusVerifyScript(
 
     if not MoneyRange(amount):
         raise ValueError('amount out of MoneyRange')
+
+    ensure_isinstance(scriptSig, CScript, 'scriptSig')
+    if not type(scriptSig) == type(scriptPubKey):
+        raise TypeError(
+            "scriptSig and scriptPubKey must be of the same script class")
+
+    if txTo.vin[inIdx].scriptSig != scriptSig:
+        raise ValueError(
+            f'supplied scriptSig is not present in input {inIdx} of '
+            f'the supplied transaction')
 
     if witness is not None:
         ensure_isinstance(witness, CScriptWitness, 'witness')
