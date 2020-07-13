@@ -2,29 +2,49 @@ language: python
 
 dist: xenial
 
+stages: test
+
 python:
   - "3.6"
   - "3.7"
   - "3.8-dev"
   - "pypy3"
 
-# Unfortunately, travis does not support python on OSX at the moment
-#
-# os:
-#   - linux
-#   - osx
-#
-# osx_image: xcode12
 
 branches:
   only:
   - gh-pages
   - /.*/
 
+jobs:
+    include:
+        stage: test
+        os: osx
+        osx_image: xcode12
+        language: sh
+        env:
+            - HOMEBREW_NO_INSTALL_CLEANUP=1
+            - HOMEBREW_NO_ANALYTICS=1
+        before_cache: rm -f "$HOME/Library/Caches/pip/log/debug.log"
+        cache: "$HOME/Library/Caches/pip"
+        addons:
+            homebrew:
+                packages: python3
+
+        before_install:
+            - python3 -m pip install --upgrade virtualenv
+            - python3 -m pip install coverage
+            - virtualenv -p python3 --system-site-packages "$HOME/venv"
+            - source "$HOME/venv/bin/activate"
+
+env:
+    - LD_LIBRARY_PATH=/usr/local/lib
+
+before_install:
+    - python3 -m pip install coverage
+
 install:
-    - pip install coverage
-    - sh -c 'git clone git://github.com/bitcoin/secp256k1.git libsecp256k1 && cd libsecp256k1 && ./autogen.sh && ./configure && make && sudo make install && cd ..;'
-    - sh -c 'sudo ln -s /usr/local/lib/libsecp256k1.so.0 /usr/lib/libsecp256k1.so.0'
+    - sh -c 'git clone git://github.com/bitcoin/secp256k1.git libsecp256k1 && cd libsecp256k1 && ./autogen.sh && ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests && make && sudo make install && cd ..;'
 
 script:
   - "coverage run --append --omit='tests/*,*/site-packages/*,*/distutils/*' setup.py test -q"
