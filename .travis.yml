@@ -1,6 +1,6 @@
 language: python
 
-dist: xenial
+dist: bionic
 
 stages: test
 
@@ -29,9 +29,11 @@ jobs:
         cache: "$HOME/Library/Caches/pip"
         addons:
             homebrew:
-                packages: python3
+                packages:
+                    - python3
 
         before_install:
+            - sh -c 'git clone git://github.com/bitcoin/secp256k1.git libsecp256k1 && cd libsecp256k1 && ./autogen.sh && ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests && make && sudo make install && cd ..;'
             - python3 -m pip install --upgrade virtualenv
             - python3 -m pip install coverage
             - virtualenv -p python3 --system-site-packages "$HOME/venv"
@@ -40,11 +42,17 @@ jobs:
 env:
     - LD_LIBRARY_PATH=/usr/local/lib
 
+addons:
+    apt:
+        packages:
+            - libsecp256k1-dev
+
 before_install:
     - python3 -m pip install coverage
 
 install:
-    - sh -c 'git clone git://github.com/bitcoin/secp256k1.git libsecp256k1 && cd libsecp256k1 && ./autogen.sh && ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests && make && sudo make install && cd ..;'
+    # libbitcoinconsensus
+    - sh -c 'git clone https://github.com/bitcoin/bitcoin.git bitcoin && cd bitcoin && ./autogen.sh && ./configure --without-qtdbus --without-qrencode --without-miniupnpc --disable-tests --disable-wallet --disable-zmq --with-libs --disable-util-cli --disable-util-tx --disable-util-wallet --disable-bench --without-daemon --without-gui --disable-fuzz --disable-ccache --disable-static --with-system-libsecp256k1 && make && sudo make install && cd ..'
 
 script:
   - "coverage run --append --omit='tests/*,*/site-packages/*,*/distutils/*' setup.py test -q"
