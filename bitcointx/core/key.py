@@ -23,6 +23,7 @@ import hmac
 import struct
 import ctypes
 import ctypes.util
+import platform
 import hashlib
 import warnings
 from abc import abstractmethod
@@ -80,7 +81,21 @@ def _check_res_openssl_void_p(val, func, args): # type: ignore
 def load_openssl_library(path: Optional[str] = None) -> Optional[ctypes.CDLL]:
 
     if path is None:
-        path = ctypes.util.find_library('ssl') or 'libeay32'
+        path_generic = ctypes.util.find_library('ssl')
+        if platform.system() == 'Darwin':
+            # Fix for bug in MacOSX 10.15 where libssl is not a real
+            # library, and causes SIGABRT on load.
+            # libssl.35 should be the most compatible lib available there.
+            path = ctypes.util.find_library('ssl.35') or path_generic
+        elif platform.system() == 'Windows':
+            path = path_generic or 'libeay32'
+        else:
+            path = path_generic
+
+        if path is None:
+            raise ImportError(
+                "ssl library is required for non-strict signature "
+                "verification, but it was not found")
 
     try:
         handle: Optional[ctypes.CDLL] = ctypes.cdll.LoadLibrary(path)
