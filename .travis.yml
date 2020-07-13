@@ -8,11 +8,13 @@ python:
   - "3.8-dev"
   - "pypy3"
 
-os:
-  - linux
-  - osx
-
-osx_image: xcode12
+# Unfortunately, travis does not support python on OSX at the moment
+#
+# os:
+#   - linux
+#   - osx
+#
+# osx_image: xcode12
 
 branches:
   only:
