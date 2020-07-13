@@ -6,6 +6,12 @@ Fixes for openssl loading (only relevant for historical signatures:
     - Fix issue with libssl on MacOSX 10.15. by trying to load `libssl.35` first
     - The `libeay32` library is only tried to be loaded on Windows platform
 
+Tests for PyPy are removed. The compatibilty of ctypes module in PyPy with ctypes
+in CPython is lacking, and debugging the quirks of PyPy implementation is too costly,
+given that the code that looks good and runs perfectly with CPython fails on PyPy with
+incomprehensive messages. Use PyPy at your own risk, there will likely be bugs around
+ctypes interaction.
+
 ## v1.1.0
 
 Breaking changes:

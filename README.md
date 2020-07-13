@@ -108,7 +108,6 @@ Like the Bitcoin Core codebase CTransaction is immutable and
 CMutableTransaction is mutable; unlike the Bitcoin Core codebase this
 distinction also applies to COutPoint, CTxIn, CTxOut and CTxWitness.
 
-
 ## Endianness Gotchas
 
 Rather confusingly Bitcoin Core shows transaction and block hashes as
@@ -217,7 +216,6 @@ skipped):
     * CPython 3.6
     * CPython 3.7
     * CPython 3.8-dev
-    * PyPy3
 
 HTML coverage reports can then be found in the htmlcov/ subdirectory.
 
