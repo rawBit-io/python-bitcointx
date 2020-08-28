@@ -67,11 +67,6 @@ _ctypes_functype = getattr(ctypes, 'WINFUNCTYPE', getattr(ctypes, 'CFUNCTYPE'))
 
 
 @_ctypes_functype(ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p)
-def _secp256k1_error_callback_fn(error_str, _data):  # type: ignore
-    _secp256k1_error_storage.last_error = {'code': -1, 'type': 'internal_error', 'message': str(error_str)}
-
-
-@_ctypes_functype(ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p)
 def _secp256k1_illegal_callback_fn(error_str, _data):  # type: ignore
     _secp256k1_error_storage.last_error = {'code': -2, 'type': 'illegal_argument', 'message': str(error_str)}
 
@@ -128,9 +123,6 @@ def _add_function_definitions(_secp256k1: ctypes.CDLL) -> None:
 
     _secp256k1.secp256k1_context_set_illegal_callback.restype = None
     _secp256k1.secp256k1_context_set_illegal_callback.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-
-    _secp256k1.secp256k1_context_set_error_callback.restype = None
-    _secp256k1.secp256k1_context_set_error_callback.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
 
     _secp256k1.secp256k1_ecdsa_sign.restype = ctypes.c_int
     _secp256k1.secp256k1_ecdsa_sign.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
@@ -198,7 +190,6 @@ def secp256k1_create_and_init_context(_secp256k1: ctypes.CDLL, flags: int
     if ctx is None:
         raise RuntimeError('secp256k1_context_create() returned None')
 
-    _secp256k1.secp256k1_context_set_error_callback(ctx, _secp256k1_error_callback_fn, 0)
     _secp256k1.secp256k1_context_set_illegal_callback(ctx, _secp256k1_illegal_callback_fn, 0)
 
     seed = os.urandom(32)
