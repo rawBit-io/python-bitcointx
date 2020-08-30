@@ -1,6 +1,11 @@
 # python-bitcointx release notes
 
-## v1.1.1.dev0
+## v1.1.1
+
+Do not set error callback in secp256k1 - the default handler will do abort()
+with an error message. There is no safe continuation possible after this happens,
+and this situation should never happen. The python handler would need to do
+os.abort() anyway.
 
 Fixes for openssl loading (only relevant for historical signatures:
     - Fix issue with libssl on MacOSX 10.15. by trying to load `libssl.35` first
