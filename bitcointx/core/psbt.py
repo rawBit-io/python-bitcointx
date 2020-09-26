@@ -389,6 +389,8 @@ class PSBT_Input(Serializable):
 
         allow_unknown_sighash_types: bool = False,
         allow_convert_to_witness_utxo: bool = False,
+        force_witness_utxo: bool = False,
+        relaxed_sanity_checks: bool = False,
         index: Optional[int] = None,
     ) -> None:
         def descr(msg: str) -> str:
@@ -486,79 +488,12 @@ class PSBT_Input(Serializable):
                               descr('contents of unkown type'))
         self.unknown_fields = unknown_fields
 
-        self.set_utxo(utxo, unsigned_tx)
+        self._utxo = None
+        self.set_utxo(utxo, unsigned_tx, force_witness_utxo=force_witness_utxo,
+                      relaxed_sanity_checks=relaxed_sanity_checks)
 
         if allow_convert_to_witness_utxo and self._witness_utxo:
             self._utxo = self._witness_utxo
-
-    def _update_witness_utxo_info(
-        self, unsigned_tx: Optional[CTransaction]
-    ) -> None:
-
-        self._witness_utxo = None
-
-        must_be_witness_utxo = \
-            bool(self.witness_script) or bool(self.final_script_witness)
-
-        if self.utxo is None:
-            if must_be_witness_utxo:
-                raise ValueError(
-                    'witness_script and/or final_script_witness '
-                    'is present for input, but utxo is not present')
-            return
-
-        if isinstance(self.utxo, CTxOut):
-            self._witness_utxo = self.utxo
-            return
-
-        assert isinstance(self.utxo, CTransaction)
-
-        if self.index is None or unsigned_tx is None:
-            if must_be_witness_utxo:
-                raise ValueError(
-                    'cannot convert non-witness utxo to witness utxo, '
-                    'usnigned_tx or input index is not present')
-            # cannot convert without index or unsigned_tx,
-            # even if it was a witness utxo, we cannot know
-            return
-
-        txin = unsigned_tx.vin[self.index]
-        if txin.prevout.n >= len(self.utxo.vout):
-            raise ValueError(
-                'prevout index in unsigned_tx is beyond the '
-                'length of utxo.vout')
-
-        txid = self.utxo.GetTxid()
-        if txid != txin.prevout.hash:
-            raise ValueError(
-                f'txid of the transaction provided in utxo field for '
-                f'segwit input at index {self.index} does not match '
-                f'prevout hash of the input')
-
-        prev_txout = self.utxo.vout[txin.prevout.n]
-
-        spk = prev_txout.scriptPubKey
-        rds = self.redeem_script
-        if spk.is_witness_scriptpubkey():
-            if self.redeem_script:
-                raise ValueError(
-                    f'redeem script is specified for input '
-                    f'at index {self.index} with non-p2sh segwit prevout')
-            must_be_witness_utxo = True
-        elif spk.is_p2sh() and rds and rds.is_witness_scriptpubkey():
-            if rds.to_p2sh_scriptPubKey() != spk:
-                raise ValueError(
-                    f'redeem script is specified for p2sh '
-                    f'input at index {self.index}, but it does not match '
-                    f'the scriptPubKey')
-            must_be_witness_utxo = True
-        elif rds and not spk.is_p2sh():
-            raise ValueError(
-                f'input at index {self.index} has redeem script specified, '
-                f'but has non-p2sh scriptPubKey')
-
-        if must_be_witness_utxo:
-            self._witness_utxo = prev_txout
 
     @property
     def utxo(self) -> Optional[Union[CTransaction, CTxOut]]:
@@ -568,20 +503,129 @@ class PSBT_Input(Serializable):
     def set_utxo(
         self,
         new_utxo: Optional[Union[CTransaction, CTxOut]],
-        unsigned_tx: Optional[CTransaction]
+        unsigned_tx: Optional[CTransaction],
+        force_witness_utxo: bool = False,
+        relaxed_sanity_checks: bool = False
     ) -> None:
         if new_utxo:
             ensure_isinstance(new_utxo, (CTransaction, CTxOut), 'new_utxo')
         if unsigned_tx:
             ensure_isinstance(unsigned_tx, CTransaction, 'unsigned_tx')
-        self._utxo = new_utxo
-        self._update_witness_utxo_info(unsigned_tx)
+
+        input_descr = ('input' if self.index is None
+                       else f'input at index {self.index}')
+
+        must_be_witness_utxo = force_witness_utxo
+        wutxo_descr = 'as explicitly stated'
+
+        if self.witness_script:
+            must_be_witness_utxo = True
+            wutxo_descr = 'because witness script is specified'
+
+        if self.final_script_witness:
+            must_be_witness_utxo = True
+            wutxo_descr = 'because final script witness is specified'
+
+        # Returns True if utxo should be definitely a witness utxo
+        # Returns False otherwise
+        # Performs consistency checks
+        # (most checks are skipped when relaxed_sanity_checks=True)
+        def check_witness_utxo_spk(spk: CScript) -> bool:
+            rds = self.redeem_script
+            if spk.is_witness_scriptpubkey():
+                if self.redeem_script and not relaxed_sanity_checks:
+                    raise ValueError(
+                        f'redeem script is specified for {input_descr} '
+                        f'with non-p2sh segwit prevout')
+                return True
+            elif rds:
+                if spk.is_p2sh():
+                    if rds.is_witness_scriptpubkey():
+                        if rds.to_p2sh_scriptPubKey() != spk and \
+                                not relaxed_sanity_checks:
+                            raise ValueError(
+                                f'redeem script is specified for p2sh '
+                                f'{input_descr}, but it does not match '
+                                f'the scriptPubKey')
+                        return True
+                    elif must_be_witness_utxo and not relaxed_sanity_checks:
+                        raise ValueError(
+                            f'{input_descr} is expected to be a witness UTXO, '
+                            f'{wutxo_descr}, but the redeem script is not '
+                            f'a witness scriptPubKey')
+                    else:
+                        return False
+                elif not relaxed_sanity_checks:
+                    raise ValueError(
+                        f'{input_descr} has redeem script specified, '
+                        f'but has non-p2sh scriptPubKey')
+                else:
+                    return False
+            elif spk.is_p2sh():
+                return must_be_witness_utxo
+
+            if must_be_witness_utxo and not relaxed_sanity_checks:
+                raise ValueError(
+                    f'{input_descr} is expected to be a witness UTXO, '
+                    f'{wutxo_descr}, but it has the scriptPubKey that is not '
+                    f'a witness scriptPubKey nor a P2SH scriptPubKey')
+
+            return False
+
+        utxo = new_utxo or self._utxo
+
+        if utxo is None:
+            self._witness_utxo = None
+            return
+
+        if isinstance(utxo, CTxOut):
+            check_witness_utxo_spk(utxo.scriptPubKey)
+            self._utxo = utxo
+            self._witness_utxo = utxo
+            return
+
+        assert isinstance(utxo, CTransaction)
+
+        if self.index is None or unsigned_tx is None:
+            if must_be_witness_utxo:
+                what_is_missing = ('unsigned_tx' if unsigned_tx is None
+                                   else 'input index')
+                raise ValueError(
+                    f'cannot convert non-witness utxo to witness utxo, '
+                    f'{what_is_missing} is not present')
+            # cannot convert without index or unsigned_tx,
+            # even if it was a witness utxo, we cannot know
+            self._utxo = utxo
+            self._witness_utxo = None
+            return
+
+        txin = unsigned_tx.vin[self.index]
+        if txin.prevout.n >= len(utxo.vout):
+            raise ValueError(
+                f'{input_descr} prevout index in unsigned_tx is beyond the '
+                f'length of utxo.vout')
+
+        txid = utxo.GetTxid()
+        if txid != txin.prevout.hash and not relaxed_sanity_checks:
+            raise ValueError(
+                f'txid of the transaction provided in utxo field for '
+                f'segwit {input_descr} does not match '
+                f'prevout hash of the input')
+
+        prev_txout = utxo.vout[txin.prevout.n]
+
+        if check_witness_utxo_spk(prev_txout.scriptPubKey):
+            self._witness_utxo = prev_txout
+        else:
+            self._witness_utxo = None
+
+        self._utxo = utxo
 
     @property
     def non_witness_utxo(self) -> Optional[CTransaction]:
         if self._witness_utxo:
             return None
-        assert isinstance(self._utxo, CTransaction)
+        assert self._utxo is None or isinstance(self._utxo, CTransaction)
         return self._utxo
 
     @property
@@ -1091,10 +1135,10 @@ class PSBT_Input(Serializable):
 
     @classmethod
     def stream_deserialize(cls: Type[T_PSBT_Input], f: ByteStream_Type,
+                           unsigned_tx: Optional[CTransaction] = None,
                            index: Optional[int] = None,
                            **kwargs: Any) -> T_PSBT_Input:
 
-        utxo: Optional[Union[CTransaction, CTxOut]] = None
         partial_sigs: Dict[CPubKey, bytes] = OrderedDict()
         sighash_type: Optional[int] = None
         redeem_script: CScript = CScript()
@@ -1111,6 +1155,32 @@ class PSBT_Input(Serializable):
         def descr(msg: str) -> str:
             return f'{msg} for input at index {index}'
 
+        def check_witness_and_nonwitness_utxo_in_sync(
+            witness_utxo: CTxOut, non_witness_utxo: CTransaction,
+        ) -> None:
+            if index is None or unsigned_tx is None:
+                raise ValueError(descr(
+                    'both witness and non-witness UTXO fields '
+                    'are present in PSBT input, but index and unsigned_tx '
+                    'arguments are not supplied. This makes it impossible '
+                    'to check that these fields are in-sync'))
+
+            prevout_index = unsigned_tx.vin[index].prevout.n
+
+            if prevout_index >= len(non_witness_utxo.vout):
+                raise SerializationError(descr(
+                    'prevout index in unsigned_tx is beyond the '
+                    'length of outputs array of non-witness UTXO'))
+
+            txout = non_witness_utxo.vout[prevout_index]
+            if witness_utxo.serialize() != txout.serialize():
+                raise SerializationError(descr(
+                    'both witness and non-witness UTXO fields are supplied, '
+                    'but witness utxo is not equal to the corresponding '
+                    'output in the transaction given for non-witness utxo'))
+
+        witness_utxo: Optional[CTxOut] = None
+        non_witness_utxo: Optional[CTransaction] = None
         keys_seen: Set[bytes] = set()
         for key_type, key_data, value in \
                 read_psbt_keymap(f, keys_seen, PSBT_InKeyType,
@@ -1118,20 +1188,16 @@ class PSBT_Input(Serializable):
 
             if key_type is PSBT_InKeyType.NON_WITNESS_UTXO:
                 ensure_empty_key_data(key_type, key_data, descr(''))
-                if utxo is not None:
-                    raise SerializationError(
-                        descr(
-                            'Non-witness UTXO encountered after witness UTXO '
-                            'already seen for the same input'))
-                utxo = CTransaction.deserialize(value)
+                non_witness_utxo = CTransaction.deserialize(value)
+                if witness_utxo is not None:
+                    check_witness_and_nonwitness_utxo_in_sync(
+                        witness_utxo, non_witness_utxo)
             elif key_type is PSBT_InKeyType.WITNESS_UTXO:
                 ensure_empty_key_data(key_type, key_data, descr(''))
-                if utxo is not None:
-                    raise SerializationError(
-                        descr(
-                            'Non-witness UTXO encountered after witness UTXO '
-                            'already seen for the same input'))
-                utxo = CTxOut.deserialize(value)
+                witness_utxo = CTxOut.deserialize(value)
+                if non_witness_utxo is not None:
+                    check_witness_and_nonwitness_utxo_in_sync(
+                        witness_utxo, non_witness_utxo)
             elif key_type is PSBT_InKeyType.PARTIAL_SIG:
                 pub = CPubKey(key_data)
                 if not pub.is_fullyvalid():
@@ -1179,7 +1245,20 @@ class PSBT_Input(Serializable):
                     f'it must be handled, and this statement '
                     f'should not be reached.')
 
-        return cls(utxo=utxo, partial_sigs=partial_sigs,
+        # non_witness_utxo is preferred over witness_utxo for `utxo` kwarg
+        # because non_witness_utxo is a full transaction,
+        # that may contain the witness utxo.
+        #
+        # If the case when non_witness_utxo contains the witness_utxo,
+        # we have checked that the CTxOut presented in WITNESS_UTXO was
+        # in fact in-sync with transaction present in NON_WITNESS_UTXO.
+        # The logic in set_utxo() will extract the witness utxo and
+        # will use it. There are cases when set_utxo() cannot detect
+        # 'witness-ness' of the utxo. To handle this cases, we also supply
+        # force_witness_utxo boolean kwarg
+        return cls(utxo=non_witness_utxo or witness_utxo,
+                   partial_sigs=partial_sigs,
+                   unsigned_tx=unsigned_tx,
                    sighash_type=sighash_type,
                    redeem_script=redeem_script, witness_script=witness_script,
                    derivation_map=derivation_map,
@@ -1188,24 +1267,30 @@ class PSBT_Input(Serializable):
                    proof_of_reserves_commitment=proof_of_reserves_commitment,
                    proprietary_fields=proprietary_fields,
                    unknown_fields=unknown_fields,
-                   index=index, **kwargs)
+                   index=index, force_witness_utxo=bool(witness_utxo),
+                   **kwargs)
 
-    def stream_serialize(self, f: ByteStream_Type, **kwargs: Any) -> None:
+    def stream_serialize(self, f: ByteStream_Type,
+                         always_include_witness_utxo: bool = True,
+                         **kwargs: Any) -> None:
         if self.utxo is not None:
-            # Note that this may be segwit input, but that retains
-            # full transaction. It will be serialized as non-segwit then
             if isinstance(self.utxo, CTransaction):
                 assert not self.utxo.is_null()
                 stream_serialize_field(PSBT_InKeyType.NON_WITNESS_UTXO, f,
                                        value=self.utxo.serialize())
-            elif isinstance(self.utxo, CTxOut):
-                assert self.utxo.is_valid()
-                stream_serialize_field(PSBT_InKeyType.WITNESS_UTXO, f,
-                                       value=self.utxo.serialize())
+                # This may be non-segwit input, or the segwit input that
+                # retains full transaction. Full transaction will be serialized
+                # as NON_WITNESS_UTXO, and if this is a segwit input,
+                # the CTxOut will be additionally serialized as WITNESS_UTXO
+                # (unless always_include_witness_utxo is False)
+                include_witness_utxo = always_include_witness_utxo
             else:
-                raise AssertionError(
-                    'Expected utxo to be an instance CTransaction or CTxOut, '
-                    f'not {self.utxo.__class__.__name__}')
+                include_witness_utxo = True
+
+            if self.witness_utxo and include_witness_utxo:
+                assert self.witness_utxo.is_valid()
+                stream_serialize_field(PSBT_InKeyType.WITNESS_UTXO, f,
+                                       value=self.witness_utxo.serialize())
 
         if not self.final_script_sig and not self.final_script_witness:
             for pub, sig in self.partial_sigs.items():
@@ -1626,7 +1711,10 @@ class PartiallySignedTransaction(Serializable):
                 elif inp.index != i:
                     raise ValueError(
                         f'incorrect index on PSBT_Input at position {i}')
-                inp._update_witness_utxo_info(unsigned_tx)
+                if inp.non_witness_utxo:
+                    # This might actually be a witness utxo. This can only be
+                    # checked when unsigned_tx is known, do this check now.
+                    inp.set_utxo(None, unsigned_tx)
 
             new_inputs.append(inp)
 
@@ -1807,7 +1895,10 @@ class PartiallySignedTransaction(Serializable):
 
         inp.index = len(saved_vin)
 
-        inp._update_witness_utxo_info(self.unsigned_tx)
+        if inp.non_witness_utxo:
+            # This might actually be a witness utxo. This can only be
+            # checked when unsigned_tx is known, do this check now.
+            inp.set_utxo(None, self.unsigned_tx)
 
         try:
             inp._check_sanity(self.unsigned_tx)
@@ -1855,10 +1946,15 @@ class PartiallySignedTransaction(Serializable):
     def set_utxo(
         self,
         new_utxo: Optional[Union[CTransaction, CTxOut]],
-        index: int
+        index: int,
+        force_witness_utxo: bool = False,
+        relaxed_sanity_checks: bool = False
     ) -> None:
         ensure_isinstance(index, int, 'index')
-        self.inputs[index].set_utxo(new_utxo, self.unsigned_tx)
+        self.inputs[index].set_utxo(
+            new_utxo, self.unsigned_tx,
+            force_witness_utxo=force_witness_utxo,
+            relaxed_sanity_checks=relaxed_sanity_checks)
 
     @classmethod
     def from_base64_or_binary(
@@ -1971,7 +2067,9 @@ class PartiallySignedTransaction(Serializable):
         for input_index in range(len(unsigned_tx.vin)):
             inputs.append(
                 PSBT_Input.stream_deserialize(
-                    f, index=input_index, unsigned_tx=unsigned_tx, **kwargs))
+                    f, index=input_index, unsigned_tx=unsigned_tx,
+                    relaxed_sanity_checks=relaxed_sanity_checks,
+                    **kwargs))
 
         outputs = []
         for output_index in range(len(unsigned_tx.vout)):
@@ -2024,11 +2122,16 @@ class PartiallySignedTransaction(Serializable):
 
         f.write(PSBT_SEPARATOR)
 
+        always_include_witness_utxo = kwargs.pop(
+            'always_include_witness_utxo', True)
+
         for inp in self.inputs:
-            inp.stream_serialize(f)
+            inp.stream_serialize(
+                f, always_include_witness_utxo=always_include_witness_utxo,
+                **kwargs)
 
         for outp in self.outputs:
-            outp.stream_serialize(f)
+            outp.stream_serialize(f, **kwargs)
 
     def sign(self, key_store: KeyStore,
              complex_script_helper_factory: Callable[

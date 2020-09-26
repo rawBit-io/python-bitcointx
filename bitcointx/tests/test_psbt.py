@@ -11,11 +11,14 @@
 
 # pylama:ignore=E501,C901
 
+from io import BytesIO
 import unittest
 import base64
+from typing import Set
+from collections import OrderedDict
 
 from bitcointx import ChainParams
-from bitcointx.wallet import CCoinExtKey, CCoinExtPubKey
+from bitcointx.wallet import CCoinExtKey, CCoinExtPubKey, P2PKHCoinAddress
 from bitcointx.core import (
     x, lx, b2x, CTransaction, CTxOut, CMutableTxOut, CTxIn, COutPoint,
     coins_to_satoshi
@@ -27,10 +30,12 @@ from bitcointx.core.script import (
     CScriptWitness
 )
 from bitcointx.core.serialize import (
-    SerializationError, SerializationTruncationError
+    SerializationError, SerializationTruncationError, ser_read
 )
 from bitcointx.core.psbt import (
-    PartiallySignedTransaction, PSBT_KeyDerivationInfo, PSBT_ProprietaryTypeData
+    PartiallySignedTransaction, PSBT_KeyDerivationInfo,
+    PSBT_ProprietaryTypeData, PSBT_MAGIC_HEADER_BYTES,
+    read_psbt_keymap, PSBT_GlobalKeyType, PSBT_InKeyType
 )
 
 
@@ -591,7 +596,8 @@ class Test_PSBT(unittest.TestCase):
         psbt.inputs[0].witness_script = CScript([1, 2, 3])
         psbt.inputs[0].redeem_script = psbt.inputs[0].witness_script.to_p2wsh_scriptPubKey()
         assert isinstance(psbt.inputs[0].utxo, CTxOut)
-        psbt.set_utxo(psbt.inputs[0].utxo.to_mutable(), index=0)
+        new_utxo = CMutableTxOut(psbt.inputs[0].utxo.nValue, psbt.inputs[0].redeem_script.to_p2sh_scriptPubKey())
+        psbt.set_utxo(new_utxo, index=0)
         assert isinstance(psbt.inputs[0].utxo, CMutableTxOut)
         psbt.inputs[0].utxo.scriptPubKey = psbt.inputs[0].redeem_script.to_p2sh_scriptPubKey()
         psbt.inputs[0].partial_sigs[pub] = b'123'
@@ -656,3 +662,108 @@ class Test_PSBT(unittest.TestCase):
         self.assertEqual(b2x(psbt2.serialize()), b2x(data))
         self.assertEqual(b2x(psbt1.serialize()), b2x(psbt2.serialize()))
         self.assertEqual(b64_data, psbt1.to_base64())
+
+    def test_both_witness_and_nonwitness_utxo_present(self) -> None:
+        psbt = PartiallySignedTransaction.from_base64('cHNidP8BAHEBAAAAAcW0gxctr4wq+udEP+oY+grv6InGxRDKVpeW98UITQiaAwAAAAD/////AqCGAQAAAAAAFgAUBjegjdQa1atsuFy/fUTLTZAL1JWY2A0AAAAAABYAFFEBdnUebGBa/XZXAOE4jm1eHkVqAAAAAAABAR/FXw8AAAAAABYAFISqBiz3yb0ti+ytJjeBA488HKBKAQD91wIBAAAAAAEEnM9T1vHW7fImScTidxYlCwUnB8U2iKoH5u4xBwpJ5vMAAAAAAP/////1DE3vAhFQrIBU0k0wrneYaIld3LwHKYRgCiEw7BfhbgMAAAAA/////zCfgoYXrNDoIYXngf8pYezpV3X45cQosTFK+oifsb2WBAAAAAD/////nqdRmB3IkGTg/180dr31IaNGmVgNfuOig4ThQYrqceQEAAAAAP////8E5ugCAAAAAAAWABRmP2PDUBffmcXqGwPoHKGHMgImMsVfDwAAAAAAFgAUr41Jy6c9tizy6M4nx2wlXGAtYTfFXw8AAAAAABYAFNntqDTGhy6cTWvI4iYCGkqYSvftxV8PAAAAAAAWABSEqgYs98m9LYvsrSY3gQOPPBygSgJHMEQCID4YPyKkw3C1d8hTf5HAA8fhBmL9iximbNyYu1V+lq+YAiBLt5eUUEDSSwMr/kJfHZ0tNnWJC2QkcNSBGLZM1u2iJgEhAvqrvxfo6SzD8tKI595SNOmLHvjMcScdvAbs7Ah6BcXQAkYwQwIgVa5lTULu+HrEujOJUAI4inPBY4Zpp9gwqx+U3x6p+UMCH0a4weUbmEtx/JN9dcwX6EuEWkQeEYrIwc7vBu3S9wQBIQMNFpH4Pa/P55tVXKs2ez3qSSE9iaK14GMcngVXtudy3QJHMEQCIExlg9oOfEklyBvIHoL4h4wXFoWWQms9ta6PO/3L68lxAiAdRGPqM8rcUQw3u15ZYwUbptdtQ4OzPRLNZzHkbBDtIgEhA750zsFB054TDF+FDrtrSLxOF3c29FiwRqD0ms1mNRfQAkcwRAIgBAHx266K4d/EdbGyPY8i8JQp2eDNf9SXGPl4ZvhbPo0CIAN2DL2nlQLV8YOusao1NtJqISxGw9SIgwETGiq4Dn3gASEDUdpWJs6SF85erRw7yLQ6h2nYlI5TB3kRz3QPPLbG40wAAAAAAQhrAkcwRAIgNDtHL2UcHEVWzANWH8diuOZvd1GwrLSSipRyfp2sDMkCIGZjl+Uaj8gOgGLKQ4b8ve12gkf+6N9+fMjBZ8/BuLtKASEDRsVK2TXRWQXR/EiC+7dH8Qc2U76Ce48yasYTYYY6NJEAAAA=')
+
+        def get_input_key_types(psbt_bytes: bytes) -> Set[PSBT_InKeyType]:
+            f = BytesIO(psbt_bytes)
+            magic = ser_read(f, 5)
+            assert magic == PSBT_MAGIC_HEADER_BYTES
+            unsigned_tx = None
+            keys_seen: Set[bytes] = set()
+            for key_type, key_data, value in \
+                    read_psbt_keymap(f, keys_seen, PSBT_GlobalKeyType,
+                                     OrderedDict(), list()):
+                if key_type == PSBT_GlobalKeyType.UNSIGNED_TX:
+                    unsigned_tx = CTransaction.deserialize(value)
+            assert unsigned_tx
+            keys_seen = set()
+            key_types_seen: Set[PSBT_InKeyType] = set()
+            assert len(unsigned_tx.vin) == 1
+            for key_type, key_data, value in \
+                    read_psbt_keymap(f, keys_seen, PSBT_InKeyType,
+                                     OrderedDict(), list()):
+                assert isinstance(key_type, PSBT_InKeyType)
+                key_types_seen.add(key_type)
+
+            return key_types_seen
+
+        # Default serialization should produce both fields
+        # (better compatibility)
+        ktset = get_input_key_types(psbt.serialize())
+        self.assertTrue(PSBT_InKeyType.NON_WITNESS_UTXO in ktset)
+        self.assertTrue(PSBT_InKeyType.WITNESS_UTXO in ktset)
+
+        # But with special kwarg, we can avoid extra field
+        ktset = get_input_key_types(
+            psbt.serialize(always_include_witness_utxo=False))
+        self.assertTrue(PSBT_InKeyType.NON_WITNESS_UTXO in ktset)
+        self.assertTrue(PSBT_InKeyType.WITNESS_UTXO not in ktset)
+
+        psbt2 = PartiallySignedTransaction.deserialize(
+            psbt.serialize(always_include_witness_utxo=False))
+
+        # The serialization should not depend on the fact that we
+        # deserialized from the data without extra witness field
+        ktset = get_input_key_types(psbt2.serialize())
+        self.assertTrue(PSBT_InKeyType.NON_WITNESS_UTXO in ktset)
+        self.assertTrue(PSBT_InKeyType.WITNESS_UTXO in ktset)
+
+        # Different serializations should produce identical results
+        self.assertEqual(psbt.inputs[0].serialize(),
+                         psbt2.inputs[0].serialize())
+        self.assertEqual(psbt.inputs[0].serialize(always_include_witness_utxo=False),
+                         psbt2.inputs[0].serialize(always_include_witness_utxo=False))
+
+        psbt3 = PartiallySignedTransaction.deserialize(psbt2.serialize())
+
+        self.assertEqual(psbt.inputs[0].serialize(),
+                         psbt3.inputs[0].serialize())
+        self.assertEqual(psbt.inputs[0].serialize(always_include_witness_utxo=False),
+                         psbt3.inputs[0].serialize(always_include_witness_utxo=False))
+
+        # Check that just-witness-utxo behavior did not change
+        psbt4 = psbt.clone()
+        psbt4.inputs[0].set_utxo(psbt.inputs[0].witness_utxo, psbt.unsigned_tx)
+
+        psbt5 = PartiallySignedTransaction.deserialize(
+            psbt4.serialize(always_include_witness_utxo=False))
+
+        ktset = get_input_key_types(psbt5.serialize())
+        self.assertTrue(PSBT_InKeyType.NON_WITNESS_UTXO not in ktset)
+        self.assertTrue(PSBT_InKeyType.WITNESS_UTXO in ktset)
+
+        # Check that mismatches are detected
+        psbt6 = psbt.clone()
+        assert isinstance(psbt.inputs[0].utxo, CTransaction)
+        object.__setattr__(psbt.inputs[0].utxo, 'nLockTime', psbt.inputs[0].utxo.nLockTime+1)
+        with self.assertRaisesRegex(ValueError,
+                                    'does not match prevout hash of the input'):
+            PartiallySignedTransaction.deserialize(psbt6.serialize())
+
+        psbt6 = psbt.clone()
+        assert isinstance(psbt6.inputs[0]._witness_utxo, CTxOut)
+        psbt6.inputs[0]._witness_utxo = CTxOut(psbt6.inputs[0]._witness_utxo.nValue+10,
+                                               psbt6.inputs[0]._witness_utxo.scriptPubKey)
+
+        with self.assertRaisesRegex(SerializationError,
+                                    'witness utxo is not equal to the corresponding output in the transaction given for non-witness utxo'):
+            PartiallySignedTransaction.deserialize(psbt6.serialize())
+
+        # Check that non-witness scriptpubkey is not allowed for WITNESS_UTXO
+        psbt7 = psbt.clone()
+        pubkey = CPubKey(x('03b1341ccba7683b6af4f1238cd6e97e7167d569fac47f1e48d47541844355bd46'))
+        assert isinstance(psbt7.inputs[0]._witness_utxo, CTxOut)
+        psbt7.inputs[0]._witness_utxo = CTxOut(psbt7.inputs[0]._witness_utxo.nValue+10,
+                                               P2PKHCoinAddress.from_pubkey(pubkey).to_scriptPubKey())
+        assert isinstance(psbt7.inputs[0].utxo, CTransaction)
+        mut_utxo = psbt7.inputs[0].utxo.to_mutable()
+        psbt7.unsigned_tx = psbt7.unsigned_tx.to_mutable()
+        mut_utxo.vout[psbt7.unsigned_tx.vin[0].prevout.n] = psbt7.inputs[0]._witness_utxo.to_mutable()
+        psbt7.inputs[0]._utxo = mut_utxo
+        psbt7.unsigned_tx.vin[0].prevout.hash = mut_utxo.GetTxid()
+
+        with self.assertRaisesRegex(ValueError,
+                                    'has the scriptPubKey that is not a witness scriptPubKey nor a P2SH scriptPubKey'):
+            PartiallySignedTransaction.deserialize(psbt7.serialize())
