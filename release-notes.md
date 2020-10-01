@@ -1,5 +1,24 @@
 # python-bitcointx release notes
 
+## v1.1.1.post0
+
+Allow the PSBT to have both `NON_WITNESS_UTXO` and `WITNESS_UTXO` for the same
+input on deserialization, as current redaction of BIP174 allows this. The fields
+will be checked to be in-sync (that witness utxo is included in "non-witness"
+full-transaction UTXO at the right position)
+
+On PSBT serialization, if `PSBT_Input` has both CTransaction as `utxo` property
+and non-Null `witness_utxo` property, both `NON_WITNESS_UTXO` and `WITNESS_UTXO`
+will be present in the serialization of this input, unless `always_include_witness_utxo=False`
+was passet to `deserialize()`.
+
+To force the `witness_utxo` field of `PSBT_Input` to be populated even though
+the "witness-ness" cannot be inferred from the supplied `CTransaction`, the
+`force_witness_utxo=True` kwarg (default is False) can be supplied to
+`PSBT_Input.__init__()` and `set_utxo()` methods of `PSBT_Input` and
+`PartiallySignedTransaction`.
+
+
 ## v1.1.1
 
 Do not set error callback in secp256k1 - the default handler will do abort()
