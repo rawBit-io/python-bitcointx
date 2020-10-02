@@ -10,6 +10,10 @@ structures. This is based on https://github.com/petertodd/python-bitcoinlib,
 but is focused only on providing the tools to build, manipulate and sign
 bitcoin transactions, and related data structures.
 
+It does not aim to be "The Swiss Army Knife of the Bitcoin protocol", but rather
+be a more specialized tool for handling transactions and associated data, with
+a focus on correctness, consistency, and developer ergonomics.
+
 ## Notable differences from python-bitcoinlib
 
 * Network-related code that deals with network messages and blocks is removed.
