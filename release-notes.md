@@ -1,5 +1,13 @@
 # python-bitcointx release notes
 
+## v1.1.1.post1
+
+Fix bug introduced in v1.1.1.post0: `set_utxo(None, ...)`, has unexpectedly changed
+semantics - instead of clearing the utxo, it used the utxo already-stored in the input.
+Such sudden change of semantics should not happen, but regretfully it slipped through.
+
+Add new `is_final()` methods to `PartiallySignedTransaction` and `PSBT_Input`
+
 ## v1.1.1.post0
 
 Allow the PSBT to have both `NON_WITNESS_UTXO` and `WITNESS_UTXO` for the same
