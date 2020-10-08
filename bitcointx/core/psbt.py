@@ -868,6 +868,33 @@ class PSBT_Input(Serializable):
                 return derinfo
         return None
 
+    @no_bool_use_as_property
+    def is_final(self) -> bool:
+        utxo = self.witness_utxo or self.utxo
+
+        if self.final_script_witness:
+            if not isinstance(utxo, CTxOut):
+                inp_descr = ("input without utxo specified" if utxo is None
+                             else "non-segwit input")
+                raise ValueError(
+                    f'final_script_witness is present for {inp_descr}')
+            self._check_nonfinal_fields_empty()
+            if self.final_script_sig:
+                if utxo.scriptPubKey.is_witness_scriptpubkey():
+                    raise ValueError(
+                        'final_script_sig is present for native segwit input')
+            elif utxo.scriptPubKey.is_p2sh():
+                raise ValueError(
+                    'final_script_sig is not present for p2sh-wrapped '
+                    'segwit input')
+            return True
+
+        if self.final_script_sig:
+            self._check_nonfinal_fields_empty()
+            return True
+
+        return False
+
     def sign(self,
              unsigned_tx: CTransaction,
              key_store: KeyStore, *,
@@ -887,34 +914,15 @@ class PSBT_Input(Serializable):
         assert(self.sighash_type != 0),\
             "unspecified sighash_type must be represented by None"
 
-        utxo = self.witness_utxo or self.utxo
-
-        if self.final_script_witness:
-            if not isinstance(utxo, CTxOut):
-                inp_descr = ("input without utxo specified" if utxo is None
-                             else "non-segwit input")
-                raise ValueError(
-                    f'final_script_witness is present for {inp_descr}')
-            self._check_nonfinal_fields_empty()
-            if self.final_script_sig:
-                if utxo.scriptPubKey.is_witness_scriptpubkey():
-                    raise ValueError(
-                        'final_script_sig is present for native segwit input')
-            elif utxo.scriptPubKey.is_p2sh():
-                raise ValueError(
-                    'final_script_sig is not present for p2sh-wrapped '
-                    'segwit input')
-            return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=0,
-                                      is_final=True)
-
-        if self.final_script_sig:
-            self._check_nonfinal_fields_empty()
+        if self.is_final():
             return PSBT_InputSignInfo(num_new_sigs=0, num_sigs_missing=0,
                                       is_final=True)
 
         if self.index is None:
             raise ValueError(
                 'index is not set for PSBT_Input')
+
+        utxo = self.witness_utxo or self.utxo
 
         if utxo is None:
             raise ValueError(
@@ -2132,6 +2140,12 @@ class PartiallySignedTransaction(Serializable):
 
         for outp in self.outputs:
             outp.stream_serialize(f, **kwargs)
+
+    @no_bool_use_as_property
+    def is_final(self) -> bool:
+        if len(self.unsigned_tx.vin) != len(self.inputs):
+            raise ValueError('len(inputs) != len(unsigned_tx.vin)')
+        return all(inp.is_final() for inp in self.inputs)
 
     def sign(self, key_store: KeyStore,
              complex_script_helper_factory: Callable[
