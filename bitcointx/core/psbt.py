@@ -502,13 +502,18 @@ class PSBT_Input(Serializable):
 
     def set_utxo(
         self,
-        new_utxo: Optional[Union[CTransaction, CTxOut]],
+        utxo: Optional[Union[CTransaction, CTxOut]],
         unsigned_tx: Optional[CTransaction],
         force_witness_utxo: bool = False,
         relaxed_sanity_checks: bool = False
     ) -> None:
-        if new_utxo:
-            ensure_isinstance(new_utxo, (CTransaction, CTxOut), 'new_utxo')
+        if utxo is not None:
+            ensure_isinstance(utxo, (CTransaction, CTxOut), 'utxo')
+        else:
+            self._utxo = None
+            self._witness_utxo = None
+            return
+
         if unsigned_tx:
             ensure_isinstance(unsigned_tx, CTransaction, 'unsigned_tx')
 
@@ -572,13 +577,8 @@ class PSBT_Input(Serializable):
 
             return False
 
-        utxo = new_utxo or self._utxo
-
-        if utxo is None:
-            self._witness_utxo = None
-            return
-
         if isinstance(utxo, CTxOut):
+            must_be_witness_utxo = True  # explicitly witness, by being CTxOut
             check_witness_utxo_spk(utxo.scriptPubKey)
             self._utxo = utxo
             self._witness_utxo = utxo
@@ -1722,7 +1722,7 @@ class PartiallySignedTransaction(Serializable):
                 if inp.non_witness_utxo:
                     # This might actually be a witness utxo. This can only be
                     # checked when unsigned_tx is known, do this check now.
-                    inp.set_utxo(None, unsigned_tx)
+                    inp.set_utxo(inp.non_witness_utxo, unsigned_tx)
 
             new_inputs.append(inp)
 
@@ -1906,7 +1906,7 @@ class PartiallySignedTransaction(Serializable):
         if inp.non_witness_utxo:
             # This might actually be a witness utxo. This can only be
             # checked when unsigned_tx is known, do this check now.
-            inp.set_utxo(None, self.unsigned_tx)
+            inp.set_utxo(inp.non_witness_utxo, self.unsigned_tx)
 
         try:
             inp._check_sanity(self.unsigned_tx)
@@ -1953,14 +1953,14 @@ class PartiallySignedTransaction(Serializable):
 
     def set_utxo(
         self,
-        new_utxo: Optional[Union[CTransaction, CTxOut]],
+        utxo: Optional[Union[CTransaction, CTxOut]],
         index: int,
         force_witness_utxo: bool = False,
         relaxed_sanity_checks: bool = False
     ) -> None:
         ensure_isinstance(index, int, 'index')
         self.inputs[index].set_utxo(
-            new_utxo, self.unsigned_tx,
+            utxo, self.unsigned_tx,
             force_witness_utxo=force_witness_utxo,
             relaxed_sanity_checks=relaxed_sanity_checks)
 
