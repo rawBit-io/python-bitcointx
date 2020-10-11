@@ -18,7 +18,7 @@ full-transaction UTXO at the right position)
 On PSBT serialization, if `PSBT_Input` has both CTransaction as `utxo` property
 and non-Null `witness_utxo` property, both `NON_WITNESS_UTXO` and `WITNESS_UTXO`
 will be present in the serialization of this input, unless `always_include_witness_utxo=False`
-was passet to `deserialize()`.
+was passed to `deserialize()`.
 
 To force the `witness_utxo` field of `PSBT_Input` to be populated even though
 the "witness-ness" cannot be inferred from the supplied `CTransaction`, the
@@ -473,7 +473,7 @@ python-bitcointx is now much easier. See for example
   - bugfix in VerifyWitnessProgram (part of VerifyScript) - it was breaking on
     p2wsh, and on integer values on witness stack
   - `de()serialize` and `stream_(de)serialize` now always work with `**kwargs`
-    instead of additional params being passet as dict
+    instead of additional params being passed as dict
   - VectorSerializer `stream_(de)serialize` method signatures changed
     to match base class
   - CKeyMixin, CExtKeyMixin, CExtPubKeyMixin renamed to CKeyBase, CExtKeyBase,
