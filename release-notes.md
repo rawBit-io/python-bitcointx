@@ -1,5 +1,18 @@
 # python-bitcointx release notes
 
+## v1.1.1.post2
+
+Fix a useability problem in `PartiallySignedTransaction` where `PSBT_Input`s that did not have
+an utxo assigned prevented the use of `psbt.sign()` to sign all other inputs on PSBT, because
+ValueError were raised on calling `sign()` of this input.
+
+Now `None` is returned in this case (and also if `index` is not set on `PSBT_Input`), and
+an exception is not raised. If you need to know if all psbt inputs are 'signable', you can
+just iterate over PSBT inputs and call `inp.sign(...)` directly and check if None is returned.
+If there's no key in `KeyStore` passed to `sign()`, `PSBT_InputSignInfo` will be returned with
+`num_new_sigs=0`, so when None is returned it means there's no way to sign the input with
+current data present in it, even if we knew the key.
+
 ## v1.1.1.post1
 
 Fix bug introduced in v1.1.1.post0: `set_utxo(None, ...)`, has unexpectedly changed
