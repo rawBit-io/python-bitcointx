@@ -919,14 +919,12 @@ class PSBT_Input(Serializable):
                                       is_final=True)
 
         if self.index is None:
-            raise ValueError(
-                'index is not set for PSBT_Input')
+            return None  # Not signable, cannot know the prevout
 
         utxo = self.witness_utxo or self.utxo
 
         if utxo is None:
-            raise ValueError(
-                f'utxo is not set for of PSBT_Input at index {self.index}')
+            return None  # Not signable, we don't have utxo at all
 
         def signer(pub: CPubKey) -> Optional[bytes]:
             assert sighash is not None
