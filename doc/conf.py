@@ -12,7 +12,7 @@
 # serve to show the default.
 
 PROJECT = 'python-bitcointx'
-DESCRIPTION = 'The Swiss Army Knife of the Bitcoin transactions.'
+DESCRIPTION = 'A library for handling Bitcoin transactions and associated data'
 AUTHORS = 'The python-bitcoinlib and python-bitcointx developers'
 
 import sphinx

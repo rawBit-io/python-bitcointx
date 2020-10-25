@@ -15,7 +15,7 @@ requires = []
 setup(
     name='python-bitcointx',
     version=__version__,
-    description='The Swiss Army Knife of the Bitcoin transactions.',
+    description='A library for handling Bitcoin transactions and associated data',
     long_description=README,
     long_description_content_type='text/markdown',
     classifiers=[
