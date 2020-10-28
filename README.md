@@ -30,14 +30,11 @@ a focus on correctness, consistency, and developer ergonomics.
 
 ## Note on v1.0.0 release
 
-The switch to v1.0.0 does not signify that the library is in any way more
-'mature' or 'stable' or 'production-ready' than the v0.10.x.The switch to the
-new major version was done purely because of the big refactoring effort
-that was made to improve the consistency of the library API,
-make it more composeable and maintainable. This required significant API
-breakage, and it made sense to bump the version.
-If anything, the first release of the v1.0.x version should be viewed as less
-mature than the v0.10.x, because of the amount of new code that was introduced.
+The switch from v0.10.x to v1.0.0 was done because of the big refactoring effort
+that was made to improve the consistency of the library API, make it more composeable and maintainable.
+This required significant API breakage, and it made sense to bump the version.
+
+The first release of the v1.0.x version introduced significant amount of new code (note that any new code compes with possibility of new bugs), and increased the differences from python-bitcoinlib.
 
 This [long post](https://gist.github.com/dgpv/6607c7d0eff66c387d8a5eaeb378e787#file-on-release-of-python-bitcointx-v1-0-1-md)
 elaborates on the motivations behind the decisions that shaped
