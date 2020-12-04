@@ -86,7 +86,11 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
             cls._mutable_cls = None
         else:
             if not issubclass(mutable_of, CoreCoinClass):
-                raise TypeError('mutable_of must be subclass of CoreCoinClass')
+                raise TypeError('mutable_of must be a subclass of CoreCoinClass')
+
+            if not issubclass(cls, mutable_of):
+                raise TypeError(f'{cls.__class__.__name__} must be a subclass '
+                                f'of {mutable_of.__class__.__name__}')
 
             make_mutable(cast(Type[CoreCoinClass], cls))
 
