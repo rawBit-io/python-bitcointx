@@ -147,6 +147,8 @@ transaction inputs validity.
 If you want script verification with consensus rules, you should use libbitcoinconsensus
 (https://github.com/bitcoin/bitcoin/blob/master/doc/shared-libraries.md), available
 via `ConsensusVerifyScript()` in `bitcointx.core.bitcoinconensus`.
+But also please note that `ConsensusVerifyScript()` does not check any standardness rules,
+only consensus rules.
 
 Script evaluation code of VerifyScript() is NOT in sync with Bitcoin Core code,
 and lacks some features. While some effort was made to make it behave closer
