@@ -205,10 +205,7 @@ class CScriptOp(int):
             return _opcode_instances[n]
         except IndexError:
             assert len(_opcode_instances) == n
-            # mypy cannot handle arguments to `bytes.__new__()` at the moment,
-            # issue: https://github.com/python/typeshed/issues/2630
-            # apparently it can't handle args to `int.__new__()`, too.
-            _opcode_instances.append(super().__new__(cls, n))  # type: ignore
+            _opcode_instances.append(super().__new__(cls, n))
             return _opcode_instances[n]
 
 
@@ -623,9 +620,7 @@ class DATA(bytes):
             raise TypeError(
                 'DATA can only accept bytes or bytearray instance')
 
-        # mypy cannot handle arguments to `bytes.__new__()` at the moment,
-        # issue: https://github.com/python/typeshed/issues/2630
-        return super().__new__(cls, data)  # type: ignore
+        return super().__new__(cls, data)
 
 
 class NUMBER(int):
@@ -647,10 +642,7 @@ class NUMBER(int):
         if isinstance(num, CScriptOp):
             raise TypeError('NUMBER can not accept CScriptOp instance')
 
-        # mypy cannot handle arguments to `bytes.__new__()` at the moment,
-        # issue: https://github.com/python/typeshed/issues/2630
-        # apparently it can't handle args to `int.__new__()`, too.
-        return super().__new__(cls, num)  # type: ignore
+        return super().__new__(cls, num)
 
 
 def OPCODE(op: CScriptOp) -> CScriptOp:
@@ -734,9 +726,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 ) -> T_CScript:
 
         if isinstance(value, (bytes, bytearray)):
-            # mypy cannot handle arguments to `bytes.__new__()` at the moment,
-            # issue: https://github.com/python/typeshed/issues/2630
-            return super().__new__(cls, value)  # type: ignore
+            return super().__new__(cls, value)
         else:
             def coerce_iterable(iterable: Iterable[ScriptElement_Type]
                                 ) -> Generator[bytes, None, None]:
@@ -746,9 +736,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             # Annoyingly bytes.join() always
             # returns a bytes instance even when subclassed.
 
-            # mypy cannot handle arguments to `bytes.__new__()` at the moment,
-            # issue: https://github.com/python/typeshed/issues/2630
-            return super().__new__(  # type: ignore
+            return super().__new__(
                 cls, b''.join(coerce_iterable(value)))
 
     def raw_iter(self) -> Generator[Tuple[CScriptOp, Optional[bytes], int],

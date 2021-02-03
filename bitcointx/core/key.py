@@ -372,7 +372,7 @@ class CKey(bytes, CKeyBase):
                 ) -> 'CKey':
         if len(secret) != 32:
             raise ValueError('secret size must be exactly 32 bytes')
-        return super().__new__(cls, secret)  # type: ignore
+        return super().__new__(cls, secret)
 
 
 T_CPubKey = TypeVar('T_CPubKey', bound='CPubKey')
@@ -396,7 +396,7 @@ class CPubKey(bytes):
     __fullyvalid: bool
 
     def __new__(cls: Type[T_CPubKey], buf: bytes = b'') -> T_CPubKey:
-        self = super().__new__(cls, buf)  # type: ignore
+        self = super().__new__(cls, buf)
 
         self.__fullyvalid = False
         if self.is_nonempty():
@@ -406,7 +406,7 @@ class CPubKey(bytes):
             self.__fullyvalid = (result == 1)
 
         self.__key_id = bitcointx.core.Hash160(self)
-        return cast(T_CPubKey, self)
+        return self
 
     @classmethod
     def _from_ctypes_char_array(cls: Type[T_CPubKey],

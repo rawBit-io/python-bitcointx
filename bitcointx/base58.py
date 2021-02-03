@@ -18,7 +18,7 @@
 import binascii
 import bitcointx.core
 
-from typing import TypeVar, Type, List, cast
+from typing import TypeVar, Type, List
 
 B58_DIGITS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
@@ -178,11 +178,9 @@ class CBase58Data(bytes):
     @classmethod
     def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
         """Instantiate from data"""
-        # mypy cannot handle arguments to `bytes.__new__()` at the moment,
-        # issue: https://github.com/python/typeshed/issues/2630
-        self = bytes.__new__(cls, data)  # type: ignore
-        self.__init__(None)
-        return cast(T_unbounded, self)
+        self = bytes.__new__(cls, data)
+        self.__init__(None)  # type: ignore
+        return self
 
     def to_bytes(self) -> bytes:
         """Convert to bytes instance
