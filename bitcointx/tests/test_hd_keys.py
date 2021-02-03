@@ -621,6 +621,10 @@ class Test_BIP32Path(unittest.TestCase):
                                               "error_range_order_bad"]), (tmpl_str, status)
                         elif str(e).startswith("index range equals wildcard range"):
                             assert(status == "error_range_equals_wildcard"), (tmpl_str, status)
+                        elif str(e).startswith("non-digit character found"):
+                            assert(status in ["error_unexpected_char",
+                                              "error_invalid_char",
+                                              "error_digit_expected"]), (tmpl_str, status)
                         elif str(e).startswith("index template format is not valid"):
                             assert(status in ["error_unexpected_char",
                                               "error_invalid_char",

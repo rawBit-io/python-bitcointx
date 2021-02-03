@@ -1142,7 +1142,7 @@ class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
 
         assert isinstance(path, str)
 
-        if path.strip() != path or len(path.split()) > 1:
+        if any(ch.isspace() for ch in path):
             raise ValueError('whitespace found in path')
 
         if path == '':
@@ -1202,8 +1202,10 @@ class BIP32Path(BIP32PathGeneric[int]):
     @classmethod
     def _index_from_str(cls, s: str, *, is_hardened: bool) -> int:
 
-        if s.strip() != s or len(s.split()) > 1:
-            raise ValueError('whitespace found in BIP32 index')
+        if not s.isdigit():
+            if any(ch.isspace() for ch in s):
+                raise ValueError('whitespace found in BIP32 index')
+            raise ValueError('non-digit character found in BIP32 index')
 
         if len(s) > 1 and s.startswith('0'):
             raise ValueError('leading zeroes are not allowed in BIP32 index')
@@ -1300,16 +1302,13 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
     def _index_from_str(cls, index_str: str, *, is_hardened: bool
                         ) -> BIP32PathTemplateIndex:
 
-        if index_str.strip() != index_str or len(index_str.split()) > 1:
+        if any(ch.isspace() for ch in index_str):
             raise ValueError('whitespace found in index template')
 
         bad_format_error = ValueError(f'index template format is not valid: "{index_str}"')
 
         def parse_index(s: str, *, is_hardened: bool
                         ) -> Tuple[Optional[int], Optional[ValueError]]:
-            if not s.isdigit():
-                return None, bad_format_error
-
             try:
                 n_int = BIP32Path._index_from_str(s, is_hardened=is_hardened)
             except ValueError as e:
