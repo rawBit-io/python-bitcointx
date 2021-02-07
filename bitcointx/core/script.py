@@ -1496,6 +1496,7 @@ def standard_multisig_redeem_script(
     total: int,
     required: int,
     pubkeys: List['bitcointx.core.key.CPubKey'],
+    accept_uncompressed_pubkeys: bool = False
 ) -> CScript:
     """Construct multisignature redeem script.
     We require to supply total number of pubkeys as separate argument
@@ -1532,6 +1533,14 @@ def standard_multisig_redeem_script(
         # therefore, if the callers want to support 1-of-1 in P2SH,
         # they need to handle it themselves.
         raise ValueError('1-of-1 multisig is not supported')
+
+    for p_i, pub in enumerate(pubkeys):
+        if not pub.is_fullyvalid():
+            raise ValueError(f'Pubkey at position {p_i} is invalid')
+        if (not pub.is_compressed()) and (not accept_uncompressed_pubkeys):
+            raise ValueError(
+                f'Pubkey at position {p_i} is uncompressed, this is not '
+                f'allowed (specify accept_uncompressed_pubkeys=True to allow)')
 
     result: List[ScriptElement_Type]
 

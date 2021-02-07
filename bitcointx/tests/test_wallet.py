@@ -318,19 +318,19 @@ class Test_P2PKHBitcoinAddress(unittest.TestCase):
     def test_from_valid_pubkey(self) -> None:
         """Create P2PKHBitcoinAddress's from valid pubkeys"""
 
-        def T(pubkey: bytes, expected_str_addr: str) -> None:
-            addr = P2PKHBitcoinAddress.from_pubkey(pubkey)
+        def T(pubkey: bytes, expected_str_addr: str, accept_uncompressed: bool = False) -> None:
+            addr = P2PKHBitcoinAddress.from_pubkey(pubkey, accept_uncompressed=accept_uncompressed)
             self.assertEqual(str(addr), expected_str_addr)
 
         T(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'),
           '1C7zdTfnkzmr13HfA2vNm5SJYRK6nEKyq8')
         T(x('0478d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71a1518063243acd4dfe96b66e3f2ec8013c8e072cd09b3834a19f81f659cc3455'),
-          '1JwSSubhmg6iPtRjtyqhUYYH7bZg3Lfy1T')
+          '1JwSSubhmg6iPtRjtyqhUYYH7bZg3Lfy1T', True)
 
         T(CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71')),
           '1C7zdTfnkzmr13HfA2vNm5SJYRK6nEKyq8')
         T(CPubKey(x('0478d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71a1518063243acd4dfe96b66e3f2ec8013c8e072cd09b3834a19f81f659cc3455')),
-          '1JwSSubhmg6iPtRjtyqhUYYH7bZg3Lfy1T')
+          '1JwSSubhmg6iPtRjtyqhUYYH7bZg3Lfy1T', True)
 
     def test_from_invalid_pubkeys(self) -> None:
         """Create P2PKHBitcoinAddress's from invalid pubkeys"""

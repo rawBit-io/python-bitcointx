@@ -1,4 +1,13 @@
 # python-bitcointx release notes
+## v1.1.2.dev
+
+Make PartiallySignedTransaction a dispatched class, mapped to PartiallySignedBitcoinTransaction
+
+ECDSA signing code now grinds for Low-R by default (same as Core does)
+
+Do not accept uncompressed pubkeys by default in `from_pubkey()` method for single-key address
+classes, and in `standard_multisig_redeem_script()`
+
 
 ## v1.1.1.post2
 

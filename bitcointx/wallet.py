@@ -326,7 +326,8 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
     @classmethod
     def from_pubkey(cls: Type[T_P2PKHCoinAddress],
                     pubkey: Union[CPubKey, bytes, bytearray],
-                    accept_invalid: bool = False) -> T_P2PKHCoinAddress:
+                    accept_invalid: bool = False,
+                    accept_uncompressed: bool = False) -> T_P2PKHCoinAddress:
         """Create a P2PKH address from a pubkey
 
         Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
@@ -341,6 +342,10 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
                 pubkey = CPubKey(pubkey)
             if not pubkey.is_fullyvalid():
                 raise P2PKHCoinAddressError('invalid pubkey')
+            if (not pubkey.is_compressed()) and (not accept_uncompressed):
+                raise P2PKHCoinAddressError(
+                    'Uncompressed pubkeys are not allowed '
+                    '(specify accept_uncompressed=True to allow)')
 
         pubkey_hash = bitcointx.core.Hash160(pubkey)
         return cls.from_bytes(pubkey_hash)
@@ -438,6 +443,9 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
                 pubkey = CPubKey(pubkey)
             if not pubkey.is_fullyvalid():
                 raise P2PKHCoinAddressError('invalid pubkey')
+            if not pubkey.is_compressed():
+                raise P2PKHCoinAddressError(
+                    'Uncompressed pubkeys are not allowed')
 
         pubkey_hash = bitcointx.core.Hash160(pubkey)
         return cls.from_bytes(pubkey_hash)
