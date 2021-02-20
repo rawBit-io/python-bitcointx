@@ -96,6 +96,7 @@ class JSONRPCError(Exception):
     of all subclasses is by no means complete.
     """
 
+    error: Dict[str, Union[str, int]]
     RPC_ERROR_CODE: int
     SUBCLS_BY_CODE: Dict[int, Type['JSONRPCError']] = {}
 
