@@ -1,12 +1,22 @@
 # python-bitcointx release notes
 ## v1.1.2.dev
 
-Make PartiallySignedTransaction a dispatched class, mapped to PartiallySignedBitcoinTransaction
+Breaking changes:
 
-ECDSA signing code now grinds for Low-R by default (same as Core does)
+    BIP32PathTemplate now uses '{' and '}' for index ranges rather than '[' and ']'
+    While this is a seriously breaking change, the BIP32 template feature is not widely used,
+    and the BIP32 templates BIP draft (https://github.com/bitcoin/bips/pull/1025) is not finalized
+    at the moment. Since the draft was changed to use curly brackets, the implementation here
+    was changed, too
 
-Do not accept uncompressed pubkeys by default in `from_pubkey()` method for single-key address
-classes, and in `standard_multisig_redeem_script()`
+Non-breaking changes:
+
+    Make PartiallySignedTransaction a dispatched class, mapped to PartiallySignedBitcoinTransaction
+
+    ECDSA signing code now grinds for Low-R by default (same as Core does)
+
+    Do not accept uncompressed pubkeys by default in `from_pubkey()` method for single-key address
+    classes, and in `standard_multisig_redeem_script()`
 
 
 ## v1.1.1.post2

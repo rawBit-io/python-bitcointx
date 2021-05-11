@@ -1333,7 +1333,7 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
         if len(index_str) < 3:
             raise bad_format_error
 
-        if '[' != index_str[0] or ']' != index_str[-1]:
+        if '{' != index_str[0] or '}' != index_str[-1]:
             raise bad_format_error
 
         index_str = index_str[1:-1]
@@ -1403,7 +1403,7 @@ class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
         if len(items) == 1 and ('-' not in items[0]):
             return f'{items[0]}{marker}'
 
-        return f"[{','.join(items)}]{marker}"
+        return f"{{{','.join(items)}}}{marker}"
 
     @classmethod
     def _index_from_argument(cls, n: Any) -> BIP32PathTemplateIndex:

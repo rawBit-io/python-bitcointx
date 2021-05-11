@@ -197,7 +197,7 @@ class Test_KeyStore(unittest.TestCase):
 
         # No error when path templates are specified for extended keys
         ks = KeyStore((xpriv1, BIP32PathTemplate('m')),
-                      (xpriv2, 'm/[44,49,84]h/0h/0h/[0-1]/*'),
+                      (xpriv2, 'm/{44,49,84}h/0h/0h/{0-1}/*'),
                       (xpub1, ''),  # '' same as BIP32PathTemplate('')
                       (xpub2, ['0/1', 'm/333/3/33']),
                       (xpub3, BIP32PathTemplate('m/0/0/1')),
@@ -292,10 +292,10 @@ class Test_KeyStore(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, 'must specify full path'):
             ks = KeyStore(xpriv2, xpub49,
-                          default_path_template='[44,49,84]h/0h/0h/[0-1]/[0-50000]')
+                          default_path_template='{44,49,84}h/0h/0h/{0-1}/{0-50000}')
 
         ks = KeyStore(xpriv2, xpub49,
-                      default_path_template='m/[44,49,84]h/0h/0h/[0-1]/[0-50000]')
+                      default_path_template='m/{44,49,84}h/0h/0h/{0-1}/{0-50000}')
 
         with self.assertRaises(BIP32PathTemplateViolation):
             ks.get_privkey(xpriv2.derive_path(long_path).pub.key_id,

@@ -259,33 +259,35 @@ class Test_BIP32Path(unittest.TestCase):
         with self.assertRaises(ValueError):
             cls('m/,')
         with self.assertRaises(ValueError):
-            cls('m/[-1,]')
+            cls('m/{-1,}')
         with self.assertRaises(ValueError):
-            cls('m/[-1,0]')
+            cls('m/{-1,0}')
         with self.assertRaises(ValueError):
             cls('m/1,')
         with self.assertRaises(ValueError):
             cls('m/,2')
         with self.assertRaises(ValueError):
-            cls('m/[1,]')
+            cls('m/{1,}')
         with self.assertRaises(ValueError):
-            cls('m/[,]')
+            cls('m/{,}')
         with self.assertRaises(ValueError):
             cls('m/abc')
         with self.assertRaises(ValueError):
-            cls('m/[1,]')
+            cls('m/{1,}')
         with self.assertRaises(ValueError):
-            cls('m/[,3]')
+            cls('m/{,3}')
         with self.assertRaises(ValueError):
-            cls('m/[3-]')
+            cls('m/{3-}')
         with self.assertRaises(ValueError):
-            cls('m/[3-7,*]')
+            cls('m/[3-5]')
         with self.assertRaises(ValueError):
-            cls('m/[7-3]')  # second bound less than first
+            cls('m/{3-7,*}')
         with self.assertRaises(ValueError):
-            cls('m/[3-7, 23]')  # space in template
+            cls('m/{7-3}')  # second bound less than first
         with self.assertRaises(ValueError):
-            cls('m/[*]')
+            cls('m/{3-7, 23}')  # space in template
+        with self.assertRaises(ValueError):
+            cls('m/{*}')
         with self.assertRaises(ValueError):
             cls('m/4/')  # slash at the end of the path
         with self.assertRaises(ValueError):
@@ -293,11 +295,11 @@ class Test_BIP32Path(unittest.TestCase):
         with self.assertRaises(ValueError):
             cls("m/2147483648'/1'")  # hardened index too big
         with self.assertRaises(ValueError):
-            cls("m/[0-2147483648]'/1'")  # hardened index too big
+            cls("m/{0-2147483648}'/1'")  # hardened index too big
         with self.assertRaises(ValueError):
             cls("m/2147483648/1")  # non-hardened index too big
         with self.assertRaises(ValueError):
-            cls("m/[1-2147483648]/1")  # non-hardened index too big
+            cls("m/{1-2147483648}/1")  # non-hardened index too big
         with self.assertRaises(ValueError):
             # wrong markers
             cls("m/2147483647'/1'/0", hardened_marker='h')
@@ -361,12 +363,12 @@ class Test_BIP32Path(unittest.TestCase):
     def test_tempate_as_list(self) -> None:
         self.assertEqual(list(BIP32PathTemplate('m/0')), [((0, 0),)])
         self.assertEqual(list(BIP32PathTemplate('0')), [((0, 0),)])
-        self.assertEqual(list(BIP32PathTemplate('[0-10,12,59]/*')),
+        self.assertEqual(list(BIP32PathTemplate('{0-10,12,59}/*')),
                          [((0, 10), (12, 12), (59, 59)),
                           ((0, BIP32_HARDENED_KEY_OFFSET-1),)])
 
         self.assertEqual(
-            list(BIP32PathTemplate("m/4h/[5-10,15]/1h")),
+            list(BIP32PathTemplate("m/4h/{5-10,15}/1h")),
             [((4+BIP32_HARDENED_KEY_OFFSET, 4+BIP32_HARDENED_KEY_OFFSET),),
              ((5, 10), (15, 15)),
              ((1+BIP32_HARDENED_KEY_OFFSET, 1+BIP32_HARDENED_KEY_OFFSET),)])
@@ -448,7 +450,7 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertEqual(str(BIP32PathTemplate([((0, 0),)], is_partial=False)),
                          "m/0")
         self.assertEqual(str(BIP32PathTemplate([((0, 1),)], is_partial=True)),
-                         "[0-1]")
+                         "{0-1}")
         self.assertEqual(str(BIP32PathTemplate([((0, 0),)], is_partial=True)),
                          "0")
 
@@ -477,7 +479,7 @@ class Test_BIP32Path(unittest.TestCase):
                  [(1, 2)],
                  [(0x80000002, 0x80000003), (0x80000004, 0x80000004)]
                  ])),
-            "2147483647'/1'/[1-2]/[2-3,4]'")
+            "2147483647'/1'/{1-2}/{2-3,4}'")
 
         self.assertEqual(
             str(BIP32PathTemplate(
@@ -487,7 +489,7 @@ class Test_BIP32Path(unittest.TestCase):
                  [(0x80000002, 0x80000003), (0x80000004, 0x80000004)]
                  ],
                 hardened_marker='h', is_partial=False)),
-            "m/2147483647h/1h/[1-2]/[2-3,4]h")
+            "m/2147483647h/1h/{1-2}/{2-3,4}h")
 
         self.assertEqual(
             str(BIP32PathTemplate(
@@ -510,19 +512,19 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertEqual(str(BIP32Path(p, hardened_marker='h')), "4h/5h/1/4")
 
     def test_from_BIP32PathTemplate(self) -> None:
-        p = BIP32PathTemplate("m/[4-44]h/[5-555555]h/1/4/*h")
+        p = BIP32PathTemplate("m/{4-44}h/{5-555555}h/1/4/*h")
         self.assertEqual(str(BIP32PathTemplate(p)),
-                         "m/[4-44]h/[5-555555]h/1/4/*h")
+                         "m/{4-44}h/{5-555555}h/1/4/*h")
         self.assertEqual(str(BIP32PathTemplate(p, hardened_marker="'")),
-                         "m/[4-44]'/[5-555555]'/1/4/*'")
+                         "m/{4-44}'/{5-555555}'/1/4/*'")
         p = BIP32PathTemplate("m/4'/5'/*/4")
         self.assertEqual(str(BIP32PathTemplate(p)), "m/4'/5'/*/4")
         self.assertEqual(str(BIP32PathTemplate(p, hardened_marker='h')),
                          "m/4h/5h/*/4")
-        p = BIP32PathTemplate("4'/5'/1/[3,4,5-10]")
-        self.assertEqual(str(BIP32PathTemplate(p)), "4'/5'/1/[3-10]")
+        p = BIP32PathTemplate("4'/5'/1/{3,4,5-10}")
+        self.assertEqual(str(BIP32PathTemplate(p)), "4'/5'/1/{3-10}")
         self.assertEqual(str(BIP32PathTemplate(p, hardened_marker='h')),
-                         "4h/5h/1/[3-10]")
+                         "4h/5h/1/{3-10}")
 
     def test_random_access(self) -> None:
         p = BIP32Path("m/4h/5h/1/4")
@@ -533,7 +535,7 @@ class Test_BIP32Path(unittest.TestCase):
         p = BIP32Path([0xFFFFFFFF-n for n in range(255)])
         self.assertEqual(p[254], 0xFFFFFF01)
 
-        pt = BIP32PathTemplate("m/4h/5h/[1-2]/[4,7]")
+        pt = BIP32PathTemplate("m/4h/5h/{1-2}/{4,7}")
         self.assertEqual(pt[0][0][0], 4+BIP32_HARDENED_KEY_OFFSET)
         self.assertEqual(pt[0][0][1], 4+BIP32_HARDENED_KEY_OFFSET)
         self.assertEqual(pt[1][0][0], 5+BIP32_HARDENED_KEY_OFFSET)
@@ -550,8 +552,8 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertEqual(pt[254][0][1], 0xFFFFFF01)
 
     def test_BIP32PathTemplate_match_path(self) -> None:
-        t_partial = BIP32PathTemplate("4'/5'/1/[3,4,5-50]")
-        t_full = BIP32PathTemplate("m/4'/5'/1/[3,4,5-50]")
+        t_partial = BIP32PathTemplate("4'/5'/1/{3,4,5-50}")
+        t_full = BIP32PathTemplate("m/4'/5'/1/{3,4,5-50}")
 
         for v in [3, 4] + list(range(5, 50)):
             self.assertTrue(t_partial.match_path(BIP32Path(f"4'/5'/1/{v}")))
@@ -569,25 +571,25 @@ class Test_BIP32Path(unittest.TestCase):
         self.assertFalse(t_partial.match_path(BIP32Path("4'/5'/1/3/1")))
 
         self.assertTrue(
-            BIP32PathTemplate("m/4'/5'/1/[3,4,5-50]/*").match_path(
+            BIP32PathTemplate("m/4'/5'/1/{3,4,5-50}/*").match_path(
                 BIP32Path("m/4'/5'/1/3/1")))
 
         self.assertTrue(
-            BIP32PathTemplate("4h/5h/1h/[3,4,5-50]h/*h").match_path(
+            BIP32PathTemplate("4h/5h/1h/{3,4,5-50}h/*h").match_path(
                 BIP32Path("4'/5'/1'/3'/323452'")))
 
         self.assertFalse(
-            BIP32PathTemplate("4h/5h/1h/[3,4,5-50]h/*h").match_path(
+            BIP32PathTemplate("4h/5h/1h/{3,4,5-50}h/*h").match_path(
                 BIP32Path("4'/5'/1'/3/323452'")))
 
         self.assertFalse(
-            BIP32PathTemplate("4h/5h/1h/[3,4,5-50]h/*h").match_path(
+            BIP32PathTemplate("4h/5h/1h/{3,4,5-50}h/*h").match_path(
                 BIP32Path("4'/5'/1'/3'/323452")))
 
         self.assertTrue(BIP32PathTemplate("*h").match_path(BIP32Path("323452h")))
-        self.assertTrue(BIP32PathTemplate("[0-100,200-300]h").match_path(BIP32Path("99h")))
-        self.assertTrue(BIP32PathTemplate("[0-100,200-300]h").match_path(BIP32Path("299h")))
-        self.assertFalse(BIP32PathTemplate("[0-100,200-300]h").match_path(BIP32Path("199h")))
+        self.assertTrue(BIP32PathTemplate("{0-100,200-300}h").match_path(BIP32Path("99h")))
+        self.assertTrue(BIP32PathTemplate("{0-100,200-300}h").match_path(BIP32Path("299h")))
+        self.assertFalse(BIP32PathTemplate("{0-100,200-300}h").match_path(BIP32Path("199h")))
         self.assertTrue(BIP32PathTemplate("m").match_path(BIP32Path("m")))
         self.assertTrue(BIP32PathTemplate("").match_path(BIP32Path("")))
         self.assertFalse(BIP32PathTemplate("m").match_path(BIP32Path("")))
