@@ -5,9 +5,7 @@ Breaking changes:
 
     BIP32PathTemplate now uses '{' and '}' for index ranges rather than '[' and ']'
     While this is a seriously breaking change, the BIP32 template feature is not widely used,
-    and the BIP32 templates BIP draft (https://github.com/bitcoin/bips/pull/1025) is not finalized
-    at the moment. Since the draft was changed to use curly brackets, the implementation here
-    was changed, too
+    and the finalized BIP88 uses curly brackets instead of square brackets.
 
 Non-breaking changes:
 
@@ -17,6 +15,10 @@ Non-breaking changes:
 
     Do not accept uncompressed pubkeys by default in `from_pubkey()` method for single-key address
     classes, and in `standard_multisig_redeem_script()`
+
+    RPCCaller config-reading code takes 'chain=' config option into account for 'network_id',
+    thus, for example, with 'chain=liquidregtest', it will look for 'liquidregtest.rpcport'
+    before bare 'rpcport' option
 
 
 ## v1.1.1.post2

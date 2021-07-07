@@ -276,7 +276,7 @@ class RPCCaller:
                 service_port = params.RPC_PORT
 
             extraname = params.get_datadir_extra_name()
-            network_id = params.get_network_id()
+            network_id = conf.get('chain', params.get_network_id())
 
             (host, port) = split_hostport(
                 conf.get(f'{network_id}.rpcconnect',
