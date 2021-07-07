@@ -1,5 +1,5 @@
 # python-bitcointx release notes
-## v1.1.2.dev
+## v1.1.2
 
 Breaking changes:
 
