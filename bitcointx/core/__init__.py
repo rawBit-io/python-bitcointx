@@ -33,7 +33,8 @@ from .serialize import (
 
 from ..util import (
     no_bool_use_as_property, ClassMappingDispatcher, activate_class_dispatcher,
-    dispatcher_wrap_methods, classgetter, ensure_isinstance, ContextVarsCompat
+    dispatcher_wrap_methods, classgetter, ensure_isinstance, ContextVarsCompat,
+    tagged_hasher
 )
 
 # NOTE: due to custom class dispatching and mutable/immmutable
@@ -216,10 +217,22 @@ class CoreCoinParams(CoreCoinClass, next_dispatch_final=True):
     def MAX_MONEY(cls) -> int:
         return 21000000 * cls.COIN
 
+    TAPROOT_LEAF_TAPSCRIPT: int
+    taptweak_hasher: Callable[[bytes], bytes]
+    tapleaf_hasher: Callable[[bytes], bytes]
+    tapbranch_hasher: Callable[[bytes], bytes]
+    tap_sighash_hasher: Callable[[bytes], bytes]
+
 
 class CoreBitcoinParams(CoreCoinParams, CoreBitcoinClass):
     PSBT_MAGIC_HEADER_BYTES = b'psbt\xff'
     PSBT_MAGIC_HEADER_BASE64 = 'cHNidP'
+
+    TAPROOT_LEAF_TAPSCRIPT = 0xc0
+    taptweak_hasher = tagged_hasher(b'TapTweak')
+    tapleaf_hasher = tagged_hasher(b'TapLeaf')
+    tapbranch_hasher = tagged_hasher(b'TapBranch')
+    tap_sighash_hasher = tagged_hasher(b'TapSighash')
 
 
 def MoneyRange(nValue: int) -> bool:

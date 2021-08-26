@@ -1,5 +1,5 @@
 # Copyright (C) 2012-2018 The python-bitcoinlib developers
-# Copyright (C) 2018-2019 The python-bitcointx developers
+# Copyright (C) 2018-2021 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
@@ -310,6 +310,33 @@ def select_chain_params(params: Union[str, ChainParamsBase,
     return prev_params, params
 
 
+def allow_secp256k1_experimental_modules() -> None:
+    """
+    python-bitcointx uses libsecp256k1 via ABI using ctypes, using dynamic
+    library loading. This means that the correctness of the calls to secp256k1
+    functions depend on these function definitions in python-bitcointx code
+    to be in-sync with the actual C language definitions in the library when
+    it was compiled. Libsecp256k1 ABI is mostly stable, but still has no
+    officially released version at the moment. But for schnorr signatures
+    and x-only pubkeys, we have to use the modules of libsecp256k1 that are
+    currently marked as 'experimental'. These modules being experimental
+    mean that their ABI can change at any moment. Therefore, to use
+    python-bitcointx with this functionality, it is highly recommended to
+    compile your own version libsecp256k1 using the git commit that is
+    recommended for particular version of python-bitcointx, and then make
+    sure that python-bitcointx will load that exact version of libsecp256k1
+    with set_custom_secp256k1_path() or LD_LIBRARY_PATH environment variable.
+
+    But since using experimental modules with some over version of libsecp256k1
+    may lead to crashes, using them is disabled by default. One have to
+    explicitly enable this by calling this function, or setting the
+    environment variable
+    "PYTHON_BITCOINTX_ALLOW_LIBSECP256K1_EXPERIMENTAL_MODULES_USE" to the
+    value "1".
+    """
+    bitcointx.util._allow_secp256k1_experimental_modules = True
+
+
 def set_custom_secp256k1_path(path: str) -> None:
     """Set the custom path that will be used to load secp256k1 library
     by bitcointx.core.secp256k1 module. For the calling of this
@@ -355,6 +382,14 @@ class ChainParamsContextVar(bitcointx.util.ContextVarsCompat):
 
 _chain_params_context = ChainParamsContextVar(params=BitcoinMainnetParams())
 
+_secp256k1_experimental_modues_enable_var = os.environ.get(
+    'PYTHON_BITCOINTX_ALLOW_LIBSECP256K1_EXPERIMENTAL_MODULES_USE')
+
+if _secp256k1_experimental_modues_enable_var is not None:
+    assert _secp256k1_experimental_modues_enable_var in ("0", "1")
+    if int(_secp256k1_experimental_modues_enable_var):
+        allow_secp256k1_experimental_modules()
+
 
 __all__ = (
     'ChainParamsBase',
@@ -369,4 +404,5 @@ __all__ = (
     'find_chain_params',
     'set_custom_secp256k1_path',
     'get_custom_secp256k1_path',
+    'allow_secp256k1_experimental_modules',
 )

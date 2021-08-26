@@ -40,6 +40,10 @@ from ..util import (
     ensure_isinstance
 )
 
+_conventional_leaf_versions = \
+    tuple(range(0xc0, 0x100, 2)) + \
+    (0x66, 0x7e, 0x80, 0x84, 0x96, 0x98, 0xba, 0xbc, 0xbe)
+
 MAX_SCRIPT_SIZE = 10000
 MAX_SCRIPT_ELEMENT_SIZE = 520
 MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600
@@ -65,12 +69,19 @@ class SIGVERSION_Type(int):
 
 SIGVERSION_BASE: SIGVERSION_Type = SIGVERSION_Type(0)
 SIGVERSION_WITNESS_V0: SIGVERSION_Type = SIGVERSION_Type(1)
+SIGVERSION_TAPROOT: SIGVERSION_Type = SIGVERSION_Type(2)
+SIGVERSION_TAPSCRIPT: SIGVERSION_Type = SIGVERSION_Type(3)
 
 
 T_int = TypeVar('T_int', bound=int)
 
 
 class SIGHASH_Bitflag_Type(int):
+    def __init__(self, value: int) -> None:
+        super().__init__()
+        if value & (value - 1) != 0:
+            raise ValueError('bitflag must be power of 2 (or 0 for no flags)')
+
     def __or__(self, other: T_int) -> T_int:
         return cast(T_int, super().__or__(other))
 
@@ -99,6 +110,14 @@ class SIGHASH_Type(int):
             raise ValueError(f'value {value} is already registered')
         cls._known_values = tuple(list(cls._known_values) + [value])
         return cls(value)
+
+    @property
+    def output_type(self: T_SIGHASH_Type) -> T_SIGHASH_Type:
+        return self.__class__(self & ~self._known_bitflags)
+
+    @property
+    def input_type(self) -> SIGHASH_Bitflag_Type:
+        return SIGHASH_Bitflag_Type(self & self._known_bitflags)
 
     # The type of 'other' is intentionally incompatible wit supertype 'int'
     # because we do not want that or-ing with anything but bitflag type
@@ -347,6 +366,9 @@ OP_NOP7 = CScriptOp(0xb6)
 OP_NOP8 = CScriptOp(0xb7)
 OP_NOP9 = CScriptOp(0xb8)
 OP_NOP10 = CScriptOp(0xb9)
+
+# Opcode added by BIP 342 (Tapscript)
+OP_CHECKSIGADD = CScriptOp(0xba)
 
 # template matching params
 OP_SMALLINTEGER = CScriptOp(0xfa)
@@ -684,6 +706,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
 
     iter(script) however does iterate by opcode.
     """
+
     @classmethod
     def __coerce_instance(cls, other: ScriptElement_Type) -> bytes:
         # Coerce other into bytes
@@ -722,11 +745,12 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         raise NotImplementedError
 
     def __new__(cls: Type[T_CScript],
-                value: Iterable[ScriptElement_Type] = b''
+                value: Iterable[ScriptElement_Type] = b'',
+                *, name: Optional[str] = None,
                 ) -> T_CScript:
 
         if isinstance(value, (bytes, bytearray)):
-            return super().__new__(cls, value)
+            instance = super().__new__(cls, value)
         else:
             def coerce_iterable(iterable: Iterable[ScriptElement_Type]
                                 ) -> Generator[bytes, None, None]:
@@ -736,8 +760,20 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
             # Annoyingly bytes.join() always
             # returns a bytes instance even when subclassed.
 
-            return super().__new__(
+            instance = super().__new__(
                 cls, b''.join(coerce_iterable(value)))
+
+        if name is not None:
+            ensure_isinstance(name, str, 'name')
+            instance._script_name = name  # type: ignore
+
+        return instance
+
+    # we only create the _script_name slot if the name is specified,
+    # so we use this @property to make access to 'name' convenient
+    @property
+    def name(self) -> Optional[str]:
+        return cast(Optional[str], getattr(self, '_script_name', None))
 
     def raw_iter(self) -> Generator[Tuple[CScriptOp, Optional[bytes], int],
                                     None, None]:
@@ -848,7 +884,12 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                 if op is not None:
                     ops.append(op)
 
-        return "%s([%s])" % (self.__class__.__name__, ', '.join(ops))
+        args = f'[{", ".join(ops)}]'
+
+        if self.name:
+            args += f', name={repr(self.name)}'
+
+        return f'{self.__class__.__name__}({args})'
 
     @no_bool_use_as_property
     def is_p2sh(self) -> bool:
@@ -1104,6 +1145,27 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         return RawBitcoinSignatureHash(self, txTo, inIdx, hashtype,
                                        amount=amount, sigversion=sigversion)
 
+    def sighash_schnorr(self, txTo: 'bitcointx.core.CTransaction', inIdx: int,
+                        spent_outputs: Sequence['bitcointx.core.CTxOut'],
+                        *,
+                        hashtype: Optional[SIGHASH_Type] = None,
+                        codeseparator_pos: int = -1,
+                        annex_hash: Optional[bytes] = None
+                        ) -> bytes:
+
+        # Only BIP342 tapscript signing is supported for now.
+        leaf_version = bitcointx.core.CoreCoinParams.TAPROOT_LEAF_TAPSCRIPT
+        tapleaf_hash = bitcointx.core.CoreCoinParams.tapleaf_hasher(
+            bytes([leaf_version]) + BytesSerializer.serialize(self)
+        )
+
+        return SignatureHashSchnorr(txTo, inIdx, spent_outputs,
+                                    hashtype=hashtype,
+                                    sigversion=SIGVERSION_TAPSCRIPT,
+                                    tapleaf_hash=tapleaf_hash,
+                                    codeseparator_pos=codeseparator_pos,
+                                    annex_hash=annex_hash)
+
 
 class CScriptWitness(ImmutableSerializable):
     """An encoding of the data elements on the initial stack for (segregated
@@ -1241,6 +1303,12 @@ def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction'
     if sigversion not in (SIGVERSION_BASE, SIGVERSION_WITNESS_V0):
         raise ValueError('unsupported sigversion')
 
+    if inIdx < 0:
+        raise ValueError('input index must not be negative')
+
+    if amount is not None and amount < 0:
+        raise ValueError('amount must not be negative')
+
     HASH_ONE = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
 
     if sigversion == SIGVERSION_WITNESS_V0:
@@ -1367,6 +1435,128 @@ def SignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction', inIdx: i
     if err is not None:
         raise ValueError(err)
     return h
+
+
+def SignatureHashSchnorr(
+    txTo: 'bitcointx.core.CTransaction',
+    inIdx: int,
+    spent_outputs: Sequence['bitcointx.core.CTxOut'],
+    *,
+    hashtype: Optional[SIGHASH_Type] = None,
+    sigversion: SIGVERSION_Type = SIGVERSION_TAPROOT,
+    tapleaf_hash: Optional[bytes] = None,
+    codeseparator_pos: int = -1,
+    annex_hash: Optional[bytes] = None
+) -> bytes:
+    if inIdx < 0:
+        raise ValueError('input index must not be negative')
+
+    if inIdx >= len(txTo.vin):
+        raise ValueError(f'inIdx {inIdx} out of range ({len(txTo.vin)})')
+
+    if tapleaf_hash is not None:
+        ensure_isinstance(tapleaf_hash, bytes, 'tapleaf_hash')
+        if len(tapleaf_hash) != 32:
+            raise ValueError('tapleaf_hash must be exactly 32 bytes long')
+
+    if annex_hash is not None:
+        ensure_isinstance(annex_hash, bytes, 'annex_hash')
+        if len(annex_hash) != 32:
+            raise ValueError('annex_hash must be exactly 32 bytes long')
+
+    if sigversion == SIGVERSION_TAPROOT:
+        ext_flag = 0
+    elif sigversion == SIGVERSION_TAPSCRIPT:
+        ext_flag = 1
+        # key_version is always 0 in Core at the moment, representing the
+        # current version of  32-byte public keys in the tapscript signature
+        # opcode execution. An upgradable public key version (with a size not
+        # 32-byte) may request a different key_version with a new sigversion.
+        key_version = 0
+    else:
+        raise ValueError('unsupported sigversion')
+
+    if len(spent_outputs) != len(txTo.vin):
+        raise ValueError(
+            'number of spent_outputs is not equal to number of inputs')
+
+    f = BytesIO()
+
+    # Epoch
+    f.write(bytes([0]))
+
+    # Hash type
+    if hashtype is None:
+        hashtype = SIGHASH_ALL
+        hashtype_byte = b'\x00'
+    else:
+        ensure_isinstance(hashtype, SIGHASH_Type, 'hashtype')
+        hashtype_byte = bytes([hashtype])
+
+    input_type = hashtype.input_type
+    output_type = hashtype.output_type
+
+    # Transaction level data
+    f.write(hashtype_byte)
+    f.write(struct.pack("<i", txTo.nVersion))
+    f.write(struct.pack("<I", txTo.nLockTime))
+
+    if input_type != SIGHASH_ANYONECANPAY:
+        amounts_hashobj = hashlib.sha256()
+        scripts_hashobj = hashlib.sha256()
+        prevouts_hashobj = hashlib.sha256()
+        sequences_hashobj = hashlib.sha256()
+
+        for sout in spent_outputs:
+            amounts_hashobj.update(struct.pack('<q', sout.nValue))
+            scripts_hashobj.update(BytesSerializer.serialize(sout.scriptPubKey))
+
+        for txin in txTo.vin:
+            prevouts_hashobj.update(txin.prevout.serialize())
+            sequences_hashobj.update(struct.pack('<I', txin.nSequence))
+
+        f.write(prevouts_hashobj.digest())
+        f.write(amounts_hashobj.digest())
+        f.write(scripts_hashobj.digest())
+        f.write(sequences_hashobj.digest())
+
+    if output_type == SIGHASH_ALL:
+        f.write(hashlib.sha256(b''.join(txout.serialize()
+                                        for txout in txTo.vout)).digest())
+
+    spend_type = ext_flag << 1
+
+    if annex_hash is not None:
+        spend_type += 1  # The low bit indicates whether an annex is present
+
+    f.write(bytes([spend_type]))
+
+    if input_type == SIGHASH_ANYONECANPAY:
+        f.write(txTo.vin[inIdx].prevout.serialize())
+        f.write(spent_outputs[inIdx].serialize())
+        f.write(struct.pack('<I', txTo.vin[inIdx].nSequence))
+    else:
+        f.write(struct.pack('<I', inIdx))
+
+    if annex_hash is not None:
+        BytesSerializer.stream_serialize(annex_hash, f)
+
+    if output_type == SIGHASH_SINGLE:
+        outIdx = inIdx
+        if outIdx > len(txTo.vout):
+            raise ValueError(f'outIdx {outIdx} out of range ({len(txTo.vout)})')
+        f.write(hashlib.sha256(txTo.vout[outIdx].serialize()).digest())
+
+    if sigversion == SIGVERSION_TAPSCRIPT:
+        if tapleaf_hash is None:
+            raise ValueError('tapleaf_hash must be specified for SIGVERSION_TAPSCRIPT')
+        if codeseparator_pos is None:
+            raise ValueError('codeseparator_pos must be specified for SIGVERSION_TAPSCRIPT')
+        f.write(tapleaf_hash)
+        f.write(bytes([key_version]))
+        f.write(struct.pack("<i", codeseparator_pos))
+
+    return bitcointx.core.CoreCoinParams.tap_sighash_hasher(f.getvalue())
 
 
 class CBitcoinScript(CScript, ScriptBitcoinClass):
@@ -1699,6 +1889,271 @@ class StandardMultisigSignatureHelper(ComplexScriptSignatureHelper):
         return False
 
 
+T_TaprootScriptTree = TypeVar('T_TaprootScriptTree', bound='TaprootScriptTree')
+
+TaprootScriptTreeLeaf_Type = Union[CScript, 'TaprootScriptTree']
+
+
+class TaprootScriptTree(ScriptCoinClass, next_dispatch_final=True):
+    """
+    Represents the script tree for taproot script spending.
+
+    When supplied with a list of CScript instances, this represents a balanced
+    tree. TaprootScriptTree instance with just one CScript leaf represents
+    this script itself, and can be used to change the leaf version of just
+    one script. TaprootScriptTree instance with just one TaprootScriptTree leaf
+    is not allowed. If there are TaprootScriptTree leaves (that are not the
+    instances with only one CScript leaf), this means that the tree will be
+    unbalanced.
+
+    TaprootScriptTree([CScript([OP_1], name="A"), CScript([OP_4], name="B")])
+
+    will result in the tree
+
+       _A
+    |-'
+      `-B
+
+    TaprootScriptTree([CScript(..., name="A"),
+                       TaprootScriptTree([CScript(..., name="B"),
+                                          CScript(..., name="C")]),
+                       CScript(..., name="D")])
+
+    will result in the tree
+
+       _A   _B
+    |-'  .-'
+      `-|  `-C
+         `D
+    """
+
+    def __init__(
+        self: T_TaprootScriptTree,
+        leaves: Sequence[TaprootScriptTreeLeaf_Type],
+        *,
+        internal_pubkey: Optional['bitcointx.core.key.XOnlyPubKey'] = None,
+        leaf_version: Optional[int] = None,
+        accept_unconventional_leaf_version: bool = False
+    ) -> None:
+        """
+        'leaves' is a sequence of instances of CScript or TaprootScriptTree.
+
+        'internal_pubkey' can be supplied (or set later) for
+            get_script_with_control_block() method to be available
+
+        'leaf_version' can be supplied for all the scripts in the tree to
+            have this version
+
+        'accept_unconventional_leaf_version' is mostly for debug, and
+            setting it to True will allow to supply versions that are not
+            adhere to the constraints set in BIP341
+        """
+
+        if len(leaves) == 0:
+            raise ValueError('List of leaves must not be empty')
+
+        if len(leaves) == 1 and isinstance(leaves[0], TaprootScriptTree):
+            raise ValueError(
+                'A single TaprootScriptTree leaf within another '
+                'TaprootScriptTree is meaningless, therefore it is '
+                'treated as an error')
+
+        if leaf_version is None:
+            leaf_version = bitcointx.core.CoreCoinParams.TAPROOT_LEAF_TAPSCRIPT
+        else:
+            if not any(isinstance(leaf, CScript) for leaf in leaves):
+                raise ValueError(
+                    'leaf_version was supplied, but none of the leaves '
+                    'are instances of CScript. Leaf version only has '
+                    'meaning if there are CScript leaves')
+
+            if leaf_version & 1:
+                raise ValueError('leaf_version cannot be odd')
+
+            if not (0 <= leaf_version <= 254):
+                raise ValueError('leaf_version must be between 0 and 254')
+
+            if not accept_unconventional_leaf_version:
+                if leaf_version not in _conventional_leaf_versions:
+                    raise ValueError(
+                        'leaf_version value is not conventional '
+                        '(see values listed in BIP341 footnote 7). To skip '
+                        'this check, specify '
+                        'accept_unconventional_leaf_version=True')
+
+        self.leaf_version = leaf_version
+        mr, collect_paths = self._traverse(leaves)
+        self.merkle_root = mr
+        merkle_paths = collect_paths(tuple())
+
+        assert len(merkle_paths) == len(leaves)
+        self._leaves_with_paths = tuple(
+            (leaf, merkle_paths[i]) for i, leaf in enumerate(leaves)
+        )
+
+        self.set_internal_pubkey(internal_pubkey)
+
+    def __repr__(self) -> str:
+        return (
+            f'{self.__class__.__name__}(['
+            f'{", ".join(repr(leaf) for leaf, _ in self._leaves_with_paths)}])'
+        )
+
+    def set_internal_pubkey(
+        self, internal_pubkey: Optional['bitcointx.core.key.XOnlyPubKey']
+    ) -> None:
+        """
+        Set internal_pubkey that shall be associated with this script tree.
+        will also set output_pubkey and parity fields.
+        """
+        self.internal_pubkey = internal_pubkey
+        self.output_pubkey = None
+        self.parity = None
+
+        if internal_pubkey:
+            tt_res = bitcointx.core.key.tap_tweak_pubkey(
+                internal_pubkey, merkle_root=self.merkle_root)
+
+            if not tt_res:
+                raise ValueError(
+                    'Failed to create tweaked key with supplied '
+                    'internal pubkey and computed merkle root')
+
+            self.output_pubkey = tt_res[0]
+            self.parity = tt_res[1]
+
+    def get_script_with_control_block(
+        self, name: str
+    ) -> Optional[Tuple[CScript, bytes]]:
+        """Return a tuple of (script, control_block) for the script with
+        with the supplied name. If the script with that name is not found
+        in the tree, None will be returned"""
+
+        if not self.internal_pubkey:
+            raise ValueError(f'This instance of {self.__class__.__name__} '
+                             f'does not have internal_pubkey')
+
+        assert self.parity is not None
+
+        result = self.get_script_with_path_and_leaf_version(name)
+        if result:
+            s, mp, lv = result
+            return s, bytes([lv + self.parity]) + self.internal_pubkey + mp
+
+        return None
+
+    def get_script_with_path_and_leaf_version(
+        self, name: str
+    ) -> Optional[Tuple[CScript, bytes, int]]:
+        """Return a tuple of (script, merkle_path, leaf_version) for the script
+        with with the supplied name. If the script with that name is not found
+        in the tree, None will be returned
+        """
+
+        for leaf, path in self._leaves_with_paths:
+            if isinstance(leaf, CScript) and leaf.name == name:
+                return leaf, b''.join(path), self.leaf_version
+            elif isinstance(leaf, TaprootScriptTree):
+                result = leaf.get_script_with_path_and_leaf_version(name)
+                if result:
+                    return (result[0],
+                            result[1] + b''.join(path[1:]),
+                            result[2])
+
+        return None
+
+    def get_script(self, name: str) -> Optional[CScript]:
+        """Return a script with the supplied name. If the script with that name
+        is not found in the tree, None will be returned
+        """
+        result = self.get_script_with_path_and_leaf_version(name)
+        if result:
+            return result[0]
+        return None
+
+    def get_script_path(self, name: str) -> Optional[bytes]:
+        """Return a path of the script with the supplied name. If the script
+        with that name is not found in the tree, None will be returned
+        """
+        result = self.get_script_with_path_and_leaf_version(name)
+        if result:
+            return result[1]
+        return None
+
+    def get_script_leaf_version(self, name: str) -> Optional[int]:
+        """Return leaf version of the script with the supplied name. If the
+        script with that name is not found in the tree, None will be returned
+        """
+        result = self.get_script_with_path_and_leaf_version(name)
+        if result:
+            return result[2]
+        return None
+
+    def _traverse(
+        self,
+        leaves: Sequence[TaprootScriptTreeLeaf_Type]
+    ) -> Tuple[bytes, Callable[[Tuple[bytes, ...]], List[Tuple[bytes, ...]]]]:
+
+        if len(leaves) == 1:
+            leaf = leaves[0]
+            if isinstance(leaf, CScript):
+                leaf_hash = bitcointx.core.CoreCoinParams.tapleaf_hasher(
+                    bytes([self.leaf_version])
+                    + BytesSerializer.serialize(leaf))
+                return (
+                    leaf_hash,
+                    lambda parent_path: [(b'', ) + parent_path]
+                )
+            elif isinstance(leaf, TaprootScriptTree):
+                if len(leaf._leaves_with_paths) == 1:
+                    assert isinstance(
+                        leaf._leaves_with_paths[0][0], CScript
+                    ), ("Single TaprootScriptTree leaf within another tree is "
+                        "meaningless and constructing such TaprootScriptTree "
+                        "should have raisen an error")
+
+                    # Treat TaprootScriptTree that contains a single script
+                    # as the script itself
+                    path = b''
+                else:
+                    path = leaf.merkle_root
+
+                return (
+                    leaf.merkle_root,
+                    lambda parent_path: [(path, ) + parent_path]
+                )
+
+            raise ValueError(
+                f'Unrecognized type for the leaf: {type(leaf)}')
+
+        split_pos = len(leaves) // 2
+        left = leaves[:split_pos]
+        right = leaves[split_pos:]
+
+        left_h, left_collector = self._traverse(left)
+        right_h, right_collector = self._traverse(right)
+
+        def collector(
+            parent_path: Tuple[bytes, ...]
+        ) -> List[Tuple[bytes, ...]]:
+            lp = left_collector((right_h, ) + parent_path)
+            rp = right_collector((left_h, ) + parent_path)
+            return lp + rp
+
+        tbh = bitcointx.core.CoreCoinParams.tapbranch_hasher
+
+        if right_h < left_h:
+            branch_hash = tbh(right_h + left_h)
+        else:
+            branch_hash = tbh(left_h + right_h)
+
+        return (branch_hash, collector)
+
+
+class TaprootBitcoinScriptTree(TaprootScriptTree, ScriptBitcoinClass):
+    ...
+
+
 # default dispatcher for the module
 activate_class_dispatcher(ScriptBitcoinClassDispatcher)
 
@@ -1843,6 +2298,7 @@ __all__ = (
     'SIGHASH_SINGLE',
     'SIGHASH_ANYONECANPAY',
     'SIGHASH_Type',
+    'SIGHASH_Bitflag_Type',
     'FindAndDelete',
     'RawSignatureHash',
     'RawBitcoinSignatureHash',
@@ -1863,4 +2319,5 @@ __all__ = (
     'standard_witness_v0_scriptpubkey',
     'ComplexScriptSignatureHelper',
     'StandardMultisigSignatureHelper',
+    'TaprootScriptTree',
 )

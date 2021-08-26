@@ -92,6 +92,8 @@ secp256k1_has_pubkey_recovery = False
 secp256k1_has_privkey_negate = False
 secp256k1_has_pubkey_negate = False
 secp256k1_has_ecdh = False
+secp256k1_has_xonly_pubkeys = False
+secp256k1_has_schnorrsig = False
 
 
 def _add_function_definitions(_secp256k1: ctypes.CDLL) -> None:
@@ -99,6 +101,8 @@ def _add_function_definitions(_secp256k1: ctypes.CDLL) -> None:
     global secp256k1_has_privkey_negate
     global secp256k1_has_pubkey_negate
     global secp256k1_has_ecdh
+    global secp256k1_has_xonly_pubkeys
+    global secp256k1_has_schnorrsig
 
     if getattr(_secp256k1, 'secp256k1_ecdsa_sign_recoverable', None):
         secp256k1_has_pubkey_recovery = True
@@ -157,6 +161,9 @@ def _add_function_definitions(_secp256k1: ctypes.CDLL) -> None:
     _secp256k1.secp256k1_ec_privkey_tweak_add.restype = ctypes.c_int
     _secp256k1.secp256k1_ec_privkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
 
+    _secp256k1.secp256k1_ec_pubkey_serialize.restype = ctypes.c_int
+    _secp256k1.secp256k1_ec_pubkey_serialize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p, ctypes.c_uint]
+
     if getattr(_secp256k1, 'secp256k1_ec_pubkey_negate', None):
         secp256k1_has_pubkey_negate = True
         _secp256k1.secp256k1_ec_pubkey_negate.restype = ctypes.c_int
@@ -174,6 +181,44 @@ def _add_function_definitions(_secp256k1: ctypes.CDLL) -> None:
         secp256k1_has_ecdh = True
         _secp256k1.secp256k1_ecdh.restype = ctypes.c_int
         _secp256k1.secp256k1_ecdh.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
+
+    if bitcointx.util._allow_secp256k1_experimental_modules:
+        if getattr(_secp256k1, 'secp256k1_xonly_pubkey_parse', None):
+            secp256k1_has_xonly_pubkeys = True
+            _secp256k1.secp256k1_xonly_pubkey_parse.restype = ctypes.c_int
+            _secp256k1.secp256k1_xonly_pubkey_parse.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+            _secp256k1.secp256k1_xonly_pubkey_tweak_add_check.restype = ctypes.c_int
+            _secp256k1.secp256k1_xonly_pubkey_tweak_add_check.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p]
+            _secp256k1.secp256k1_xonly_pubkey_tweak_add.restype = ctypes.c_int
+            _secp256k1.secp256k1_xonly_pubkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+            _secp256k1.secp256k1_xonly_pubkey_from_pubkey.restype = ctypes.c_int
+            _secp256k1.secp256k1_xonly_pubkey_from_pubkey.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int), ctypes.c_char_p]
+            _secp256k1.secp256k1_xonly_pubkey_serialize.restype = ctypes.c_int
+            _secp256k1.secp256k1_xonly_pubkey_serialize.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+            _secp256k1.secp256k1_keypair_create.restype = ctypes.c_int
+            _secp256k1.secp256k1_keypair_create.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+            _secp256k1.secp256k1_keypair_xonly_pub.restype = ctypes.c_int
+            _secp256k1.secp256k1_keypair_xonly_pub.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int), ctypes.c_char_p]
+            _secp256k1.secp256k1_keypair_xonly_tweak_add.restype = ctypes.c_int
+            _secp256k1.secp256k1_keypair_xonly_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+
+        # Note that we check specifically for secp256k1_schnorrsig_sign_custom
+        # to avoid incompatibility with earlier version of libsecp256k1.
+        # Before secp256k1_schnorrsig_sign_custom was itroduced,
+        # secp256k1_schnorrsig_sign had different signature, and using it
+        # with this signature will result in segfault.
+        # Supporting older versions of libsecp256k1 will be burdensome, and given
+        # that currently schnorrsig module is experimental, even the current
+        # signature can change unexpectedly. Such is the woes of being lightweight
+        # in linking C libraries, as we cannot look into C headers as CFFI would
+        # do. We will need to wait for libsecp256k1 ABI stabilization for this
+        # potential problem go go away.
+        if getattr(_secp256k1, 'secp256k1_schnorrsig_sign_custom', None):
+            secp256k1_has_schnorrsig = True
+            _secp256k1.secp256k1_schnorrsig_verify.restype = ctypes.c_int
+            _secp256k1.secp256k1_schnorrsig_verify.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p]
+            _secp256k1.secp256k1_schnorrsig_sign.restype = ctypes.c_int
+            _secp256k1.secp256k1_schnorrsig_sign.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
 
 
 class _secp256k1_context:
@@ -266,4 +311,9 @@ __all__ = (
     'SECP256K1_CONTEXT_SIGN',
     'SECP256K1_CONTEXT_VERIFY',
     'secp256k1_has_pubkey_recovery',
+    'secp256k1_has_privkey_negate',
+    'secp256k1_has_pubkey_negate',
+    'secp256k1_has_ecdh',
+    'secp256k1_has_xonly_pubkeys',
+    'secp256k1_has_schnorrsig',
 )

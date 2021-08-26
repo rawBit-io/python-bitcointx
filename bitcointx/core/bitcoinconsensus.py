@@ -19,15 +19,16 @@ to evaluate bitcoin script.
 """
 
 import ctypes
-from typing import Union, Tuple, Set, Optional
+from typing import Union, Tuple, Set, Optional, Sequence
 
 from bitcointx.util import ensure_isinstance
-from bitcointx.core import MoneyRange, CTransaction
+from bitcointx.core import MoneyRange, CTransaction, CTxOut
 from bitcointx.core.script import CScript, CScriptWitness
 from bitcointx.core.scripteval import (
     SCRIPT_VERIFY_P2SH, SCRIPT_VERIFY_DERSIG,
     SCRIPT_VERIFY_NULLDUMMY, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY, SCRIPT_VERIFY_WITNESS,
+    SCRIPT_VERIFY_TAPROOT,
     ALL_SCRIPT_VERIFY_FLAGS, ScriptVerifyFlag_Type,
     VerifyScriptError, script_verify_flags_to_string
 )
@@ -68,6 +69,7 @@ bitcoinconsensus_SCRIPT_FLAGS_VERIFY_CHECKLOCKTIMEVERIFY = 1 << 9
 bitcoinconsensus_SCRIPT_FLAGS_VERIFY_CHECKSEQUENCEVERIFY = 1 << 10
 # enable WITNESS (BIP141)
 bitcoinconsensus_SCRIPT_FLAGS_VERIFY_WITNESS = 1 << 11
+bitcoinconsensus_SCRIPT_FLAGS_VERIFY_TAPROOT = 1 << 17
 
 BITCOINCONSENSUS_FLAG_MAPPING = {
     SCRIPT_VERIFY_P2SH: bitcoinconsensus_SCRIPT_FLAGS_VERIFY_P2SH,
@@ -75,7 +77,8 @@ BITCOINCONSENSUS_FLAG_MAPPING = {
     SCRIPT_VERIFY_NULLDUMMY: bitcoinconsensus_SCRIPT_FLAGS_VERIFY_NULLDUMMY,
     SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY: bitcoinconsensus_SCRIPT_FLAGS_VERIFY_CHECKLOCKTIMEVERIFY,
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY: bitcoinconsensus_SCRIPT_FLAGS_VERIFY_CHECKSEQUENCEVERIFY,
-    SCRIPT_VERIFY_WITNESS: bitcoinconsensus_SCRIPT_FLAGS_VERIFY_WITNESS
+    SCRIPT_VERIFY_WITNESS: bitcoinconsensus_SCRIPT_FLAGS_VERIFY_WITNESS,
+    SCRIPT_VERIFY_TAPROOT: bitcoinconsensus_SCRIPT_FLAGS_VERIFY_TAPROOT
 }
 
 BITCOINCONSENSUS_ACCEPTED_FLAGS = set(BITCOINCONSENSUS_FLAG_MAPPING.keys())
@@ -122,6 +125,20 @@ def _add_function_definitions(handle: ctypes.CDLL) -> None:
         ctypes.c_uint,  # unsigned int flags
         ctypes.POINTER(ctypes.c_uint)  # bitcoinconsensus_error* err
     ]
+
+    # handle.bitcoinconsensus_verify_script_taproot.restype = ctypes.c_int
+    # handle.bitcoinconsensus_verify_script_taproot.argtypes = [
+    #     ctypes.c_char_p,  # const unsigned char *scriptPubKey
+    #     ctypes.c_uint,  # unsigned int scriptPubKeyLen
+    #     ctypes.c_int64,  # int64_t amount
+    #     ctypes.c_char_p,  # const unsigned char *txTo
+    #     ctypes.c_uint,  # unsigned int txToLen
+    #     ctypes.c_char_p,  # const unsigned char *spentOutputs
+    #     ctypes.c_uint,  # unsigned int spentOutputsLen
+    #     ctypes.c_uint,  # unsigned int nIn
+    #     ctypes.c_uint,  # unsigned int flags
+    #     ctypes.POINTER(ctypes.c_uint)  # bitcoinconsensus_error* err
+    # ]
 
     handle.bitcoinconsensus_version.restype = ctypes.c_int
     handle.bitcoinconsensus_version.argtypes = []
@@ -173,12 +190,15 @@ def load_bitcoinconsensus_library(library_name: Optional[str] = None,
 
 
 def ConsensusVerifyScript(
-    scriptSig: CScript, scriptPubKey: CScript,
-    txTo: CTransaction, inIdx: int,
+    scriptSig: CScript,
+    scriptPubKey: CScript,
+    txTo: CTransaction,
+    inIdx: int,
     flags: Union[Tuple[ScriptVerifyFlag_Type, ...],
                  Set[ScriptVerifyFlag_Type]] = (),
     amount: int = 0,
     witness: Optional[CScriptWitness] = None,
+    spent_outputs: Optional[Sequence[CTxOut]] = None,
     consensus_library_hanlde: Optional[ctypes.CDLL] = None
 ) -> None:
 
@@ -266,11 +286,26 @@ def ConsensusVerifyScript(
     error_code = ctypes.c_uint()
     error_code.value = 0
 
-    result = handle.bitcoinconsensus_verify_script_with_amount(
-        scriptPubKey, len(scriptPubKey), amount,
-        tx_data, len(tx_data), inIdx, libconsensus_flags,
-        ctypes.byref(error_code)
-    )
+    if spent_outputs:
+        raise NotImplementedError(
+            'no taproot support for libbitcoinconsensus yet')
+        if len(spent_outputs) != len(txTo.vin):
+            raise ValueError('number of spent_outputs must equal '
+                             'the number of inputs in transacton')
+
+        spent_outs_data = b''.join(out.serialize() for out in spent_outputs)
+        result = handle.bitcoinconsensus_verify_script_taproot(
+            scriptPubKey, len(scriptPubKey), amount,
+            tx_data, len(tx_data), spent_outs_data, len(spent_outs_data),
+            inIdx, libconsensus_flags,
+            ctypes.byref(error_code)
+        )
+    else:
+        result = handle.bitcoinconsensus_verify_script_with_amount(
+            scriptPubKey, len(scriptPubKey), amount,
+            tx_data, len(tx_data), inIdx, libconsensus_flags,
+            ctypes.byref(error_code)
+        )
 
     if result == 1:
         # script was verified successfully - just return, no exception raised.

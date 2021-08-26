@@ -425,22 +425,6 @@ class intVectorSerializer(Serializer[Sequence[int]]):
         return ints
 
 
-class VarBytesSerializer(Serializer[bytes]):
-    """Serialize variable length byte strings"""
-    @classmethod
-    def stream_serialize(cls, obj: bytes, f: ByteStream_Type,
-                         **kwargs: Any) -> None:
-        b = obj
-        datalen = len(b)
-        VarIntSerializer.stream_serialize(datalen, f, **kwargs)
-        f.write(b)
-
-    @classmethod
-    def stream_deserialize(cls, f: ByteStream_Type, **kwargs: Any) -> bytes:
-        datalen = VarIntSerializer.stream_deserialize(f, **kwargs)
-        return ser_read(f, datalen)
-
-
 def uint256_from_bytes(s: bytes) -> int:
     """Convert bytes to uint256"""
     r = 0
@@ -494,7 +478,6 @@ __all__ = (
     'VectorSerializer',
     'uint256VectorSerializer',
     'intVectorSerializer',
-    'VarBytesSerializer',
     'uint256_from_bytes',
     'uint256_to_bytes',
     'uint256_to_shortstr',

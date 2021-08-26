@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2019 The python-bitcointx developers
+# Copyright (C) 2018-2021 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
@@ -18,6 +18,7 @@ except ImportError:
     import threading
     has_contextvars = False
 
+import hashlib
 import functools
 from enum import Enum
 from types import FunctionType
@@ -27,6 +28,7 @@ from typing import (
     TypeVar, Generic, cast, NoReturn
 )
 
+_allow_secp256k1_experimental_modules = False
 _secp256k1_library_path: Optional[str] = None
 _openssl_library_path: Optional[str] = None
 
@@ -615,6 +617,15 @@ class ContextLocalClassDispatchers(ContextVarsCompat):
         setattr(self, identity, value)
 
 
+def tagged_hasher(tag: bytes) -> Callable[[bytes], bytes]:
+    thash = hashlib.sha256(tag).digest() * 2
+
+    def hasher(data: bytes) -> bytes:
+        return hashlib.sha256(thash+data).digest()
+
+    return hasher
+
+
 class_mapping_dispatch_data = ContextLocalClassDispatchers()
 
 __all__ = (
@@ -631,4 +642,5 @@ __all__ = (
     'ReadOnlyField',
     'WriteableField',
     'ContextVarsCompat',
+    'tagged_hasher',
 )

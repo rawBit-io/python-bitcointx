@@ -17,20 +17,24 @@ import os
 import unittest
 import warnings
 import ctypes
+import random
 
-from typing import List, Iterator, Tuple, Set, Optional
+from typing import List, Iterator, Tuple, Set, Optional, Sequence, Dict, Union
 
 from binascii import unhexlify
 
+import bitcointx.util
+
 from bitcointx.core import (
-    x, ValidationError,
+    coins_to_satoshi, x, ValidationError,
     CTxOut, CTxIn, CTransaction, COutPoint, CTxWitness, CTxInWitness
 )
-from bitcointx.core.key import CKey
+from bitcointx.core.key import CKey, tap_tweak_pubkey
 from bitcointx.core.script import (
     OPCODES_BY_NAME, CScript, CScriptWitness,
-    OP_0, SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
+    OP_0, SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0, OP_CHECKSIG,
     standard_multisig_redeem_script, standard_multisig_witness_stack,
+    TaprootScriptTree, TaprootScriptTreeLeaf_Type, SignatureHashSchnorr
 )
 from bitcointx.core.scripteval import (
     VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH,
@@ -40,6 +44,13 @@ from bitcointx.core.bitcoinconsensus import (
     ConsensusVerifyScript, BITCOINCONSENSUS_ACCEPTED_FLAGS,
     load_bitcoinconsensus_library
 )
+from bitcointx.wallet import P2TRCoinAddress, CCoinKey
+
+TestDataIterator = Iterator[
+    Tuple[CScript, CScript, CScript, CScriptWitness, int,
+          Optional[Sequence[CTxOut]], Set[ScriptVerifyFlag_Type],
+          str, str, str]
+]
 
 
 def parse_script(s: str) -> CScript:
@@ -71,12 +82,7 @@ def parse_script(s: str) -> CScript:
     return CScript(b''.join(r))
 
 
-def load_test_vectors(
-    name: str, skip_fixme: bool = True
-) -> Iterator[
-    Tuple[CScript, CScript, CScriptWitness, int, Set[ScriptVerifyFlag_Type],
-          str, str, str]
-]:
+def load_test_vectors(name: str, skip_fixme: bool = True) -> TestDataIterator:
     with open(os.path.dirname(__file__) + '/data/' + name, 'r') as fd:
         fixme_comment = None
         num_skipped = 0
@@ -136,7 +142,7 @@ def load_test_vectors(
 
                     flag_set.add(flag)
 
-            yield (scriptSig, scriptPubKey, witness, nValue,
+            yield (scriptSig, scriptPubKey, CScript(), witness, nValue, None,
                    flag_set, expected_result, comment, test_case)
 
         if fixme_comment is not None:
@@ -144,25 +150,158 @@ def load_test_vectors(
 
 
 class Test_EvalScript(unittest.TestCase):
+
+    def setUp(self) -> None:
+        try:
+            handle = load_bitcoinconsensus_library()
+        except ImportError:
+            warnings.warn(
+                "libbitcoinconsensus library is not avaliable, "
+                "not testing bitcoinconsensus module and taproot scripts")
+            handle = None  # type: ignore
+
+        self._bitcoinconsensus_handle = handle
+
+    # IMPORANT: The code inside this function (TaprootScriptTree functionality)
+    # is what actually being tested here, not the libbitcoinconsensus
+    # interface, so this should not be changed into something that just
+    # loads data from a json file.
+    def generate_taproot_test_scripts(self) -> TestDataIterator:
+        k = CCoinKey.from_secret_bytes(os.urandom(32))
+
+        xopub = k.xonly_pub
+
+        spk = P2TRCoinAddress.from_xonly_pubkey(xopub).to_scriptPubKey()
+        nValue = 100
+        (txCredit, txSpend) = self.create_test_txs(
+            CScript(), spk, spk, CScriptWitness(), nValue)
+        sh = SignatureHashSchnorr(txSpend, 0, txCredit.vout)
+        sig = k.sign_schnorr_tweaked(sh)
+        yield (CScript(), spk, spk, CScriptWitness([sig]), nValue,
+               txCredit.vout, BITCOINCONSENSUS_ACCEPTED_FLAGS,
+               'OK', '', 'simple taproot spend')
+
+        random_tweak = os.urandom(32)
+
+        tt_res = tap_tweak_pubkey(xopub, merkle_root=random_tweak)
+        assert tt_res is not None
+        rnd_twpub, _ = tt_res
+
+        t = TaprootScriptTree(
+            [CScript([rnd_twpub, OP_CHECKSIG], name='simplespend')])
+        t.set_internal_pubkey(xopub)
+
+        swcb = t.get_script_with_control_block('simplespend')
+        assert swcb is not None
+        s, cb = swcb
+        spk = P2TRCoinAddress.from_script_tree(t).to_scriptPubKey()
+        (txCredit, txSpend) = self.create_test_txs(
+            CScript(), spk, spk, CScriptWitness(), nValue)
+        sh = s.sighash_schnorr(txSpend, 0, txCredit.vout)
+        sig = k.sign_schnorr_tweaked(sh, merkle_root=random_tweak)
+
+        yield (CScript(), spk, spk, CScriptWitness([sig, s, cb]), nValue,
+               txCredit.vout, BITCOINCONSENSUS_ACCEPTED_FLAGS,
+               'OK', '', 'simple taproot script spend')
+
+        def gen_leaves(num_leaves: int, prefix: str = ''
+                       ) -> Tuple[List[TaprootScriptTreeLeaf_Type],
+                                  Dict[str, bytes]]:
+            leaves: List[TaprootScriptTreeLeaf_Type] = []
+            tweaks = {}
+            for leaf_idx in range(num_leaves):
+                tw = os.urandom(32)
+                tt_res = tap_tweak_pubkey(xopub, merkle_root=tw)
+                assert tt_res is not None
+                twpub, _ = tt_res
+                sname = f'{prefix}leaf_{leaf_idx}'
+                tweaks[sname] = tw
+                leaves.append(CScript([twpub, OP_CHECKSIG], name=sname))
+
+            return leaves, tweaks
+
+        def yield_leaves(leaves: Sequence[Union[CScript, TaprootScriptTree]],
+                         tweaks: Dict[str, bytes]) -> TestDataIterator:
+            t = TaprootScriptTree(leaves, internal_pubkey=xopub)
+
+            spk = P2TRCoinAddress.from_script_tree(t).to_scriptPubKey()
+
+            for sname, tweak in tweaks.items():
+                nValue = random.randint(1, coins_to_satoshi(21000000))
+                swcb = t.get_script_with_control_block(sname)
+                assert swcb is not None
+                s, cb = swcb
+                (txCredit, txSpend) = self.create_test_txs(
+                    CScript(), spk, spk, CScriptWitness(), nValue)
+                sh = s.sighash_schnorr(txSpend, 0, txCredit.vout)
+                sig = k.sign_schnorr_tweaked(sh, merkle_root=tweak)
+
+                yield (CScript(), spk, spk, CScriptWitness([sig, s, cb]), nValue,
+                       txCredit.vout, BITCOINCONSENSUS_ACCEPTED_FLAGS,
+                       'OK', '', f'taproot script spend leaf {sname}')
+
+        # Test simple balanced tree
+        for num_leaves in range(1, 12):
+            leaves, tweaks = gen_leaves(num_leaves)
+            for data in yield_leaves(leaves, tweaks):
+                yield data
+
+        leaves, tweaks = gen_leaves(7)
+        for data in yield_leaves(leaves, tweaks):
+            yield data
+
+        # Test un-balanced geterogenous tree
+        lvdict: Dict[str, List[TaprootScriptTreeLeaf_Type]] = {}
+        scripts = {}
+        for num_scripts, pfx in ((5, 'level1'), (7, 'level2a'), (6, 'level2b'),
+                                 (8, 'level3a'), (11, 'level3b'),
+                                 (3, 'level3c')):
+
+            lvdict[pfx], new_scripts = gen_leaves(num_scripts, pfx + '/')
+            scripts.update(new_scripts)
+
+        l2a = (lvdict['level2a'][:3] +
+               [TaprootScriptTree(lvdict['level3a'][:4])] +
+               [lvdict['level2a'][3]] +
+               [TaprootScriptTree(lvdict['level3a'][4:])] +
+               lvdict['level2a'][4:] +
+               [TaprootScriptTree(lvdict['level3b'][:10])] +
+               [TaprootScriptTree([lvdict['level3b'][10]])])
+
+        l2b: List[TaprootScriptTreeLeaf_Type]
+        l2b = [TaprootScriptTree(lvdict['level3c'])]
+        l2b.extend(lvdict['level2b'])
+
+        TaprootScriptTree(l2b)
+
+        l1 = (lvdict['level1'][:1] + [TaprootScriptTree(l2a)]
+              + lvdict['level1'][1:2] + [TaprootScriptTree(l2b)]
+              + lvdict['level1'][2:])
+
+        for data in yield_leaves(l1, scripts):
+            yield data
+
     def create_test_txs(
         self, scriptSig: CScript, scriptPubKey: CScript,
-        witness: CScriptWitness, nValue: int
+        dst_scriptPubKey: CScript, witness: CScriptWitness, nValue: int
     ) -> Tuple[CTransaction, CTransaction]:
         txCredit = CTransaction([CTxIn(COutPoint(), CScript([OP_0, OP_0]), nSequence=0xFFFFFFFF)],
                                 [CTxOut(nValue, scriptPubKey)],
                                 witness=CTxWitness(),
                                 nLockTime=0, nVersion=1)
+
         txSpend = CTransaction([CTxIn(COutPoint(txCredit.GetTxid(), 0), scriptSig, nSequence=0xFFFFFFFF)],
-                               [CTxOut(nValue, CScript())],
+                               [CTxOut(nValue, dst_scriptPubKey)],
                                nLockTime=0, nVersion=1,
                                witness=CTxWitness([CTxInWitness(witness)]))
         return (txCredit, txSpend)
 
     def test_script(self) -> None:
         for t in load_test_vectors('script_tests.json'):
-            (scriptSig, scriptPubKey, witness, nValue,
-             flags, expected_result, comment, test_case) = t
-            (txCredit, txSpend) = self.create_test_txs(scriptSig, scriptPubKey, witness, nValue)
+            (scriptSig, scriptPubKey, dst_scriptPubKey, witness, nValue,
+             spent_outputs, flags, expected_result, comment, test_case) = t
+            (txCredit, txSpend) = self.create_test_txs(
+                scriptSig, scriptPubKey, dst_scriptPubKey, witness, nValue)
 
             try:
                 VerifyScript(scriptSig, scriptPubKey, txSpend, 0, flags, amount=nValue, witness=witness)
@@ -174,38 +313,56 @@ class Test_EvalScript(unittest.TestCase):
             if expected_result != 'OK':
                 self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
 
+    def _do_test_bicoinconsensus(
+        self, handle: Optional[ctypes.CDLL],
+        test_data_iterator: TestDataIterator
+    ) -> None:
+        for t in test_data_iterator:
+            (scriptSig, scriptPubKey, dst_scriptPubKey, witness, nValue, spent_outputs,
+                flags, expected_result, comment, test_case) = t
+
+            (txCredit, txSpend) = self.create_test_txs(
+                scriptSig, scriptPubKey, dst_scriptPubKey, witness, nValue)
+
+            libconsensus_flags = (flags & BITCOINCONSENSUS_ACCEPTED_FLAGS)
+            if flags != libconsensus_flags:
+                continue
+
+            try:
+                ConsensusVerifyScript(scriptSig, scriptPubKey, txSpend, 0,
+                                      libconsensus_flags, amount=nValue,
+                                      witness=witness,
+                                      spent_outputs=spent_outputs,
+                                      consensus_library_hanlde=handle)
+            except ValidationError as err:
+                if expected_result == 'OK':
+                    self.fail('Script FAILED: %r %r %r with exception %r\n\nTest data: %r' % (scriptSig, scriptPubKey, comment, err, test_case))
+                continue
+
+            if expected_result != 'OK':
+                self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
+
     def test_script_bitcoinconsensus(self) -> None:
-        try:
-            handle = load_bitcoinconsensus_library()
-        except ImportError:
-            warnings.warn("libbitcoinconsensus library is not avaliable, not testing bitcoinconsensus module")
-            return
+        if not self._bitcoinconsensus_handle:
+            self.skipTest("bitcoinconsensus library is not available")
 
-        def do_test_bicoinconsensus(handle: Optional[ctypes.CDLL]) -> None:
-            for t in load_test_vectors('script_tests.json', skip_fixme=False):
-                (scriptSig, scriptPubKey, witness, nValue,
-                 flags, expected_result, comment, test_case) = t
-                (txCredit, txSpend) = self.create_test_txs(scriptSig, scriptPubKey, witness, nValue)
+        test_data_iterator = load_test_vectors('script_tests.json',
+                                               skip_fixme=False)
+        # test with supplied handle
+        self._do_test_bicoinconsensus(self._bitcoinconsensus_handle,
+                                      test_data_iterator)
+        # test with default-loaded handle
+        self._do_test_bicoinconsensus(None, test_data_iterator)
 
-                libconsensus_flags = (flags & BITCOINCONSENSUS_ACCEPTED_FLAGS)
-                if flags != libconsensus_flags:
-                    continue
-
-                try:
-                    ConsensusVerifyScript(scriptSig, scriptPubKey, txSpend, 0,
-                                          libconsensus_flags, amount=nValue,
-                                          witness=witness,
-                                          consensus_library_hanlde=handle)
-                except ValidationError as err:
-                    if expected_result == 'OK':
-                        self.fail('Script FAILED: %r %r %r with exception %r\n\nTest data: %r' % (scriptSig, scriptPubKey, comment, err, test_case))
-                    continue
-
-                if expected_result != 'OK':
-                    self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
-
-        do_test_bicoinconsensus(handle)  # test with supplied handle
-        do_test_bicoinconsensus(None)  # test with default-loaded handle
+    @unittest.skipIf(
+        not bitcointx.util._allow_secp256k1_experimental_modules,
+        "bitcoinconsensus library is not available or "
+    )
+    def test_script_bitcoinconsensus_taproot_scripts(self) -> None:
+        if not self._bitcoinconsensus_handle:
+            self.skipTest("bitcoinconsensus library is not available")
+        # disabled until libbitcoinconsensus can handle taproot scripts
+        # self._do_test_bicoinconsensus(self._bitcoinconsensus_handle, self.generate_taproot_test_scripts())
 
     def test_p2sh_redeemscript(self) -> None:
         def T(required: int, total: int, alt_total: Optional[int] = None) -> None:
@@ -224,7 +381,7 @@ class Test_EvalScript(unittest.TestCase):
 
             scriptPubKey = redeem_script.to_p2sh_scriptPubKey()
 
-            (_, tx) = self.create_test_txs(CScript(), scriptPubKey,
+            (_, tx) = self.create_test_txs(CScript(), scriptPubKey, CScript(),
                                            CScriptWitness([]), amount)
 
             tx = tx.to_mutable()
@@ -246,7 +403,7 @@ class Test_EvalScript(unittest.TestCase):
 
             scriptPubKey = redeem_script.to_p2wsh_scriptPubKey()
 
-            (_, tx) = self.create_test_txs(CScript(), scriptPubKey,
+            (_, tx) = self.create_test_txs(CScript(), scriptPubKey, CScript(),
                                            CScriptWitness([]), amount)
 
             tx = tx.to_mutable()
@@ -271,7 +428,7 @@ class Test_EvalScript(unittest.TestCase):
 
             scriptPubKey = redeem_script.to_p2wsh_scriptPubKey()
 
-            (_, tx) = self.create_test_txs(CScript(), scriptPubKey,
+            (_, tx) = self.create_test_txs(CScript(), scriptPubKey, CScript(),
                                            CScriptWitness([]), amount)
 
             tx = tx.to_mutable()

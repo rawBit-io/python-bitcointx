@@ -1,6 +1,6 @@
 # Copyright (C) 2011 Sam Rushing
 # Copyright (C) 2012-2015 The python-bitcoinlib developers
-# Copyright (C) 2018-2019 The python-bitcointx developers
+# Copyright (C) 2018-2021 The python-bitcointx developers
 #
 # This file is part of python-bitcointx.
 #
@@ -42,7 +42,8 @@ from bitcointx.core.secp256k1 import (
     PUBLIC_KEY_SIZE, COMPRESSED_PUBLIC_KEY_SIZE,
     SECP256K1_EC_COMPRESSED, SECP256K1_EC_UNCOMPRESSED,
     secp256k1_has_pubkey_recovery, secp256k1_has_ecdh,
-    secp256k1_has_privkey_negate, secp256k1_has_pubkey_negate
+    secp256k1_has_privkey_negate, secp256k1_has_pubkey_negate,
+    secp256k1_has_xonly_pubkeys, secp256k1_has_schnorrsig
 )
 
 BIP32_HARDENED_KEY_OFFSET = 0x80000000
@@ -53,6 +54,7 @@ T_CExtKeyBase = TypeVar('T_CExtKeyBase', bound='CExtKeyBase')
 T_CExtPubKeyBase = TypeVar('T_CExtPubKeyBase', bound='CExtPubKeyBase')
 T_unbounded = TypeVar('T_unbounded')
 
+
 _openssl_library_handle: Optional[ctypes.CDLL] = None
 
 
@@ -62,6 +64,18 @@ class OpenSSLException(EnvironmentError):
 
 class KeyDerivationFailException(RuntimeError):
     pass
+
+
+def _experimental_module_unavailable_error(msg: str, module_name: str) -> str:
+    return (
+        f'{msg} handling functions from libsecp256k1 is not available. '
+        f'You should use newer version of secp256k1 library, '
+        f'configure it with --enable-experimental and '
+        f'--enable-module-{module_name}, and also enable the use '
+        f'of functions from libsecp256k1 experimental modules by '
+        f'python-bitcointx (see docstring for '
+        f'allow_secp256k1_experimental_modules() function)'
+    )
 
 
 # Thx to Sam Devlin for the ctypes magic 64-bit fix (FIXME: should this
@@ -202,6 +216,10 @@ class CKeyBase:
     def pub(self) -> 'CPubKey':
         return self.__pub
 
+    @property
+    def xonly_pub(self) -> 'XOnlyPubKey':
+        return XOnlyPubKey(self.__pub)
+
     def sign(self, hash: Union[bytes, bytearray], *,
              _ecdsa_sig_grind_low_r: bool = True,
              _ecdsa_sig_extra_entropy: int = 0
@@ -283,11 +301,153 @@ class CKeyBase:
 
         return output.raw, recid.value
 
+    def sign_schnorr_no_tweak(
+        self, hash: Union[bytes, bytearray],
+        *,
+        aux: Optional[bytes] = None
+    ) -> bytes:
+        """
+        Produce Schnorr signature of the supplied `hash` with this key.
+        No tweak is applied to the key before signing.
+        This is mostly useful when the signature is going to be checked
+        within the script by CHECKSIG-related opcodes, or for other generic
+        Schnorr signing needs
+        """
+        return self._sign_schnorr_internal(hash, aux=aux)
+
+    def _sign_schnorr_internal(
+        self, hash: Union[bytes, bytearray],
+        *,
+        merkle_root: Optional[bytes] = None,
+        aux: Optional[bytes] = None
+    ) -> bytes:
+        """
+        Internal function to produce Schnorr signature.
+        It is not supposed to be called by the external code.
+
+        Note on merkle_root argument: values of None, b'' and <32 bytes>
+        all have different meaning.
+           - None means no tweak is applied to the key before signing.
+             This is mostly useful when the signature is going to be checked
+             within the script by CHECKSIG-related opcodes, or for other
+             generic Schnorr signing needs
+           - b'' means that the tweak will be applied, with merkle_root
+             being generated as the tagged hash of the x-only pubkey
+             corresponding to this private key. This is mostly useful
+             when signing keypath spends when there is no script path
+           - <32 bytes> are used directly as a tweak. This is mostly useful
+             when signing keypath spends when there is also a script path
+             present
+        """
+
+        ensure_isinstance(hash, (bytes, bytearray), 'hash')
+        if len(hash) != 32:
+            raise ValueError('Hash must be exactly 32 bytes long')
+
+        if not secp256k1_has_schnorrsig:
+            raise RuntimeError(
+                _experimental_module_unavailable_error(
+                    'schnorr signature', 'schnorrsig'))
+
+        if aux is not None:
+            ensure_isinstance(aux, (bytes, bytearray), 'aux')
+            if len(aux) != 32:
+                raise ValueError('aux must be exactly 32 bytes long')
+
+        sizeof_keypair = 96
+        keypair_buf = ctypes.create_string_buffer(sizeof_keypair)
+
+        result = _secp256k1.secp256k1_keypair_create(
+            secp256k1_context_sign, keypair_buf, self)
+
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_keypair_create returned failure')
+
+        pubkey_buf = ctypes.create_string_buffer(64)
+
+        if merkle_root is not None:
+            ensure_isinstance(merkle_root, (bytes, bytearray), 'merkle_root')
+
+            result = _secp256k1.secp256k1_keypair_xonly_pub(
+                secp256k1_context_sign, pubkey_buf, None, keypair_buf)
+
+            if 1 != result:
+                assert(result == 0)
+                raise RuntimeError('secp256k1_keypair_xonly_pub returned failure')
+
+            # It should take one less secp256k1 call if we just take self.pub
+            # here, because XOnlyPubKey(self.pub) will just drop the first
+            # byte of self.pub data and will make x-only pubkey from that.
+            # But the code is translated from CKey::SignSchnorr in Bitcon Core,
+            # so one extra secp256k1 call here to be close to original source
+
+            serialized_pubkey_buf = ctypes.create_string_buffer(32)
+            result = _secp256k1.secp256k1_xonly_pubkey_serialize(
+                secp256k1_context_verify, serialized_pubkey_buf, pubkey_buf)
+
+            if 1 != result:
+                assert(result == 0)
+                raise RuntimeError('secp256k1_xonly_pubkey_serialize returned failure')
+
+            tweak = compute_tap_tweak_hash(
+                XOnlyPubKey(serialized_pubkey_buf.raw),
+                merkle_root=merkle_root)
+
+            result = _secp256k1.secp256k1_keypair_xonly_tweak_add(
+                secp256k1_context_sign, keypair_buf, tweak)
+
+            if 1 != result:
+                assert(result == 0)
+                raise RuntimeError('secp256k1_keypair_xonly_tweak_add returned failure')
+
+        sig_buf = ctypes.create_string_buffer(64)
+        result = _secp256k1.secp256k1_schnorrsig_sign(
+            secp256k1_context_sign, sig_buf, hash, keypair_buf, aux
+        )
+
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_schnorrsig_sign returned failure')
+
+        # The pubkey may be tweaked, so extract it from keypair
+        # to do verification after signing
+        result = _secp256k1.secp256k1_keypair_xonly_pub(
+            secp256k1_context_sign, pubkey_buf, None, keypair_buf)
+
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_keypair_xonly_pub returned failure')
+
+        # This check is not in Bitcoin Core's `CKey::SignSchnorr`, but
+        # is recommended in BIP340 if the computation cost is not a concern
+        result = _secp256k1.secp256k1_schnorrsig_verify(
+            secp256k1_context_verify,
+            sig_buf.raw, hash, 32, pubkey_buf
+        )
+
+        if result != 1:
+            assert result == 0
+            raise RuntimeError(
+                'secp256k1_schnorrsig_verify failed after signing')
+
+        # There's no C compiler that can optimize out the 'superfluous' memset,
+        # so we don't need special memory_cleanse() function.
+        # Not that it matters much in python where we don't have control over
+        # memory and the keydata is probably spread all over the place anyway,
+        # but still, do this to be close to the original source
+        ctypes.memset(keypair_buf, 0, sizeof_keypair)
+
+        return sig_buf.raw
+
     def verify(self, hash: bytes, sig: bytes) -> bool:
         return self.pub.verify(hash, sig)
 
     def verify_nonstrict(self, hash: bytes, sig: bytes) -> bool:
         return self.pub.verify_nonstrict(hash, sig)
+
+    def verify_schnorr(self, msg: bytes, sig: bytes) -> bool:
+        return XOnlyPubKey(self.pub).verify_schnorr(msg, sig)
 
     def ECDH(self, pub: Optional['CPubKey'] = None) -> bytes:
         if not secp256k1_has_ecdh:
@@ -383,12 +543,6 @@ class CPubKey(bytes):
 
     Attributes:
 
-    is_nonempty()      - Corresponds to CPubKey.IsValid()
-
-    is_fullyvalid() - Corresponds to CPubKey.IsFullyValid()
-
-    is_compressed() - Corresponds to CPubKey.IsCompressed()
-
     key_id        - Hash160(pubkey)
     """
 
@@ -403,6 +557,7 @@ class CPubKey(bytes):
             tmp_pub = ctypes.create_string_buffer(64)
             result = _secp256k1.secp256k1_ec_pubkey_parse(
                 secp256k1_context_verify, tmp_pub, self, len(self))
+            assert result in (1, 0)
             self.__fullyvalid = (result == 1)
 
         self.__key_id = bitcointx.core.Hash160(self)
@@ -490,7 +645,11 @@ class CPubKey(bytes):
 
     @no_bool_use_as_property
     def is_nonempty(self) -> bool:
-        return len(self) > 0
+        return not self.is_null()
+
+    @no_bool_use_as_property
+    def is_null(self) -> bool:
+        return len(self) == 0
 
     @no_bool_use_as_property
     def is_fullyvalid(self) -> bool:
@@ -511,6 +670,9 @@ class CPubKey(bytes):
 
         ensure_isinstance(sig, (bytes, bytearray), 'signature')
         ensure_isinstance(hash, (bytes, bytearray), 'hash')
+
+        if len(hash) != 32:
+            raise ValueError('Hash must be exactly 32 bytes long')
 
         if not sig:
             return False
@@ -555,6 +717,9 @@ class CPubKey(bytes):
         ensure_isinstance(sig, (bytes, bytearray), 'signature')
         ensure_isinstance(hash, (bytes, bytearray), 'hash')
 
+        if len(hash) != 32:
+            raise ValueError('Hash must be exactly 32 bytes long')
+
         if not sig:
             return False
 
@@ -592,6 +757,9 @@ class CPubKey(bytes):
             return False
 
         return self.verify(hash, norm_der.raw)
+
+    def verify_schnorr(self, msg: bytes, sig: bytes) -> bool:
+        return XOnlyPubKey(self).verify_schnorr(msg, sig)
 
     @classmethod
     def combine(cls: Type[T_CPubKey], *pubkeys: T_CPubKey,
@@ -1905,6 +2073,178 @@ class KeyStore:
         return None
 
 
+T_XOnlyPubKey = TypeVar('T_XOnlyPubKey', bound='XOnlyPubKey')
+
+
+class XOnlyPubKey(bytes):
+    """An encapsulated X-Only public key"""
+
+    __fullyvalid: bool
+
+    def __new__(cls: Type[T_XOnlyPubKey],
+                keydata: Union[bytes, CPubKey] = b'') -> T_XOnlyPubKey:
+
+        if not secp256k1_has_xonly_pubkeys:
+            raise RuntimeError(
+                _experimental_module_unavailable_error(
+                    'x-only pubkey', 'extrakeys'))
+
+        if len(keydata) in (32, 0):
+            ensure_isinstance(keydata, bytes, 'x-only pubkey data')
+        elif len(keydata) == 33:
+            ensure_isinstance(keydata, CPubKey,
+                              'x-only pubkey data of 33 bytes')
+            keydata = keydata[1:33]
+        else:
+            raise ValueError('unrecognized pubkey data length')
+
+        self = super().__new__(cls, keydata)
+
+        self.__fullyvalid = False
+
+        if self.is_nonempty():
+            tmpbuf = ctypes.create_string_buffer(64)
+            result = _secp256k1.secp256k1_xonly_pubkey_parse(
+                secp256k1_context_verify, tmpbuf, self)
+            assert result in (1, 0)
+            self.__fullyvalid = (result == 1)
+
+        return self
+
+    @no_bool_use_as_property
+    def is_fullyvalid(self) -> bool:
+        return self.__fullyvalid
+
+    @no_bool_use_as_property
+    def is_nonempty(self) -> bool:
+        return not self.is_null()
+
+    @no_bool_use_as_property
+    def is_null(self) -> bool:
+        return len(self) == 0
+
+    def verify_schnorr(self, hash: bytes, sigbytes: bytes) -> bool:
+        if not secp256k1_has_schnorrsig:
+            raise RuntimeError(
+                _experimental_module_unavailable_error(
+                    'schnorr signature', 'schnorrsig'))
+
+        ensure_isinstance(sigbytes, (bytes, bytearray), 'signature')
+        ensure_isinstance(hash, (bytes, bytearray), 'hash')
+
+        if len(hash) != 32:
+            raise ValueError('Hash must be exactly 32 bytes long')
+
+        if not sigbytes:
+            return False
+
+        if len(sigbytes) != 64:
+            raise ValueError('Signature must be exactly 64 bytes long')
+
+        result = _secp256k1.secp256k1_schnorrsig_verify(
+            secp256k1_context_verify,
+            sigbytes, hash, 32, self._to_ctypes_char_array()
+        )
+
+        if result != 1:
+            assert result == 0
+            return False
+
+        return True
+
+    def _to_ctypes_char_array(self) -> 'ctypes.Array[ctypes.c_char]':
+        assert self.is_fullyvalid()
+        raw_pub = ctypes.create_string_buffer(64)
+        result = _secp256k1.secp256k1_xonly_pubkey_parse(
+            secp256k1_context_verify, raw_pub, self)
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_xonly_pubkey_parse returned failure')
+        return raw_pub
+
+    def __str__(self) -> str:
+        return repr(self)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(x('{bitcointx.core.b2x(self)}'))"
+
+
+def compute_tap_tweak_hash(
+    pub: XOnlyPubKey, *, merkle_root: bytes = b''
+) -> bytes:
+    ensure_isinstance(merkle_root, bytes, 'merkle_root')
+
+    if not merkle_root:
+        return bitcointx.core.CoreCoinParams.taptweak_hasher(pub)
+
+    if len(merkle_root) != 32:
+        raise ValueError('non-empty merkle_root must be 32 bytes long')
+
+    return bitcointx.core.CoreCoinParams.taptweak_hasher(
+        pub + merkle_root)
+
+
+def check_tap_tweak(tweaked_pub: XOnlyPubKey, internal_pub: XOnlyPubKey,
+                    *,
+                    merkle_root: bytes = b'',
+                    parity: bool) -> bool:
+
+    tweak = compute_tap_tweak_hash(internal_pub, merkle_root=merkle_root)
+
+    result = _secp256k1.secp256k1_xonly_pubkey_tweak_add_check(
+        secp256k1_context_verify, tweaked_pub, int(bool(parity)),
+        internal_pub._to_ctypes_char_array(), tweak)
+
+    if result != 1:
+        assert result == 0
+        return False
+
+    return True
+
+
+# in BitcoinCore, the same function is called `CreateTapTweak`. But
+# in this case it makes sense to deviate from followin Core's naming
+# conventions, because `create_tap_tweak` could be perceived as something
+# that creates tweak hash, rather than tweaks the pubkey.
+def tap_tweak_pubkey(pub: XOnlyPubKey, *, merkle_root: bytes = b'',
+                     ) -> Optional[Tuple[XOnlyPubKey, bool]]:
+
+    base_point = pub._to_ctypes_char_array()
+    tweak = compute_tap_tweak_hash(pub, merkle_root=merkle_root)
+    out = ctypes.create_string_buffer(64)
+
+    result = _secp256k1.secp256k1_xonly_pubkey_tweak_add(
+        secp256k1_context_verify, out, base_point, tweak)
+
+    if result != 1:
+        assert result == 0
+        return None
+
+    out_xonly = ctypes.create_string_buffer(64)
+
+    parity_ret = ctypes.c_int()
+    parity_ret.value = -1
+
+    result = _secp256k1.secp256k1_xonly_pubkey_from_pubkey(
+        secp256k1_context_verify, out_xonly, ctypes.byref(parity_ret),
+        out)
+
+    if result != 1:
+        assert result == 0
+        return None
+
+    assert parity_ret.value in (0, 1)
+    parity = bool(parity_ret.value)
+
+    out_xonly_serialized = ctypes.create_string_buffer(32)
+
+    result = _secp256k1.secp256k1_xonly_pubkey_serialize(
+        secp256k1_context_verify, out_xonly_serialized, out_xonly)
+    assert result == 1
+
+    return XOnlyPubKey(out_xonly_serialized.raw), parity
+
+
 __all__ = (
     'CKey',
     'CPubKey',
@@ -1917,5 +2257,9 @@ __all__ = (
     'BIP32PathTemplate',
     'BIP32PathTemplateIndex',
     'KeyDerivationInfo',
-    'KeyStore'
+    'KeyStore',
+    'XOnlyPubKey',
+    'compute_tap_tweak_hash',
+    'check_tap_tweak',
+    'tap_tweak_pubkey',
 )

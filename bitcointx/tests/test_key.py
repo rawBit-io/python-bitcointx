@@ -11,11 +11,15 @@
 
 # pylama:ignore=E501
 
+import os
+import csv
 import unittest
 import warnings
 import hashlib
 
-from bitcointx.core.key import CKey, CPubKey
+import bitcointx.util
+
+from bitcointx.core.key import CKey, CPubKey, XOnlyPubKey
 from bitcointx.core import x
 from bitcointx.core.secp256k1 import secp256k1_has_pubkey_negate
 
@@ -158,3 +162,39 @@ class Test_CKey(unittest.TestCase):
                 small_sig_found = True
 
         self.assertTrue(small_sig_found)
+
+    def test_schnorr(self) -> None:
+        if not bitcointx.util._allow_secp256k1_experimental_modules:
+            self.skipTest("secp256k1 experimental modules are not available")
+        # adapted from reference code of BIP340
+        # at https://github.com/bitcoin/bips/blob/master/bip-0340/reference.py
+        with open(os.path.dirname(__file__) + '/data/schnorr-sig-test-vectors.csv', 'r') as fd:
+            reader = csv.reader(fd)
+            reader.__next__()
+            for row in reader:
+                (
+                    _testcase_idx,
+                    seckey_hex, pubkey_hex, aux_rand_hex, msg_hex, sig_hex,
+                    result_str, _comment
+                ) = row
+
+                pubkey = XOnlyPubKey(x(pubkey_hex))
+                msg = x(msg_hex)
+                assert len(msg) == 32
+                sig = x(sig_hex)
+                result = (result_str == 'TRUE')
+
+                if seckey_hex != '':
+                    seckey = CKey(x(seckey_hex))
+                    pubkey_actual = seckey.xonly_pub
+                    self.assertEqual(pubkey, pubkey_actual)
+                    aux_rand = x(aux_rand_hex)
+                    sig_actual = seckey.sign_schnorr_no_tweak(
+                        msg, aux=aux_rand)
+                    self.assertEqual(sig, sig_actual)
+                if pubkey.is_fullyvalid():
+                    result_actual = pubkey.verify_schnorr(msg, sig)
+                else:
+                    result_actual = False
+
+                self.assertEqual(result, result_actual)

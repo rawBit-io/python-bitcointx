@@ -31,10 +31,12 @@ from bitcointx.util import (
     ensure_isinstance
 )
 from bitcointx.core.key import (
-    CPubKey, CKeyBase, CExtKeyBase, CExtPubKeyBase
+    CPubKey, CKeyBase, CExtKeyBase, CExtPubKeyBase, XOnlyPubKey,
+    tap_tweak_pubkey
 )
 from bitcointx.core.script import (
-    CScript, standard_keyhash_scriptpubkey, standard_scripthash_scriptpubkey
+    CScript, standard_keyhash_scriptpubkey, standard_scripthash_scriptpubkey,
+    TaprootScriptTree
 )
 
 
@@ -491,6 +493,128 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     _scriptpubkey_type = 'witness_v1_taproot'
 
     @classmethod
+    def from_xonly_output_pubkey(
+        cls: Type[T_P2TRCoinAddress],
+        pubkey: Union[XOnlyPubKey, bytes, bytearray],
+        *,
+        accept_invalid: bool = False
+    ) -> T_P2TRCoinAddress:
+        """Create a P2TR address from x-only pubkey that is already tweaked,
+        the "output pubkey" in the terms of BIP341
+
+        Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
+        is True.
+        """
+        ensure_isinstance(pubkey, (XOnlyPubKey, bytes, bytearray), 'pubkey')
+
+        if not accept_invalid:
+            if not isinstance(pubkey, XOnlyPubKey):
+                pubkey = XOnlyPubKey(pubkey)
+            if not pubkey.is_fullyvalid():
+                raise P2TRCoinAddressError('invalid x-only pubkey')
+
+        return cls.from_bytes(pubkey)
+
+    @classmethod
+    def from_xonly_pubkey(
+        cls: Type[T_P2TRCoinAddress],
+        pubkey: Union[XOnlyPubKey, bytes, bytearray]
+    ) -> T_P2TRCoinAddress:
+        """Create a P2TR address from x-only "internal" pubkey (in BIP341 terms).
+        The pubkey will be tweaked with the tagged hash of itself, to make
+        the output pubkey commit to an unspendable script path, as recommended
+        by BIP341 (see note 22 in BIP341).
+
+        Raises CCoinAddressError if pubkey is invalid
+        """
+        ensure_isinstance(pubkey, (XOnlyPubKey, bytes, bytearray), 'pubkey')
+
+        if not isinstance(pubkey, XOnlyPubKey):
+            pubkey = XOnlyPubKey(pubkey)
+
+        if not pubkey.is_fullyvalid():
+            raise P2TRCoinAddressError('invalid pubkey')
+
+        tt_res = tap_tweak_pubkey(pubkey)
+
+        if not tt_res:
+            raise ValueError('cannot create tap tweak from supplied pubkey')
+
+        out_pub, _ = tt_res
+
+        return cls.from_xonly_output_pubkey(out_pub)
+
+    @classmethod
+    def from_output_pubkey(cls: Type[T_P2TRCoinAddress],
+                           pubkey: Union[CPubKey, bytes, bytearray],
+                           *,
+                           accept_invalid: bool = False) -> T_P2TRCoinAddress:
+        """Create a P2TR address from a pubkey that is already tweaked,
+        the "output pubkey" in the terms of BIP341
+
+        Raises CCoinAddressError if pubkey is invalid, unless accept_invalid
+        is True.
+        """
+        ensure_isinstance(pubkey, (XOnlyPubKey, CPubKey, bytes, bytearray),
+                          'pubkey')
+
+        if len(pubkey) == 32:
+            if not isinstance(pubkey, CPubKey):  # might be invalid CPubKey
+                return cls.from_xonly_output_pubkey(
+                    pubkey, accept_invalid=accept_invalid)
+
+        if not accept_invalid:
+            if not isinstance(pubkey, CPubKey):
+                pubkey = CPubKey(pubkey)
+            if not pubkey.is_fullyvalid():
+                raise P2TRCoinAddressError('invalid pubkey')
+            if not pubkey.is_compressed():
+                raise P2TRCoinAddressError(
+                    'Uncompressed pubkeys are not allowed')
+
+        return cls.from_xonly_output_pubkey(XOnlyPubKey(pubkey),
+                                            accept_invalid=accept_invalid)
+
+    @classmethod
+    def from_pubkey(cls: Type[T_P2TRCoinAddress],
+                    pubkey: Union[XOnlyPubKey, CPubKey, bytes, bytearray],
+                    ) -> T_P2TRCoinAddress:
+        """Create a P2TR address from "internal" pubkey (in BIP341 terms)
+
+        Raises CCoinAddressError if pubkey is invalid
+        """
+        ensure_isinstance(pubkey, (XOnlyPubKey, CPubKey, bytes, bytearray),
+                          'pubkey')
+
+        if not isinstance(pubkey, CPubKey):
+
+            if len(pubkey) == 32:
+                return cls.from_xonly_pubkey(pubkey)
+
+            pubkey = CPubKey(pubkey)
+
+        if not pubkey.is_fullyvalid():
+            raise P2TRCoinAddressError('invalid pubkey')
+
+        if not pubkey.is_compressed():
+            raise P2TRCoinAddressError(
+                'Uncompressed pubkeys are not allowed')
+
+        return cls.from_xonly_pubkey(XOnlyPubKey(pubkey))
+
+    @classmethod
+    def from_script_tree(cls: Type[T_P2TRCoinAddress],
+                         stree: TaprootScriptTree) -> T_P2TRCoinAddress:
+        """Create a P2TR address from TaprootScriptTree instance
+        """
+        if not stree.internal_pubkey:
+            raise ValueError(
+                f'The supplied instance of {stree.__class__.__name__} '
+                f'does not have internal_pubkey')
+        assert stree.output_pubkey is not None
+        return cls.from_xonly_output_pubkey(stree.output_pubkey)
+
+    @classmethod
     def from_scriptPubKey(cls: Type[T_P2TRCoinAddress],
                           scriptPubKey: CScript) -> T_P2TRCoinAddress:
         """Convert a scriptPubKey to a P2TR address
@@ -705,6 +829,26 @@ class CCoinKey(CBase58DataDispatched, CKeyBase,
         if not self.is_compressed():
             return self
         return self.__class__.from_secret_bytes(self[:32], False)
+
+    def sign_schnorr_tweaked(
+        self, hash: Union[bytes, bytearray],
+        *,
+        merkle_root: bytes = b'',
+        aux: Optional[bytes] = None
+    ) -> bytes:
+        """Schnorr-sign with the key that is tweaked before signing.
+
+        When merkle_root is empty bytes, the tweak will be generated
+        as a tagged hash of the x-only pubkey that corresponds to this
+        private key. Supplying empty-bytes merkle_root (the default) is
+        mostly useful when signing keypath spends when there is no script path.
+
+        When merkle_root is 32 bytes, it will be directly used as a tweak.
+        This is mostly useful when signing keypath spends when there is also
+        a script path present
+        """
+        return self._sign_schnorr_internal(
+            hash, merkle_root=merkle_root, aux=aux)
 
 
 class CBitcoinKey(CCoinKey, WalletBitcoinClass):
