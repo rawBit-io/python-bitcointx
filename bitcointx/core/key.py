@@ -655,10 +655,15 @@ class CExtKeyCommonBase:
             raise ValueError('Invalid length for extended key')
 
     def _check_depth(self) -> None:
-        if self.depth == 0 and self.parent_fp != b'\x00\x00\x00\x00':
-            raise ValueError(
-                'Derivation depth of the key is 0, the fingerprint '
-                'must be 0x00000000, but it is not ().')
+        if self.depth == 0:
+            if self.parent_fp != b'\x00\x00\x00\x00':
+                raise ValueError(
+                    'Derivation depth of the key is 0, the fingerprint '
+                    'must be 0x00000000, but it is not')
+            if self.child_number != 0:
+                raise ValueError(
+                    'Derivation depth of the key is 0, the child_number '
+                    'must be 0, but it is not')
 
     @property
     @abstractmethod
