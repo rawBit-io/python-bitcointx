@@ -202,7 +202,6 @@ class Test_CBitcoinExtKey(unittest.TestCase):
 
     def test_standard_bip32_vector_invalidxkeys(self) -> None:
         for xkey_str, descr, extype in BIP32_TEST_VECTOR_INVALIDXKEYS:
-            print(descr)
             with self.assertRaises(extype):
                 CBitcoinExtKey(xkey_str)
 
