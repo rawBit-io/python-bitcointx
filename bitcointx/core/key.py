@@ -66,7 +66,7 @@ class KeyDerivationFailException(RuntimeError):
 
 # Thx to Sam Devlin for the ctypes magic 64-bit fix (FIXME: should this
 # be applied to every OpenSSL call whose return type is a pointer?)
-def _check_res_openssl_void_p(val, func, args): # type: ignore
+def _check_res_openssl_void_p(val, func, args):  # type: ignore
     if val == 0:
         _ssl = _openssl_library_handle
         assert _ssl is not None
@@ -127,7 +127,7 @@ def load_openssl_library(path: Optional[str] = None) -> Optional[ctypes.CDLL]:
     handle.i2d_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 
     # this specifies the curve used with ECDSA.
-    _NIDsecp256k1 = 714 # from openssl/obj_mac.h
+    _NIDsecp256k1 = 714  # from openssl/obj_mac.h
 
     # test that OpenSSL supports secp256k1
     handle.EC_KEY_new_by_curve_name(_NIDsecp256k1)
@@ -253,7 +253,7 @@ class CKeyBase:
         # conversion needed.
         return mb_sig.raw[:sig_size0.value]
 
-    def sign_compact(self, hash: Union[bytes, bytearray]) -> Tuple[bytes, int]: # pylint: disable=redefined-builtin
+    def sign_compact(self, hash: Union[bytes, bytearray]) -> Tuple[bytes, int]:  # pylint: disable=redefined-builtin
         ensure_isinstance(hash, (bytes, bytearray), 'hash')
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
@@ -751,11 +751,11 @@ class CExtKeyCommonBase:
 
         if derivation_info:
             if len(derivation_info.path) != self.depth:
-                    raise ValueError(
-                        f'the length of derivation path specified in '
-                        f'derivation_info ({len(derivation_info.path)}) '
-                        f'is not the same as the depth specified in this '
-                        f'extended key ({self.depth})')
+                raise ValueError(
+                    f'the length of derivation path specified in '
+                    f'derivation_info ({len(derivation_info.path)}) '
+                    f'is not the same as the depth specified in this '
+                    f'extended key ({self.depth})')
 
             if self.depth == 1 and \
                     self.parent_fp != derivation_info.master_fp:

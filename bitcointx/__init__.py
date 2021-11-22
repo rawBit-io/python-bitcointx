@@ -32,7 +32,7 @@ __version__ = '1.1.3.dev0'
 
 # initialized at the end of the module, because it
 # references BitcoinMainnetParams, which is not yet defined here.
-_chain_params_context:  'ChainParamsContextVar'
+_chain_params_context: 'ChainParamsContextVar'
 
 
 T_ChainParamsMeta = TypeVar('T_ChainParamsMeta', bound='ChainParamsMeta')

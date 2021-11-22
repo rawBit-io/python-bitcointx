@@ -152,13 +152,13 @@ class CScriptOp(int):
     def encode_op_pushdata(d: Union[bytes, bytearray]) -> bytes:
         """Encode a PUSHDATA op, returning bytes"""
         if len(d) < 0x4c:
-            return b'' + bytes([len(d)]) + d # OP_PUSHDATA
+            return b'' + bytes([len(d)]) + d  # OP_PUSHDATA
         elif len(d) <= 0xff:
-            return b'\x4c' + bytes([len(d)]) + d # OP_PUSHDATA1
+            return b'\x4c' + bytes([len(d)]) + d  # OP_PUSHDATA1
         elif len(d) <= 0xffff:
-            return b'\x4d' + struct.pack(b'<H', len(d)) + d # OP_PUSHDATA2
+            return b'\x4d' + struct.pack(b'<H', len(d)) + d  # OP_PUSHDATA2
         elif len(d) <= 0xffffffff:
-            return b'\x4e' + struct.pack(b'<I', len(d)) + d # OP_PUSHDATA4
+            return b'\x4e' + struct.pack(b'<I', len(d)) + d  # OP_PUSHDATA4
         else:
             raise ValueError("Data too long to encode in a PUSHDATA op")
 
@@ -784,7 +784,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                     i += 4
 
                 else:
-                    assert False # shouldn't happen
+                    assert False  # shouldn't happen
 
                 data = bytes(self[i:i+datasize])
 
@@ -981,7 +981,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                     # Could have used a OP_PUSHDATA2.
                     return False
 
-        except CScriptInvalidError: # Invalid pushdata
+        except CScriptInvalidError:  # Invalid pushdata
             return False
         return True
 
@@ -1186,10 +1186,10 @@ def IsLowDERSignature(sig: bytes) -> bool:
     # complement modulo the order could have been used instead, which is
     # one byte shorter when encoded correctly.
     max_mod_half_order = [
-        0x7f,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-        0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-        0x5d,0x57,0x6e,0x73,0x57,0xa4,0x50,0x1d,
-        0xdf,0xe9,0x2f,0x46,0x68,0x1b,0x20,0xa0]
+        0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0x5d, 0x57, 0x6e, 0x73, 0x57, 0xa4, 0x50, 0x1d,
+        0xdf, 0xe9, 0x2f, 0x46, 0x68, 0x1b, 0x20, 0xa0]
 
     return CompareBigEndian(s_val, [0]) > 0 and \
         CompareBigEndian(s_val, max_mod_half_order) <= 0
@@ -1442,8 +1442,8 @@ def parse_standard_multisig_redeem_script(script: CScript
     try:
         last_op = next(si)
     except StopIteration:
-            raise ValueError('script is too short, ended before we could get '
-                             'the last opcode')
+        raise ValueError('script is too short, ended before we could get '
+                         'the last opcode')
 
     if last_op != OP_CHECKMULTISIG:
         raise ValueError('script is not a p2sh script, last opcode '
@@ -1602,12 +1602,13 @@ class ComplexScriptSignatureHelper:
         """Collect a signature for the pubkey.
         return True if there is enough signatures to satisfy the script."""
 
-    def sign(self, signer: Callable[['bitcointx.core.key.CPubKey'],
-                                    Optional[bytes]],
-             partial_sigs: Optional[
-                 Dict['bitcointx.core.key.CPubKey', bytes]
-             ] = None
-             ) -> Tuple[Dict['bitcointx.core.key.CPubKey', bytes], bool]:
+    def sign(
+        self, signer: Callable[['bitcointx.core.key.CPubKey'],
+                               Optional[bytes]],
+        partial_sigs: Optional[
+            Dict['bitcointx.core.key.CPubKey', bytes]
+        ] = None
+    ) -> Tuple[Dict['bitcointx.core.key.CPubKey', bytes], bool]:
         """Create signatures for the pubkeys involved in spending conditions
         of the script, bu using provided `signer` callback. This callback
         should have access to all the information required to produce the

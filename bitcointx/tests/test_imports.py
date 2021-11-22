@@ -11,19 +11,19 @@
 
 import unittest
 
-from bitcointx.core import *
-from bitcointx.core.key import *
-from bitcointx.core.script import *
-from bitcointx.core.scripteval import *
-from bitcointx.core.serialize import *
-from bitcointx.core.secp256k1 import *
-from bitcointx.core.sha256 import *
-from bitcointx import *
-from bitcointx.base58 import *
-from bitcointx.bech32 import *
-from bitcointx.rpc import *
-from bitcointx.wallet import *
-from bitcointx.util import *
+from bitcointx.core import *  # noqa
+from bitcointx.core.key import *  # noqa
+from bitcointx.core.script import *  # noqa
+from bitcointx.core.scripteval import *  # noqa
+from bitcointx.core.serialize import *  # noqa
+from bitcointx.core.secp256k1 import *  # noqa
+from bitcointx.core.sha256 import *  # noqa
+from bitcointx import *  # noqa
+from bitcointx.base58 import *  # noqa
+from bitcointx.bech32 import *  # noqa
+from bitcointx.rpc import *  # noqa
+from bitcointx.wallet import *  # noqa
+from bitcointx.util import *  # noqa
 
 
 class Test_Imports(unittest.TestCase):

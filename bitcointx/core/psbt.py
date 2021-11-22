@@ -762,7 +762,7 @@ class PSBT_Input(PSBT_CoinClass, next_dispatch_final=True):
                     self._witness_utxo = other.witness_utxo.to_immutable()
             else:
                 assert isinstance(self.utxo, CTransaction) or \
-                        isinstance(other.utxo, CTxOut)
+                    isinstance(other.utxo, CTxOut)
         else:
             raise AssertionError(
                 'should not happen, all variants of witness/nonwitness utxo '
@@ -1810,7 +1810,7 @@ class PartiallySignedTransaction(PSBT_CoinClass, next_dispatch_final=True):
         for xpub, derinfo in xpubs.items():
             ensure_isinstance(xpub, CCoinExtPubKey, 'one of xpubs')
             ensure_isinstance(derinfo, PSBT_KeyDerivationInfo,
-                              f'derivation info for one of xpubs')
+                              'derivation info for one of xpubs')
         self.xpubs = xpubs
 
         if proprietary_fields is None:

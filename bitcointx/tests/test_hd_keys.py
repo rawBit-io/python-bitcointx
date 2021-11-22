@@ -199,11 +199,11 @@ class Test_CBitcoinExtKey(unittest.TestCase):
             key_from_path = base_key.derive_path(str(BIP32Path(path)))
             self.assertEqual(key, key_from_path)
 
-
     def test_standard_bip32_vector_invalidxkeys(self) -> None:
         for xkey_str, descr, extype in BIP32_TEST_VECTOR_INVALIDXKEYS:
             with self.assertRaises(extype):
                 CBitcoinExtKey(xkey_str)
+
 
 class Test_CBitcoinExtPubKey(unittest.TestCase):
     def test(self) -> None:

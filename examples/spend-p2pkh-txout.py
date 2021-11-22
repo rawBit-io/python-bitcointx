@@ -57,9 +57,8 @@ txin_scriptPubKey = \
 # Create the txout. This time we create the scriptPubKey from a Bitcoin
 # address.
 txout = CMutableTxOut(coins_to_satoshi(0.001),
-                      CBitcoinAddress(
-                          '1C7zdTfnkzmr13HfA2vNm5SJYRK6nEKyq8'
-                      ).to_scriptPubKey())
+                      CBitcoinAddress('1C7zdTfnkzmr13HfA2vNm5SJYRK6nEKyq8'
+                                      ).to_scriptPubKey())
 
 # Create the unsigned transaction.
 tx = CMutableTransaction([txin], [txout])

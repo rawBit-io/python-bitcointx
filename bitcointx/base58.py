@@ -195,11 +195,11 @@ class CBase58Data(bytes):
 
 
 __all__ = (
-        'B58_DIGITS',
-        'Base58Error',
-        'InvalidBase58Error',
-        'encode',
-        'decode',
-        'Base58ChecksumError',
-        'CBase58Data',
+    'B58_DIGITS',
+    'Base58Error',
+    'InvalidBase58Error',
+    'encode',
+    'decode',
+    'Base58ChecksumError',
+    'CBase58Data',
 )

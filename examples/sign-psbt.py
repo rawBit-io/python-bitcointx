@@ -114,7 +114,7 @@ if __name__ == '__main__':
             if info:
                 print(f"Input {index}: added {info.num_new_sigs} sigs, ",
                       end='')
-                print(f"input is now final"
+                print("input is now final"
                       if info.is_final
                       else f"{info.num_sigs_missing} is still missing")
             else:
@@ -123,7 +123,7 @@ if __name__ == '__main__':
     print()
     if args.finalize:
         if not sign_result.is_final:
-            print(f'Failed to finalize transaction')
+            print('Failed to finalize transaction')
             sys.exit(-1)
 
         print("Signed network transaction:\n")
