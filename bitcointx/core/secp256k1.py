@@ -173,7 +173,7 @@ def _add_function_definitions(_secp256k1: ctypes.CDLL) -> None:
     if getattr(_secp256k1, 'secp256k1_ecdh', None):
         secp256k1_has_ecdh = True
         _secp256k1.secp256k1_ecdh.restype = ctypes.c_int
-        _secp256k1.secp256k1_ecdh.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
+        _secp256k1.secp256k1_ecdh.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p]
 
 
 class _secp256k1_context:

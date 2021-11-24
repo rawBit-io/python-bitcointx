@@ -58,6 +58,15 @@ class Test_CKey(unittest.TestCase):
         k = CKey(data, compressed=False)
         self.assertEqual(k.pub, expected_uncompressed_pub)
 
+    def test_ECDH(self) -> None:
+        sk1 = CKey(x('5586e3531b857c5a3d7af6d512ec84161f4531b66daf2ad72a6f647e4164c8ae'))
+        sk2 = CKey(x('9e77dd4f6693461578e32e60e9c095023e1fc98ae3eaf0c53f645d53a5ead91e'))
+        pk1 = sk1.pub
+        pk2 = sk2.pub
+        shared1 = sk1.ECDH(pk2)
+        shared2 = sk2.ECDH(pk1)
+        self.assertEqual(shared1, shared2)
+
     def test_add_sub(self) -> None:
         k1 = CKey(x('5586e3531b857c5a3d7af6d512ec84161f4531b66daf2ad72a6f647e4164c8ae'))
         k2 = CKey(x('9e77dd4f6693461578e32e60e9c095023e1fc98ae3eaf0c53f645d53a5ead91e'))
