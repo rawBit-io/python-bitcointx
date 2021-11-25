@@ -279,8 +279,7 @@ class ClassMappingDispatcher(ABCMeta):
                 bases: Tuple[type, ...], namespace: Dict[str, Any],
                 next_dispatch_final: bool = False,
                 variant_of: Optional[type] = None) -> T_ClassMappingDispatcher:
-        return cast(T_ClassMappingDispatcher,
-                    super().__new__(mcs, name, bases, namespace))
+        return super().__new__(mcs, name, bases, namespace)
 
     def __init__(cls: 'ClassMappingDispatcher', name: str,
                  bases: Tuple[type, ...], namespace: Dict[str, Any],
