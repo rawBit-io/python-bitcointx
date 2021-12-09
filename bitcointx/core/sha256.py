@@ -13,9 +13,13 @@
 # Original C++ code was Copyright (c) 2014-2017 The Bitcoin Core developers
 # Original C++ code was licensed under MIT software license.
 
-# This is needed for midstate SHA256, that is not available
-# from hashlib.sha256. Runtime performance will be slow,
-# but oftentimes this is acceptable.
+"""
+This is needed for midstate SHA256, that is not available
+from hashlib.sha256. Runtime performance will be slow, but oftentimes this
+is acceptable. IMPORTANT: code is not constant-time! This should NOT be used
+for working with # secret data, such as, for example  building a MAC (message
+authentication code), etc.
+"""
 
 # pylama:ignore=E501
 
@@ -68,6 +72,15 @@ T_CSHA256 = TypeVar('T_CSHA256', bound='CSHA256')
 
 
 class CSHA256():
+    """
+    This class provides access to SHA256 routines, with access to
+    SHA256 midstate (which is not available from hashlib.sha256)
+
+    The code is not constant-time! This should NOT be used for working with
+    secret data, such as, for example  building a MAC (message authentication
+    code), etc.
+    """
+
     __slots__ = ['s', 'buf', 'bytes_count']
 
     buf: bytes

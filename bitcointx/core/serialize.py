@@ -23,6 +23,7 @@ from typing import (
     List, Tuple, Sequence, Union, TypeVar, Type, Generic, Any, Optional, cast
 )
 from ..util import ensure_isinstance
+from ._ripemd160 import ripemd160
 
 from io import BytesIO
 
@@ -48,9 +49,7 @@ def Hash(msg: Union[bytes, bytearray]) -> bytes:
 
 def Hash160(msg: Union[bytes, bytearray]) -> bytes:
     """RIPEME160(SHA256(msg)) -> bytes"""
-    h = hashlib.new('ripemd160')
-    h.update(hashlib.sha256(msg).digest())
-    return h.digest()
+    return ripemd160(hashlib.sha256(msg).digest())
 
 
 class SerializationError(Exception):

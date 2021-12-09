@@ -28,6 +28,7 @@ import bitcointx.core
 import bitcointx.core._bignum
 import bitcointx.core.key
 import bitcointx.core.serialize
+import bitcointx.core._ripemd160
 
 from bitcointx.util import ensure_isinstance
 
@@ -1012,10 +1013,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
 
             elif sop == OP_RIPEMD160:
                 check_args(1)
-
-                h = hashlib.new('ripemd160')
-                h.update(stack.pop())
-                stack.append(h.digest())
+                stack.append(bitcointx.core._ripemd160.ripemd160(stack.pop()))
 
             elif sop == OP_ROT:
                 check_args(3)
