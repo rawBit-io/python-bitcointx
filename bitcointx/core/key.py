@@ -867,7 +867,7 @@ class CExtKeyBase(CExtKeyCommonBase):
         child_privkey = ctypes.create_string_buffer(self.priv.secret_bytes, size=32)
 
         result = _secp256k1.secp256k1_ec_privkey_tweak_add(
-            secp256k1_context_sign, child_privkey, bip32_hash)
+            secp256k1_context_sign, child_privkey, bip32_hash[:32])
 
         if result != 1:
             assert result == 0
@@ -940,7 +940,7 @@ class CExtPubKeyBase(CExtKeyCommonBase):
         raw_pub = self.pub._to_ctypes_char_array()
 
         result = _secp256k1.secp256k1_ec_pubkey_tweak_add(
-            secp256k1_context_verify, raw_pub, bip32_hash)
+            secp256k1_context_verify, raw_pub, bip32_hash[:32])
 
         if result != 1:
             assert result == 0
