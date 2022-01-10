@@ -145,7 +145,8 @@ def dispatcher_mapped_list(cls: T_ClassMappingDispatcher,
 class DispatcherMethodWrapper():
     """A helper class that allows to wrap both classmethods and staticmethods,
     in addition to normal instance methods"""
-    def __init__(self, method: Union[FunctionType, classmethod, staticmethod,
+    def __init__(self, method: Union[FunctionType,
+                                     'classmethod[Any]', 'staticmethod[Any]',
                                      'DispatcherMethodWrapper'],
                  wrapper: Callable[[Callable[..., Any], type],
                                    Callable[..., Any]]) -> None:

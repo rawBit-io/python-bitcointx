@@ -32,7 +32,7 @@ import os
 import urllib.parse
 from typing import (
     Type, Dict, Tuple, Optional, Union, Any, Callable, Iterable,
-    TYPE_CHECKING, cast
+    TYPE_CHECKING
 )
 
 import bitcointx
@@ -119,7 +119,7 @@ class JSONRPCError(Exception):
 
         self.error = rpc_error
 
-        return cast('JSONRPCError', self)
+        return self
 
 
 @JSONRPCError._register_subcls
