@@ -27,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: |
         if [ "$RUNNER_OS" == "macOS" ]; then
-          brew install automake
+          brew install automake openssl@1.1
         fi
         sh -c 'git clone https://github.com/bitcoin/secp256k1.git /tmp/libsecp256k1 && cd /tmp/libsecp256k1 && git checkout $(grep -A1 '!LIBSECP256K1_COMMIT_MARKER_DO_NOT_MOVE_OR_EDIT!' README.md |tail -n 1|sed -E 's/`([a-f0-9][a-f0-9]*)`/\1/g') && ./autogen.sh && ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests --enable-module-recovery --enable-module-ecdh --enable-experimental --enable-module-schnorrsig && make && sudo make install'
         sh -c 'git clone https://github.com/bitcoin/bitcoin.git /tmp/bitcoin && cd /tmp/bitcoin && git checkout v0.20.1 && ./autogen.sh && ./configure --without-qtdbus --without-qrencode --without-miniupnpc --disable-tests --disable-wallet --disable-zmq --with-libs --disable-util-cli --disable-util-tx --disable-util-wallet --disable-bench --without-daemon --without-gui --disable-fuzz --disable-ccache --disable-static --with-system-libsecp256k1 && make && sudo make install'
@@ -40,6 +40,6 @@ jobs:
       run: ./run_mypy.sh
     - name: Test with pytest
       env:
-        LD_LIBRARY_PATH: /usr/local/lib
         PYTHON_BITCOINTX_ALLOW_LIBSECP256K1_EXPERIMENTAL_MODULES_USE: 1
-      run: pytest
+        LD_LIBRARY_PATH: /usr/local/lib
+      run: DYLD_LIBRARY_PATH=/usr/local/lib:/usr/local/opt/openssl@1.1/lib pytest
