@@ -158,7 +158,7 @@ class Test_EvalScript(unittest.TestCase):
             warnings.warn(
                 "libbitcoinconsensus library is not avaliable, "
                 "not testing bitcoinconsensus module and taproot scripts")
-            handle = None  # type: ignore
+            handle = None
 
         self._bitcoinconsensus_handle = handle
 
