@@ -444,11 +444,17 @@ class Test_CBitcoinAddress(unittest.TestCase):
                     else:
                         cls.from_pubkey(inv_pub)
 
+            if bitcointx.util._allow_secp256k1_experimental_modules:
+                with self.assertRaises(CBitcoinAddressError):
+                    P2TRCoinAddress.from_pubkey(inv_pub)
+
         if bitcointx.util._allow_secp256k1_experimental_modules:
             for inv_pub in (x(''), inv_pub_bytes[1:],
                             XOnlyPubKey(inv_pub_bytes[1:])):
                 with self.assertRaises(CBitcoinAddressError):
                     P2TRCoinAddress.from_xonly_output_pubkey(inv_pub)
+                with self.assertRaises(CBitcoinAddressError):
+                    P2TRCoinAddress.from_xonly_pubkey(inv_pub)
 
 
 class Test_P2PKHBitcoinAddress(unittest.TestCase):
