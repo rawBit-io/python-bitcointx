@@ -208,6 +208,10 @@ class P2WSHCoinAddressError(CBech32AddressError):
     """Raised when an invalid PW2SH address is encountered"""
 
 
+class P2TRCoinAddressError(CBech32AddressError):
+    """Raised when an invalid PW2SH address is encountered"""
+
+
 class P2WPKHCoinAddressError(CBech32AddressError):
     """Raised when an invalid PW2PKH address is encountered"""
 
@@ -326,6 +330,7 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
     @classmethod
     def from_pubkey(cls: Type[T_P2PKHCoinAddress],
                     pubkey: Union[CPubKey, bytes, bytearray],
+                    *,
                     accept_invalid: bool = False,
                     accept_uncompressed: bool = False) -> T_P2PKHCoinAddress:
         """Create a P2PKH address from a pubkey
@@ -428,6 +433,7 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     @classmethod
     def from_pubkey(cls: Type[T_P2WPKHCoinAddress],
                     pubkey: Union[CPubKey, bytes, bytearray],
+                    *,
                     accept_invalid: bool = False) -> T_P2WPKHCoinAddress:
         """Create a P2WPKH address from a pubkey
 
@@ -474,6 +480,38 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
     def from_redeemScript(cls: Type[T_P2WPKHCoinAddress],
                           redeemScript: CScript) -> T_P2WPKHCoinAddress:
         raise NotImplementedError
+
+
+T_P2TRCoinAddress = TypeVar('T_P2TRCoinAddress', bound='P2TRCoinAddress')
+
+
+class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
+    _data_length = 32
+    bech32_witness_version = 1
+    _scriptpubkey_type = 'witness_v1_taproot'
+
+    @classmethod
+    def from_scriptPubKey(cls: Type[T_P2TRCoinAddress],
+                          scriptPubKey: CScript) -> T_P2TRCoinAddress:
+        """Convert a scriptPubKey to a P2TR address
+
+        Raises CCoinAddressError if the scriptPubKey isn't of the correct
+        form.
+        """
+        if scriptPubKey.is_witness_v1_taproot():
+            return cls.from_bytes(scriptPubKey[2:34])
+        else:
+            raise P2TRCoinAddressError('not a P2TR scriptPubKey')
+
+    def to_scriptPubKey(self) -> CScript:
+        """Convert an address to a scriptPubKey"""
+        return CScript([1, self])
+
+    # Return type deliberately incompatible with CCoinAddress,
+    # because this operation is not defined for p2tr address
+    def to_redeemScript(self) -> None:  # type: ignore
+        raise NotImplementedError(
+            "not enough data in p2tr address to reconstruct redeem script")
 
 
 class CBitcoinAddress(CCoinAddress, WalletBitcoinClass):
@@ -573,6 +611,10 @@ class P2WPKHBitcoinAddress(P2WPKHCoinAddress, CBech32BitcoinAddress):
     ...
 
 
+class P2TRBitcoinAddress(P2TRCoinAddress, CBech32BitcoinAddress):
+    ...
+
+
 class P2WSHBitcoinTestnetAddress(P2WSHCoinAddress,
                                  CBech32BitcoinTestnetAddress):
     ...
@@ -580,6 +622,11 @@ class P2WSHBitcoinTestnetAddress(P2WSHCoinAddress,
 
 class P2WPKHBitcoinTestnetAddress(P2WPKHCoinAddress,
                                   CBech32BitcoinTestnetAddress):
+    ...
+
+
+class P2TRBitcoinTestnetAddress(P2TRCoinAddress,
+                                CBech32BitcoinTestnetAddress):
     ...
 
 
@@ -593,6 +640,11 @@ class P2WPKHBitcoinRegtestAddress(P2WPKHCoinAddress,
     ...
 
 
+class P2TRBitcoinRegtestAddress(P2TRCoinAddress,
+                                CBech32BitcoinRegtestAddress):
+    ...
+
+
 class P2WSHBitcoinSignetAddress(P2WSHCoinAddress,
                                 CBech32BitcoinSignetAddress):
     ...
@@ -600,6 +652,11 @@ class P2WSHBitcoinSignetAddress(P2WSHCoinAddress,
 
 class P2WPKHBitcoinSignetAddress(P2WPKHCoinAddress,
                                  CBech32BitcoinSignetAddress):
+    ...
+
+
+class P2TRBitcoinSignetAddress(P2TRCoinAddress,
+                               CBech32BitcoinSignetAddress):
     ...
 
 
@@ -755,6 +812,7 @@ __all__ = (
     'P2PKHCoinAddressError',
     'P2WSHCoinAddressError',
     'P2WPKHCoinAddressError',
+    'P2TRCoinAddressError',
     'CCoinAddress',
     'CBitcoinAddress',
     'CBitcoinTestnetAddress',
@@ -764,16 +822,29 @@ __all__ = (
     'P2PKHCoinAddress',
     'P2WSHCoinAddress',
     'P2WPKHCoinAddress',
+    'P2TRCoinAddress',
     'P2SHBitcoinAddress',
     'P2PKHBitcoinAddress',
     'P2WSHBitcoinAddress',
     'P2WPKHBitcoinAddress',
+    'P2TRBitcoinAddress',
     'CBase58BitcoinTestnetAddress',
     'CBech32BitcoinTestnetAddress',
     'P2SHBitcoinTestnetAddress',
     'P2PKHBitcoinTestnetAddress',
     'P2WSHBitcoinTestnetAddress',
     'P2WPKHBitcoinTestnetAddress',
+    'P2TRBitcoinTestnetAddress',
+    'P2SHBitcoinRegtestAddress',
+    'P2PKHBitcoinRegtestAddress',
+    'P2WSHBitcoinRegtestAddress',
+    'P2WPKHBitcoinRegtestAddress',
+    'P2TRBitcoinRegtestAddress',
+    'P2SHBitcoinSignetAddress',
+    'P2PKHBitcoinSignetAddress',
+    'P2WSHBitcoinSignetAddress',
+    'P2WPKHBitcoinSignetAddress',
+    'P2TRBitcoinSignetAddress',
     'CCoinKey',
     'CCoinExtKey',
     'CCoinExtPubKey',

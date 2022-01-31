@@ -95,7 +95,14 @@ class Test_CBech32Data(unittest.TestCase):
 
     def test_invalid_bech32_exception(self) -> None:
 
-        for invalid, _ in load_test_vectors("bech32_invalid.json"):
+        for testdata in load_test_vectors("bech32_invalid.json"):
+            assert len(testdata) in (2, 3)
+            if len(testdata) == 3:
+                assert isinstance(testdata[0], int)
+                invalid = chr(testdata[0]) + testdata[1]
+            elif len(testdata) == 2:
+                invalid = testdata[0]
+
             msg = '%r should have raised Bech32Error but did not' % invalid
             with self.assertRaises(Bech32Error, msg=msg):
                 MockBech32Data(invalid)

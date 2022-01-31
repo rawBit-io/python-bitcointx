@@ -932,6 +932,11 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         return len(self) == 34 and self[0:2] == b'\x00\x20'
 
     @no_bool_use_as_property
+    def is_witness_v1_taproot(self) -> bool:
+        """Returns true if this is a scriptpubkey for V1 P2TR. """
+        return len(self) == 34 and self[0:2] == b'\x51\x20'
+
+    @no_bool_use_as_property
     def is_witness_v0_nested_scripthash(self) -> bool:
         """Returns true if this is a scriptSig for V0 P2WSH embedded in P2SH. """
         return len(self) == 35 and self[0:3] == b'\x22\x00\x20'
