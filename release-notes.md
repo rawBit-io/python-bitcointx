@@ -4,7 +4,7 @@
 Fixed base58 and bech32 prefixes for signet addresses and keys (they had values based on some early
 signet branch of Bitcoin Core, and they were changed afterwards, now they are the same as for testnet)
 
-...
+Added support for P2TR addresses (bech32m encoding, segwit v1)
 
 ## v1.1.2
 
