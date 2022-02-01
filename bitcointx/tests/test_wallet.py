@@ -84,14 +84,15 @@ def _test_address_implementations(
                             xa = aclass.from_xonly_pubkey(XOnlyPubKey(pub))
                             a = aclass.from_pubkey(pub)
                             test.assertEqual(a, xa)
+                            xoa = aclass.from_xonly_output_pubkey(XOnlyPubKey(pub))
+                            a_from_spk = aclass.from_scriptPubKey(
+                                CScript(b'\x51\x20' + pub[1:]))
+                            test.assertEqual(a_from_spk, xoa)
                     elif getattr(aclass, 'from_pubkey', None):
                         a = aclass.from_pubkey(pub)
                     elif getattr(aclass, 'from_redeemScript', None):
                         a = aclass.from_redeemScript(
                             CScript(b'\xa9' + Hash160(pub) + b'\x87'))
-                    elif issubclass(aclass, P2TRCoinAddress):
-                        a = aclass.from_scriptPubKey(
-                            CScript(b'\x51\x20' + pub[1:]))
                     else:
                         assert len(dispatcher_mapped_list(aclass)) > 0,\
                             ("dispatcher mapped list for {} "
