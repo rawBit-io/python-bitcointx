@@ -509,7 +509,10 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
 
         if not accept_invalid:
             if not isinstance(pubkey, XOnlyPubKey):
-                pubkey = XOnlyPubKey(pubkey)
+                try:
+                    pubkey = XOnlyPubKey(pubkey)
+                except ValueError as e:
+                    raise P2TRCoinAddressError(f'problem with pubkey: {e}')
             if not pubkey.is_fullyvalid():
                 raise P2TRCoinAddressError('invalid x-only pubkey')
 
@@ -538,7 +541,7 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
         tt_res = tap_tweak_pubkey(pubkey)
 
         if not tt_res:
-            raise ValueError('cannot create tap tweak from supplied pubkey')
+            raise P2TRCoinAddressError('cannot create tap tweak from supplied pubkey')
 
         out_pub, _ = tt_res
 
@@ -608,7 +611,7 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
         """Create a P2TR address from TaprootScriptTree instance
         """
         if not stree.internal_pubkey:
-            raise ValueError(
+            raise P2TRCoinAddressError(
                 f'The supplied instance of {stree.__class__.__name__} '
                 f'does not have internal_pubkey')
         assert stree.output_pubkey is not None
@@ -621,6 +624,9 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
 
         Raises CCoinAddressError if the scriptPubKey isn't of the correct
         form.
+
+        Note that there is no check if the x-only pubkey included in the
+        scriptPubKey is a valid pubkey
         """
         if scriptPubKey.is_witness_v1_taproot():
             return cls.from_bytes(scriptPubKey[2:34])

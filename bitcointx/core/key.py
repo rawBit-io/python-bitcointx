@@ -767,9 +767,12 @@ class CPubKey(bytes):
         if len(pubkeys) <= 1:
             raise ValueError(
                 'number of pubkeys to combine must be more than one')
-        if not all(isinstance(p, CPubKey) for p in pubkeys):
-            raise ValueError(
-                'each supplied pubkey must be an instance of CPubKey')
+        for p in pubkeys:
+            if not isinstance(p, CPubKey):
+                raise ValueError(
+                    'each supplied pubkey must be an instance of CPubKey')
+            if not p.is_fullyvalid():
+                raise ValueError('each supplied pubkey must be valid')
 
         pubkey_arr = (ctypes.c_char_p*len(pubkeys))()
         for i, p in enumerate(pubkeys):
@@ -789,6 +792,10 @@ class CPubKey(bytes):
             raise RuntimeError(
                 'secp256k1 does not export pubkey negation function. '
                 'You should use newer version of secp256k1 library')
+
+        if not self.is_fullyvalid():
+            raise ValueError('cannot negate an invalid pubkey')
+
         pubkey_buf = self._to_ctypes_char_array()
         ret = _secp256k1.secp256k1_ec_pubkey_negate(secp256k1_context_verify, pubkey_buf)
         if 1 != ret:
@@ -2138,6 +2145,9 @@ class XOnlyPubKey(bytes):
         if not sigbytes:
             return False
 
+        if not self.is_fullyvalid():
+            return False
+
         if len(sigbytes) != 64:
             raise ValueError('Signature must be exactly 64 bytes long')
 
@@ -2189,6 +2199,12 @@ def check_tap_tweak(tweaked_pub: XOnlyPubKey, internal_pub: XOnlyPubKey,
                     merkle_root: bytes = b'',
                     parity: bool) -> bool:
 
+    if not tweaked_pub.is_fullyvalid():
+        raise ValueError('supplied tweaked_pub must be valid')
+
+    if not internal_pub.is_fullyvalid():
+        raise ValueError('supplied internal_pub must be valid')
+
     tweak = compute_tap_tweak_hash(internal_pub, merkle_root=merkle_root)
 
     result = _secp256k1.secp256k1_xonly_pubkey_tweak_add_check(
@@ -2208,6 +2224,9 @@ def check_tap_tweak(tweaked_pub: XOnlyPubKey, internal_pub: XOnlyPubKey,
 # that creates tweak hash, rather than tweaks the pubkey.
 def tap_tweak_pubkey(pub: XOnlyPubKey, *, merkle_root: bytes = b'',
                      ) -> Optional[Tuple[XOnlyPubKey, bool]]:
+
+    if not pub.is_fullyvalid():
+        raise ValueError('pubkey must be valid')
 
     base_point = pub._to_ctypes_char_array()
     tweak = compute_tap_tweak_hash(pub, merkle_root=merkle_root)

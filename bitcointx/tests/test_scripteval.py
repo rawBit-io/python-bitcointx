@@ -356,7 +356,7 @@ class Test_EvalScript(unittest.TestCase):
 
     @unittest.skipIf(
         not bitcointx.util._allow_secp256k1_experimental_modules,
-        "bitcoinconsensus library is not available or "
+        "secp256k1_experimental_module is not available or not enabled"
     )
     def test_script_bitcoinconsensus_taproot_scripts(self) -> None:
         if not self._bitcoinconsensus_handle:
