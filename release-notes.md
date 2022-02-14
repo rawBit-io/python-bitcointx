@@ -1,10 +1,16 @@
 # python-bitcointx release notes
-## v1.1.3.dev0
+
+## v1.1.3
 
 Fixed base58 and bech32 prefixes for signet addresses and keys (they had values based on some early
 signet branch of Bitcoin Core, and they were changed afterwards, now they are the same as for testnet)
 
 Added support for P2TR addresses (bech32m encoding, segwit v1)
+
+haslib.ripemd160 is replaced with python-only implementation
+(due to OpenSSL dropping it in default configuration)
+
+Other small fixes
 
 ## v1.1.2
 
