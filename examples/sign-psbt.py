@@ -16,7 +16,7 @@ import argparse
 from typing import Optional, Union
 
 from bitcointx import select_chain_params
-from bitcointx.core import b2x
+from bitcointx.core import x, b2x
 from bitcointx.core.key import KeyStore, BIP32PathTemplate
 from bitcointx.core.psbt import PartiallySignedTransaction
 from bitcointx.base58 import Base58Error
@@ -31,6 +31,9 @@ def parser() -> 'argparse.ArgumentParser':
     parser.add_argument(
         '-k', '--key', nargs='*',
         help='List of private keys or extended private keys (base58 encoding)')
+    parser.add_argument(
+        '-p', '--acceptable-xpub-prefix', nargs='*',
+        help='List of XPUB prefixes that is acceptable in PSBT (in hex)')
     parser.add_argument('--path-template',
                         help='Path template for signing checks')
     parser.add_argument('--without-path-template-checks',
@@ -74,6 +77,22 @@ if __name__ == '__main__':
     elif args.without_path_template_checks:
         require_path_templates = False
 
+    acceptable_xpub_prefixes = []
+    for pfx_index, pfx_data in enumerate(args.acceptable_xpub_prefix or []):
+        if pfx_data.startswith('0x'):
+            pfx_data = pfx_data[2:]
+        try:
+            pfx = x(pfx_data)
+        except Exception as e:
+            print(f'xpub prefix at position {pfx_index} is not valid hex: {e}')
+            sys.exit(-1)
+
+        if len(pfx) != 4:
+            print(f'xpub prefix at position {pfx_index} length is not 4')
+            sys.exit(-1)
+
+        acceptable_xpub_prefixes.append(pfx)
+
     keys = []
     for key_index, key_data in enumerate(args.key or []):
         k: Optional[Union[CCoinKey, CCoinExtKey]] = None
@@ -92,7 +111,8 @@ if __name__ == '__main__':
             sys.exit(-1)
         keys.append(k)
 
-    psbt = PartiallySignedTransaction.from_base64_or_binary(psbt_data)
+    psbt = PartiallySignedTransaction.from_base64_or_binary(
+        psbt_data, acceptable_xpub_prefixes=acceptable_xpub_prefixes)
     sign_result = psbt.sign(
         KeyStore.from_iterable(keys,
                                default_path_template=path_template,
