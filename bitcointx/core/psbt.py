@@ -13,7 +13,7 @@
 
 from typing import (
     TypeVar, Tuple, List, Dict, Set, Union, Type, Any, Optional, Generator,
-    NamedTuple, Callable
+    NamedTuple, Callable, Collection
 )
 
 import base64
@@ -2081,6 +2081,7 @@ class PartiallySignedTransaction(PSBT_CoinClass, next_dispatch_final=True):
     def stream_deserialize(cls: Type[T_PartiallySignedTransaction],
                            f: ByteStream_Type,
                            relaxed_sanity_checks: bool = False,
+                           acceptable_xpub_prefixes: Collection[bytes] = (),
                            **kwargs: Any) -> T_PartiallySignedTransaction:
 
         magic = ser_read(f, 5)
@@ -2104,16 +2105,29 @@ class PartiallySignedTransaction(PSBT_CoinClass, next_dispatch_final=True):
                 ensure_empty_key_data(key_type, key_data)
                 unsigned_tx = CTransaction.deserialize(value)
             elif key_type is PSBT_GlobalKeyType.XPUB:
-                if key_data[:4] != CCoinExtPubKey.base58_prefix:
+
+                acceptable_prefixes = [CCoinExtPubKey.base58_prefix]
+                acceptable_prefixes.extend(acceptable_xpub_prefixes)
+
+                if key_data[:4] not in acceptable_prefixes:
+                    if len(acceptable_xpub_prefixes) > 1:
+                        pfx_msg = 'prefixes (hex) ('
+                        pfx_msg += ', '.join([b2x(pfx) for
+                                              pfx in acceptable_prefixes])
+                        pfx_msg += ')'
+                    else:
+                        pfx_msg = 'prefix (hex) ' + b2x(acceptable_prefixes[0])
+
                     raise ValueError(
                         f'One of global xpubs has unknown prefix: expected '
-                        f'prefix (hex) {b2x(CCoinExtPubKey.base58_prefix)}, '
-                        f'got {b2x(key_data[:4])}')
+                        f'{pfx_msg}, got {b2x(key_data[:4])}')
+
                 xpub = CCoinExtPubKey.from_bytes(key_data[4:])
                 assert xpub not in xpubs,\
                     ("duplicate keys should have been catched "
                      "inside read_psbt_keymap()")
                 xpubs[xpub] = PSBT_KeyDerivationInfo.deserialize(value)
+
             elif key_type is PSBT_GlobalKeyType.VERSION:
                 ensure_empty_key_data(key_type, key_data)
                 if len(value) != 4:
