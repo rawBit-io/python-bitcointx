@@ -2101,6 +2101,9 @@ class XOnlyPubKey(bytes):
         elif len(keydata) == 33:
             ensure_isinstance(keydata, CPubKey,
                               'x-only pubkey data of 33 bytes')
+            if not keydata.is_fullyvalid():
+                raise ValueError('invalid CPubKey supplied')
+
             keydata = keydata[1:33]
         else:
             raise ValueError('unrecognized pubkey data length')
