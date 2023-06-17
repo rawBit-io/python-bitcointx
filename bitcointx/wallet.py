@@ -574,6 +574,11 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
             if not pubkey.is_compressed():
                 raise P2TRCoinAddressError(
                     'Uncompressed pubkeys are not allowed')
+        elif isinstance(pubkey, CPubKey):
+            # XOnlyPubKey() will check validity of supplied pubkey before
+            # stripping its first byte. We strip it here without
+            # checking validity, becasue accept_invalid is True
+            pubkey = pubkey[1:33]
 
         return cls.from_xonly_output_pubkey(XOnlyPubKey(pubkey),
                                             accept_invalid=accept_invalid)
