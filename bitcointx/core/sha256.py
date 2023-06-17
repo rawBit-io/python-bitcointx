@@ -26,6 +26,8 @@ authentication code), etc.
 import struct
 from typing import Union, List, TypeVar
 
+SHA256_MAX = 0x1FFFFFFFFFFFFFFF
+
 
 def Ch(x: int, y: int, z: int) -> int:
     return z ^ (x & (y ^ z))
@@ -247,6 +249,9 @@ class CSHA256():
     def Write(self: T_CSHA256, data: Union[bytes, bytearray]) -> T_CSHA256:
         if not isinstance(data, (bytes, bytearray)):
             raise TypeError('data must be instance of bytes or bytearray')
+
+        if self.bytes_count + len(data) > SHA256_MAX:
+            raise ValueError('total bytes count beyond max allowed value')
 
         bufsize = self.bytes_count % 64
         assert len(self.buf) == bufsize
