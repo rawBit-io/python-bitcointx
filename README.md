@@ -45,7 +45,6 @@ the library and v1.0.0 release in particular, and also has some code examples.
 - Python >= 3.6
 - [libsecp256k1](https://github.com/bitcoin-core/secp256k1)
 - [libbitcoinconsensus](https://github.com/bitcoin/bitcoin/blob/master/doc/shared-libraries.md) (optional, for consensus-compatible script verification)
-- [openssl](https://github.com/openssl/openssl) (optional, only for historical signatures verification)
 
 It is recommended to build the libsecp256k1 library by hand, using the following commit:
 
