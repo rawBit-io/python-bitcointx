@@ -23,7 +23,6 @@ import hmac
 import struct
 import ctypes
 import ctypes.util
-import platform
 import hashlib
 import warnings
 from abc import abstractmethod
@@ -33,9 +32,7 @@ from typing import (
 )
 
 import bitcointx.core
-from bitcointx.util import (
-    no_bool_use_as_property, ensure_isinstance, _openssl_library_path
-)
+from bitcointx.util import no_bool_use_as_property, ensure_isinstance
 from bitcointx.core.secp256k1 import (
     _secp256k1, secp256k1_context_sign, secp256k1_context_verify,
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
@@ -45,6 +42,7 @@ from bitcointx.core.secp256k1 import (
     secp256k1_has_privkey_negate, secp256k1_has_pubkey_negate,
     secp256k1_has_xonly_pubkeys, secp256k1_has_schnorrsig
 )
+from bitcointx.core.ecdasig_parse_der_lax import ecdsa_signature_parse_der_lax
 
 BIP32_HARDENED_KEY_OFFSET = 0x80000000
 
@@ -53,13 +51,6 @@ T_CExtKeyCommonBase = TypeVar('T_CExtKeyCommonBase', bound='CExtKeyCommonBase')
 T_CExtKeyBase = TypeVar('T_CExtKeyBase', bound='CExtKeyBase')
 T_CExtPubKeyBase = TypeVar('T_CExtPubKeyBase', bound='CExtPubKeyBase')
 T_unbounded = TypeVar('T_unbounded')
-
-
-_openssl_library_handle: Optional[ctypes.CDLL] = None
-
-
-class OpenSSLException(EnvironmentError):
-    pass
 
 
 class KeyDerivationFailException(RuntimeError):
@@ -76,77 +67,6 @@ def _experimental_module_unavailable_error(msg: str, module_name: str) -> str:
         f'python-bitcointx (see docstring for '
         f'allow_secp256k1_experimental_modules() function)'
     )
-
-
-# Thx to Sam Devlin for the ctypes magic 64-bit fix (FIXME: should this
-# be applied to every OpenSSL call whose return type is a pointer?)
-def _check_res_openssl_void_p(val, func, args):  # type: ignore
-    if val == 0:
-        _ssl = _openssl_library_handle
-        assert _ssl is not None
-        errno = _ssl.ERR_get_error()
-        errmsg = ctypes.create_string_buffer(120)
-        _ssl.ERR_error_string_n(errno, errmsg, 120)
-        raise OpenSSLException(errno, str(errmsg.value))
-
-    return ctypes.c_void_p(val)
-
-
-def load_openssl_library(path: Optional[str] = None) -> Optional[ctypes.CDLL]:
-
-    if path is None:
-        path_generic = ctypes.util.find_library('ssl')
-        if platform.system() == 'Darwin':
-            # Fix for bug in MacOSX 10.15 where libssl is not a real
-            # library, and causes SIGABRT on load.
-            # libssl.35 should be the most compatible lib available there.
-            path = ctypes.util.find_library('ssl.35') or path_generic
-        elif platform.system() == 'Windows':
-            path = path_generic or 'libeay32'
-        else:
-            path = path_generic
-
-        if path is None:
-            raise ImportError(
-                "ssl library is required for non-strict signature "
-                "verification, but it was not found")
-
-    try:
-        handle: Optional[ctypes.CDLL] = ctypes.cdll.LoadLibrary(path)
-        if handle and not getattr(handle, 'EC_KEY_new_by_curve_name', None):
-            handle = None
-    except OSError:
-        handle = None
-
-    if not handle:
-        return None
-
-    handle.EC_KEY_new_by_curve_name.errcheck = _check_res_openssl_void_p  # type: ignore
-    handle.EC_KEY_new_by_curve_name.restype = ctypes.c_void_p
-    handle.EC_KEY_new_by_curve_name.argtypes = [ctypes.c_int]
-
-    handle.ECDSA_SIG_free.restype = None
-    handle.ECDSA_SIG_free.argtypes = [ctypes.c_void_p]
-
-    handle.ERR_error_string_n.restype = None
-    handle.ERR_error_string_n.argtypes = [ctypes.c_ulong, ctypes.c_char_p, ctypes.c_size_t]
-
-    handle.ERR_get_error.restype = ctypes.c_ulong
-    handle.ERR_get_error.argtypes = []
-
-    handle.d2i_ECDSA_SIG.restype = ctypes.c_void_p
-    handle.d2i_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
-
-    handle.i2d_ECDSA_SIG.restype = ctypes.c_int
-    handle.i2d_ECDSA_SIG.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-
-    # this specifies the curve used with ECDSA.
-    _NIDsecp256k1 = 714  # from openssl/obj_mac.h
-
-    # test that OpenSSL supports secp256k1
-    handle.EC_KEY_new_by_curve_name(_NIDsecp256k1)
-
-    return handle
 
 
 def _raw_sig_has_low_r(raw_sig: bytes) -> bool:
@@ -315,7 +235,7 @@ class CKeyBase:
         """
         return self._sign_schnorr_internal(hash, aux=aux)
 
-    def _sign_schnorr_internal(
+    def _sign_schnorr_internal(  # noqa
         self, hash: Union[bytes, bytearray],
         *,
         merkle_root: Optional[bytes] = None,
@@ -704,16 +624,6 @@ class CPubKey(bytes):
     def verify_nonstrict(self, hash: bytes, sig: bytes) -> bool:
         """Verify a non-strict DER signature"""
 
-        global _openssl_library_handle
-
-        if not _openssl_library_handle:
-            _openssl_library_handle = load_openssl_library(_openssl_library_path)
-
-        _ssl = _openssl_library_handle
-
-        if not _ssl:
-            raise RuntimeError('openssl library is not available. verify_nonstrict is not functional.')
-
         ensure_isinstance(sig, (bytes, bytearray), 'signature')
         ensure_isinstance(hash, (bytes, bytearray), 'hash')
 
@@ -723,40 +633,25 @@ class CPubKey(bytes):
         if not sig:
             return False
 
-        # bitcoind uses ecdsa_signature_parse_der_lax() to load signatures that
-        # may be not properly encoded, but is still accepted by openssl.
-        # it allows a strict subset of violations what OpenSSL will accept.
-        # ecdsa_signature_parse_der_lax() is present in secp256k1 contrib/
-        # directory, but is not compiled by default. Bundling it with this
-        # library will mean that it have to use C compiler at build stage, and
-        # I would like to avoid this build-dependency.
-        #
-        # secp256k1_ecdsa_verify won't accept encoding violations for
-        # signatures, so instead of ecdsa_signature_parse_der_lax() we use
-        # decode-openssl/encode-openssl/decode-secp256k cycle
-        # this means that we allow all encoding violatons that openssl allows.
-        #
-        # extra encode/decode is wasteful, but the result is that verification
-        # is still roughly 4 times faster than with openssl's ECDSA_verify()
-        norm_sig = ctypes.c_void_p(0)
-        result = _ssl.d2i_ECDSA_SIG(ctypes.byref(norm_sig), ctypes.byref(ctypes.c_char_p(sig)), len(sig))
-        if not result:
+        raw_sig = ecdsa_signature_parse_der_lax(sig)
+        if raw_sig is None:
             return False
 
-        derlen = _ssl.i2d_ECDSA_SIG(norm_sig, 0)
-        if derlen == 0:
-            _ssl.ECDSA_SIG_free(norm_sig)
-            return False
+        sig_size0 = ctypes.c_size_t()
+        sig_size0.value = SIGNATURE_SIZE
+        mb_sig = ctypes.create_string_buffer(SIGNATURE_SIZE)
 
-        norm_der = ctypes.create_string_buffer(derlen)
-        result = _ssl.i2d_ECDSA_SIG(norm_sig, ctypes.byref(ctypes.pointer(norm_der)))
+        result = _secp256k1.secp256k1_ecdsa_signature_serialize_der(
+            secp256k1_context_verify, mb_sig, ctypes.byref(sig_size0), raw_sig)
+        if 1 != result:
+            assert(result == 0)
+            raise RuntimeError('secp256k1_ecdsa_signature_parse_der returned failure')
 
-        _ssl.ECDSA_SIG_free(norm_sig)
+        # secp256k1 creates signatures already in lower-S form, no further
+        # conversion needed.
+        norm_der = mb_sig.raw[:sig_size0.value]
 
-        if not result:
-            return False
-
-        return self.verify(hash, norm_der.raw)
+        return self.verify(hash, norm_der)
 
     def verify_schnorr(self, msg: bytes, sig: bytes) -> bool:
         return XOnlyPubKey(self).verify_schnorr(msg, sig)
@@ -1199,7 +1094,7 @@ class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
     _hardened_marker: str
     _is_partial_path: bool  # True if path does not start from master (no 'm/')
 
-    def __init__(
+    def __init__(  # noqa
         self, path: Union[
             str, 'BIP32PathGeneric[T_BIP32PathIndex]',  # noqa
             Sequence[T_BIP32PathIndex],
@@ -1314,7 +1209,7 @@ class BIP32PathGeneric(Generic[T_BIP32PathIndex]):
     def __iter__(self) -> Iterator[T_BIP32PathIndex]:
         return (n for n in self._indexes)
 
-    def _parse_string(self, path: str, hardened_marker: Optional[str] = None
+    def _parse_string(self, path: str, hardened_marker: Optional[str] = None  # noqa
                       ) -> Tuple[List[T_BIP32PathIndex], Optional[str], bool]:
         """Parse bip32 derivation path.
         returns a tuple (list_of_indexes, actual_hardened_marker).
@@ -1479,7 +1374,7 @@ class BIP32PathTemplateIndex(tuple):  # type: ignore
 class BIP32PathTemplate(BIP32PathGeneric[BIP32PathTemplateIndex]):
 
     @classmethod
-    def _index_from_str(cls, index_str: str, *, is_hardened: bool
+    def _index_from_str(cls, index_str: str, *, is_hardened: bool  # noqa
                         ) -> BIP32PathTemplateIndex:
 
         if any(ch.isspace() for ch in index_str):

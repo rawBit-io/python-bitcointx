@@ -11,14 +11,15 @@
 """
 Pure Python RIPEMD160 implementation.
 The code is taken from Bitcoin Core's test framework.
-This is needed because the openssl has deprecated ripemd160 algorithm
-and it might not be available from hashlib anymore.
+This is needed because ripemd160 algorithm might not be available
+from hashlib anymore.
 Runtime performance will be slow, but the alternative is having a compiled
 dependency, which is too heavy.
 
 IMPORTANT: code is not constant-time! This should NOT be used for working
 with secret data, such as, for example  building a MAC (message
 authentication code), etc.
+(btw, you cannot expect constant-time behavior from python code at all)
 """
 
 from typing import Tuple
