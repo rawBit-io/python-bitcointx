@@ -28,7 +28,7 @@ import warnings
 from abc import abstractmethod
 from typing import (
     TypeVar, Type, Union, Tuple, List, Sequence, Optional, Iterator, cast,
-    Dict, Any, Iterable, Callable, Generic
+    Dict, Any, Iterable, Callable, Generic, ClassVar
 )
 
 import bitcointx.core
@@ -169,7 +169,7 @@ class CKeyBase:
                 secp256k1_context_sign, raw_sig, hash, self.secret_bytes, None,
                 maybe_extra_entropy())
             if 1 != result:
-                assert(result == 0)
+                assert result == 0
                 raise RuntimeError('secp256k1_ecdsa_sign returned failure')
 
             if not _ecdsa_sig_grind_low_r or _raw_sig_has_low_r(raw_sig.raw):
@@ -184,7 +184,7 @@ class CKeyBase:
         result = _secp256k1.secp256k1_ecdsa_signature_serialize_der(
             secp256k1_context_sign, mb_sig, ctypes.byref(sig_size0), raw_sig)
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_ecdsa_signature_parse_der returned failure')
 
         # secp256k1 creates signatures already in lower-S form, no further
@@ -206,7 +206,7 @@ class CKeyBase:
             secp256k1_context_sign, recoverable_sig, hash, self.secret_bytes, None, None)
 
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_ecdsa_sign_recoverable returned failure')
 
         recid = ctypes.c_int()
@@ -216,7 +216,7 @@ class CKeyBase:
             secp256k1_context_sign, output, ctypes.byref(recid), recoverable_sig)
 
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_ecdsa_recoverable_signature_serialize_compact returned failure')
 
         return output.raw, recid.value
@@ -281,7 +281,7 @@ class CKeyBase:
             secp256k1_context_sign, keypair_buf, self)
 
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_keypair_create returned failure')
 
         pubkey_buf = ctypes.create_string_buffer(64)
@@ -293,7 +293,7 @@ class CKeyBase:
                 secp256k1_context_sign, pubkey_buf, None, keypair_buf)
 
             if 1 != result:
-                assert(result == 0)
+                assert result == 0
                 raise RuntimeError('secp256k1_keypair_xonly_pub returned failure')
 
             # It should take one less secp256k1 call if we just take self.pub
@@ -307,7 +307,7 @@ class CKeyBase:
                 secp256k1_context_verify, serialized_pubkey_buf, pubkey_buf)
 
             if 1 != result:
-                assert(result == 0)
+                assert result == 0
                 raise RuntimeError('secp256k1_xonly_pubkey_serialize returned failure')
 
             tweak = compute_tap_tweak_hash(
@@ -318,7 +318,7 @@ class CKeyBase:
                 secp256k1_context_sign, keypair_buf, tweak)
 
             if 1 != result:
-                assert(result == 0)
+                assert result == 0
                 raise RuntimeError('secp256k1_keypair_xonly_tweak_add returned failure')
 
         sig_buf = ctypes.create_string_buffer(64)
@@ -327,7 +327,7 @@ class CKeyBase:
         )
 
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_schnorrsig_sign returned failure')
 
         # The pubkey may be tweaked, so extract it from keypair
@@ -336,7 +336,7 @@ class CKeyBase:
             secp256k1_context_sign, pubkey_buf, None, keypair_buf)
 
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_keypair_xonly_pub returned failure')
 
         # This check is not in Bitcoin Core's `CKey::SignSchnorr`, but
@@ -386,7 +386,7 @@ class CKeyBase:
                                         pub._to_ctypes_char_array(), self,
                                         None, None)
         if 1 != ret:
-            assert(ret == 0)
+            assert ret == 0
             raise RuntimeError('secp256k1_ecdh returned failure')
         return result_data.raw
 
@@ -431,7 +431,7 @@ class CKeyBase:
         key_buf = ctypes.create_string_buffer(self.secret_bytes)
         ret = _secp256k1.secp256k1_ec_privkey_negate(secp256k1_context_sign, key_buf)
         if 1 != ret:
-            assert(ret == 0)
+            assert ret == 0
             raise RuntimeError('secp256k1_ec_privkey_negate returned failure')
         return self.__class__.from_secret_bytes(key_buf.raw[:32], compressed=self.is_compressed())
 
@@ -505,7 +505,7 @@ class CPubKey(bytes):
         result = _secp256k1.secp256k1_ec_pubkey_parse(
             secp256k1_context_verify, raw_pub, self, len(self))
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_ec_pubkey_parse returned failure')
         return raw_pub
 
@@ -644,7 +644,7 @@ class CPubKey(bytes):
         result = _secp256k1.secp256k1_ecdsa_signature_serialize_der(
             secp256k1_context_verify, mb_sig, ctypes.byref(sig_size0), raw_sig)
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_ecdsa_signature_parse_der returned failure')
 
         # secp256k1 creates signatures already in lower-S form, no further
@@ -694,7 +694,7 @@ class CPubKey(bytes):
         pubkey_buf = self._to_ctypes_char_array()
         ret = _secp256k1.secp256k1_ec_pubkey_negate(secp256k1_context_verify, pubkey_buf)
         if 1 != ret:
-            assert(ret == 0)
+            assert ret == 0
             raise RuntimeError('secp256k1_ec_pubkey_negate returned failure')
         return self.__class__._from_ctypes_char_array(
             pubkey_buf, compressed=self.is_compressed())
@@ -1025,7 +1025,7 @@ class CExtPubKeyBase(CExtKeyCommonBase):
             SECP256K1_EC_COMPRESSED)
 
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_ec_pubkey_serialize returned failure')
 
         cls = self.__class__
@@ -1062,7 +1062,7 @@ T_CExtKey = TypeVar('T_CExtKey', bound='CExtKey')
 class CExtKey(bytes, CExtKeyBase):
     "Standalone extended key class"
 
-    neuter: Callable[['CExtKey'], CExtPubKey]
+    neuter: ClassVar[Callable[['CExtKey'], CExtPubKey]]
 
     @classmethod
     def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
@@ -1996,6 +1996,7 @@ class XOnlyPubKey(bytes):
         elif len(keydata) == 33:
             ensure_isinstance(keydata, CPubKey,
                               'x-only pubkey data of 33 bytes')
+            assert isinstance(keydata, CPubKey)
             if not keydata.is_fullyvalid():
                 raise ValueError('invalid CPubKey supplied')
 
@@ -2066,7 +2067,7 @@ class XOnlyPubKey(bytes):
         result = _secp256k1.secp256k1_xonly_pubkey_parse(
             secp256k1_context_verify, raw_pub, self)
         if 1 != result:
-            assert(result == 0)
+            assert result == 0
             raise RuntimeError('secp256k1_xonly_pubkey_parse returned failure')
         return raw_pub
 

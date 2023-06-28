@@ -126,6 +126,7 @@ class Test_CScript(unittest.TestCase):
                                sigversion=SIGVERSION_WITNESS_V0 + 1)  # type: ignore
 
         assert spk_segwit.is_witness_scriptpubkey()
+        assert spk_segwit.witness_version() == 0
         with self.assertRaises(ValueError):
             # incorect sigversion for segwit
             spk_segwit.sighash(tx, 0, SIGHASH_ALL,

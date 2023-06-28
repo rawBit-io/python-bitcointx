@@ -2,7 +2,11 @@
 
 ## v1.1.4.dev0
 
-Removed bitcointx.core.serialize.VarBytesSerializer - it was a duplicate of BytesSerializer
+Marked bitcointx package as typed (added bitcointx/py.typed)
+
+Dropped python3.6 support, as GitHub Actions, that we use for testing, do not have support for it now
+
+Removed `bitcointx.core.serialize.VarBytesSerializer` - it was a duplicate of BytesSerializer
 
 Removed openssl dependency (ported `ecdsa_signature_parse_der_lax` from Bitcoin Core)
 

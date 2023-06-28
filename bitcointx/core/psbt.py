@@ -357,7 +357,7 @@ class PSBT_KeyDerivationInfo(ImmutableSerializable, KeyDerivationInfo):
                            ) -> T_PSBT_KeyDerivationInfo:
         fingerprint = ser_read(f, 4)
         indexlist: List[int] = []
-        while(True):
+        while True:
             data = f.read(4)
             if len(data) < 4:
                 if len(data):
@@ -800,14 +800,14 @@ class PSBT_Input(PSBT_CoinClass, next_dispatch_final=True):
     def is_null(self) -> bool:
         return (
             self.utxo is None
-            and not(self.partial_sigs)
-            and not(self.redeem_script)
-            and not(self.witness_script)
-            and not(self.derivation_map)
-            and not(self.final_script_sig)
-            and not(self.final_script_witness)
-            and not(self.proprietary_fields)
-            and not(self.unknown_fields)
+            and (not self.partial_sigs)
+            and (not self.redeem_script)
+            and (not self.witness_script)
+            and (not self.derivation_map)
+            and (not self.final_script_sig)
+            and (not self.final_script_witness)
+            and (not self.proprietary_fields)
+            and (not self.unknown_fields)
         )
 
     def _get_nonfinal_fields_present(self) -> Optional[List[str]]:
@@ -954,7 +954,7 @@ class PSBT_Input(PSBT_CoinClass, next_dispatch_final=True):
 
         sighash: Optional[bytes] = None
 
-        assert(self.sighash_type != 0),\
+        assert self.sighash_type != 0, \
             "unspecified sighash_type must be represented by None"
 
         if self.is_final():
@@ -1510,11 +1510,11 @@ class PSBT_Output(PSBT_CoinClass, next_dispatch_final=True):
     @no_bool_use_as_property
     def is_null(self) -> bool:
         return (
-            not(self.redeem_script)
-            and not(self.witness_script)
-            and not(self.derivation_map)
-            and not(self.proprietary_fields)
-            and not(self.unknown_fields)
+            (not self.redeem_script)
+            and (not self.witness_script)
+            and (not self.derivation_map)
+            and (not self.proprietary_fields)
+            and (not self.unknown_fields)
         )
 
     def merge(self: T_PSBT_Output, other: T_PSBT_Output,
@@ -2070,11 +2070,11 @@ class PartiallySignedTransaction(PSBT_CoinClass, next_dispatch_final=True):
     def is_null(self) -> bool:
         return (
             self.unsigned_tx.is_null()
-            and not(self.inputs)
-            and not(self.outputs)
-            and not(self.xpubs)
-            and not(self.proprietary_fields)
-            and not(self.unknown_fields)
+            and (not self.inputs)
+            and (not self.outputs)
+            and (not self.xpubs)
+            and (not self.proprietary_fields)
+            and (not self.unknown_fields)
         )
 
     @classmethod

@@ -19,7 +19,9 @@ scriptPubKeys; currently there is no actual wallet support implemented.
 # pylama:ignore=E501,E221
 
 from io import BytesIO
-from typing import Type, TypeVar, Union, Optional, List, Callable, cast
+from typing import (
+    Type, TypeVar, Union, Optional, List, Callable, ClassVar, cast
+)
 
 import bitcointx
 import bitcointx.base58
@@ -96,15 +98,22 @@ class CCoinAddress(WalletCoinClass):
     _data_length: int
     _scriptpubkey_type: str
 
-    __bytes__: Callable[[T_CCoinAddress], bytes]
-
     def __new__(cls: Type[T_CCoinAddress], s: str) -> T_CCoinAddress:
         ensure_isinstance(s, str, 'address string')
+
         recognized_encoding = []
         target_cls_set = dispatcher_mapped_list(cls)
         for target_cls in target_cls_set:
             try:
-                return target_cls(s)
+                inst = target_cls(s)
+
+                # CCoinClass shall be used as mixin along with
+                # bytes-derived base class
+                assert isinstance(inst, bytes), \
+                    '{inst.__class__.__name__} must be bytes subclass'
+
+                return inst
+
             except CCoinAddressError:
                 recognized_encoding.append(target_cls.__name__)
             except bitcointx.core.AddressDataEncodingError:
@@ -178,6 +187,11 @@ class CCoinAddress(WalletCoinClass):
             elif spk_type_string == spk_type:
                 return target_cls
         return None
+
+    def __bytes__(self) -> bytes:
+        # we checked at __new__ that self is a bytes instance
+        assert isinstance(self, bytes)
+        return self[:]
 
     def to_scriptPubKey(self) -> CScript:
         raise NotImplementedError('method must be overriden in a subclass')
@@ -894,7 +908,7 @@ class CCoinExtPubKey(CBase58DataDispatched, CExtPubKeyBase,
 class CCoinExtKey(CBase58DataDispatched, CExtKeyBase,
                   WalletCoinClass, next_dispatch_final=True):
 
-    neuter: Callable[['CCoinExtKey'], CCoinExtPubKey]
+    neuter: ClassVar[Callable[['CCoinExtKey'], CCoinExtPubKey]]
 
     def __init__(self, _s: str) -> None:
         assert isinstance(self, CExtKeyBase)

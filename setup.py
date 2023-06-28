@@ -26,12 +26,12 @@ setup(
         "Programming Language :: Python :: 3.10",
         "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     url='https://github.com/Simplexum/python-bitcointx',
     keywords='bitcoin',
     packages=find_packages(),
     zip_safe=False,
     install_requires=requires,
     test_suite="bitcointx.tests",
-    extras_require={"typing_extensions": ["typing_extensions>=3.6"]}
+    package_data={"bitcointx": ["py.typed"]}
 )

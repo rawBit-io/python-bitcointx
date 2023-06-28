@@ -221,26 +221,6 @@ will print
 Bitcoin testnet params (bitcoin/testnet) are in effect
 ```
 
-## Unit tests
-
-Under bitcointx/tests using test data from Bitcoin Core. To run them:
-
-    python3 -m unittest discover
-
-Alternately, if Tox (see https://tox.readthedocs.org/) is available on your
-system, you can run unit tests for multiple Python versions:
-
-    ./runtests.sh
-
-Currently, the following implementations are tried (any not installed are
-skipped):
-
-    * CPython 3.6
-    * CPython 3.7
-    * CPython 3.8-dev
-
-HTML coverage reports can then be found in the htmlcov/ subdirectory.
-
 ## Documentation
 
 Sphinx documentation is in the "doc" subdirectory. Run "make help" from there

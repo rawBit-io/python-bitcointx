@@ -671,35 +671,35 @@ class Test_BIP32Path(unittest.TestCase):
                         pt = BIP32PathTemplate(tmpl_str)
                     except ValueError as e:
                         if str(e).startswith("incorrect path template index bound"):
-                            assert(status in ["error_range_start_equals_end",
+                            assert status in ["error_range_start_equals_end",
                                               "error_ranges_intersect",
-                                              "error_range_order_bad"]), (tmpl_str, status)
+                                              "error_range_order_bad"], (tmpl_str, status)
                         elif str(e).startswith("index range equals wildcard range"):
-                            assert(status == "error_range_equals_wildcard"), (tmpl_str, status)
+                            assert status == "error_range_equals_wildcard", (tmpl_str, status)
                         elif str(e).startswith("non-digit character found"):
-                            assert(status in ["error_unexpected_char",
+                            assert status in ["error_unexpected_char",
                                               "error_invalid_char",
-                                              "error_digit_expected"]), (tmpl_str, status)
+                                              "error_digit_expected"], (tmpl_str, status)
                         elif str(e).startswith("index template format is not valid"):
-                            assert(status in ["error_unexpected_char",
+                            assert status in ["error_unexpected_char",
                                               "error_invalid_char",
                                               "error_unexpected_finish",
-                                              "error_digit_expected"]), (tmpl_str, status)
+                                              "error_digit_expected"], (tmpl_str, status)
                         elif str(e).startswith("leading zeroes are not allowed"):
-                            assert(status == "error_index_has_leading_zero"), (tmpl_str, status)
+                            assert status == "error_index_has_leading_zero", (tmpl_str, status)
                         elif str(e).startswith("index_from cannot be larger than index_to in an index tuple"):
-                            assert(status == "error_range_order_bad"), (tmpl_str, status)
+                            assert status == "error_range_order_bad", (tmpl_str, status)
                         elif str(e).startswith('derivation path must not end with "/"'):
-                            assert(status == "error_unexpected_slash"), (tmpl_str, status)
+                            assert status == "error_unexpected_slash", (tmpl_str, status)
                         elif str(e).startswith('partial derivation path must not start with "/"'):
-                            assert(status == "error_unexpected_slash"), (tmpl_str, status)
+                            assert status == "error_unexpected_slash", (tmpl_str, status)
                         elif str(e).startswith('duplicate slashes are not allowed'):
-                            assert(status == "error_unexpected_slash"), (tmpl_str, status)
+                            assert status == "error_unexpected_slash", (tmpl_str, status)
                         elif str(e).startswith('Unexpected hardened marker'):
-                            assert(status == "error_unexpected_hardened_marker"), (tmpl_str, status)
+                            assert status == "error_unexpected_hardened_marker", (tmpl_str, status)
                         elif str(e).startswith('whitespace found'):
-                            assert(status == "error_unexpected_space"), (tmpl_str, status)
+                            assert status == "error_unexpected_space", (tmpl_str, status)
                         elif str(e).startswith('derivation index string cannot represent value > 2147483647'):
-                            assert(status == "error_index_too_big"), (tmpl_str, status)
+                            assert status == "error_index_too_big", (tmpl_str, status)
                         else:
                             raise
