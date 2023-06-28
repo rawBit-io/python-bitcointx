@@ -26,12 +26,14 @@
 
 import ctypes
 
+from typing import Optional
+
 from bitcointx.core.secp256k1 import (
     _secp256k1, COMPACT_SIGNATURE_SIZE, secp256k1_context_verify
 )
 
 
-def ecdsa_signature_parse_der_lax(laxinput: bytes) -> bytes | None:  # noqa
+def ecdsa_signature_parse_der_lax(laxinput: bytes) -> Optional[bytes]:  # noqa
     rpos: int
     rlen: int
     spos: int
@@ -173,7 +175,7 @@ def ecdsa_signature_parse_der_lax(laxinput: bytes) -> bytes | None:  # noqa
     if not overflow:
         parse_result = _secp256k1.secp256k1_ecdsa_signature_parse_compact(
             secp256k1_context_verify, sig, bytes(tmpsig))
-        overflow = int(not(parse_result))
+        overflow = int(not parse_result)
 
     if overflow:
         # Overwrite the result again with a correctly-parsed but invalid

@@ -25,7 +25,7 @@ from types import FunctionType
 from abc import ABCMeta, ABC, abstractmethod
 from typing import (
     Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable, Optional,
-    TypeVar, Generic, cast, NoReturn
+    TypeVar, Generic, cast, NoReturn, Mapping
 )
 
 _allow_secp256k1_experimental_modules = False
@@ -37,6 +37,7 @@ T_Callable = TypeVar('T_Callable', bound=Callable[..., Any])
 T_ClassMappingDispatcher = TypeVar('T_ClassMappingDispatcher',
                                    bound='ClassMappingDispatcher')
 T_unbounded = TypeVar('T_unbounded')
+T_rettype = TypeVar('T_rettype')
 
 
 class _NoBoolCallable():
@@ -72,7 +73,7 @@ class no_bool_use_as_property():
         # but we want to use Callable[[Any], bool] for the method so that
         # the decorator would only be applied to methods with expected
         # signature
-        method = self.method.__get__(instance, owner)  # type: ignore
+        method = self.method.__get__(instance, owner)
 
         name = '{}{}.{}'.format(owner.__name__,
                                 '' if instance is None else '()',
@@ -100,9 +101,9 @@ def activate_class_dispatcher(dclass: Type[T_ClassMappingDispatcher]
                               ) -> Type[T_ClassMappingDispatcher]:
     """Activate particular class dispatcher - so that the mapping it contains
     will be active. Activates its dependent dispatchers, recursively, too."""
-    if ClassMappingDispatcher not in dclass.__mro__:
+    if not issubclass(dclass, ClassMappingDispatcher):
         raise TypeError(
-            f'{dclass.__name__} does not appear to be a subclass '
+            f'{dclass.__name__} is not a subclass '
             f'of ClassMappingDispatcher')
 
     if dclass._class_dispatcher__no_direct_use:
@@ -128,7 +129,7 @@ def dispatcher_mapped_list(cls: T_ClassMappingDispatcher,
     """Get a list of the classes that particular class is to be
     dispatched to. Returns empty list when class is not in a dispatch map"""
     mcs = type(cls)
-    if ClassMappingDispatcher not in mcs.__mro__:
+    if not issubclass(mcs, ClassMappingDispatcher):
         raise ValueError('{} is not a dispatcher class'.format(cls.__name__))
 
     dispatcher = class_mapping_dispatch_data.get_dispatcher_class(
@@ -147,7 +148,8 @@ class DispatcherMethodWrapper():
     """A helper class that allows to wrap both classmethods and staticmethods,
     in addition to normal instance methods"""
     def __init__(self, method: Union[FunctionType,
-                                     'classmethod[Any]', 'staticmethod[Any]',
+                                     'classmethod[Any, Any, Any]',
+                                     'staticmethod[Any, Any]',
                                      'DispatcherMethodWrapper'],
                  wrapper: Callable[[Callable[..., Any], type],
                                    Callable[..., Any]]) -> None:
@@ -166,10 +168,10 @@ def dispatcher_wrap_methods(cls: 'ClassMappingDispatcher',
                             dct: Optional[Dict[str, Any]] = None) -> None:
     """Wrap all methods of a class with a function, that would
     establish the dispatching context for that method"""
-    if dct is None:
-        dct = cls.__dict__
 
-    for attr_name, attr_value in dct.items():
+    classdict: Mapping[str, Any] = cls.__dict__ if dct is None else dct
+
+    for attr_name, attr_value in classdict.items():
         if isinstance(attr_value, (FunctionType, classmethod, staticmethod,
                                    DispatcherMethodWrapper)):
             setattr(cls, attr_name,
@@ -444,14 +446,14 @@ class ClassMappingDispatcher(ABCMeta):
         return getattr(class_list[0], name)
 
 
-class classgetter:
+class classgetter(Generic[T_rettype]):
     """simple decorator to create a read-only class property
     from class method"""
 
-    def __init__(self, f: Callable[..., T_unbounded]):
+    def __init__(self, f: Callable[..., T_rettype]):
         self.f = f
 
-    def __get__(self, obj: object, owner: type) -> T_unbounded:
+    def __get__(self, obj: object, owner: type) -> T_rettype:
         return self.f(owner)
 
 

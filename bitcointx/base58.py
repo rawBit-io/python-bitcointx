@@ -24,7 +24,6 @@ B58_DIGITS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 
 T_CBase58Data = TypeVar('T_CBase58Data', bound='CBase58Data')
-T_unbounded = TypeVar('T_unbounded')
 
 
 class Base58Error(bitcointx.core.AddressDataEncodingError):
@@ -176,7 +175,7 @@ class CBase58Data(bytes):
             'base58 prefix does not match any known base58 address class')
 
     @classmethod
-    def from_bytes(cls: Type[T_unbounded], data: bytes) -> T_unbounded:
+    def from_bytes(cls: Type[T_CBase58Data], data: bytes) -> T_CBase58Data:
         """Instantiate from data"""
         self = bytes.__new__(cls, data)
         self.__init__(None)  # type: ignore

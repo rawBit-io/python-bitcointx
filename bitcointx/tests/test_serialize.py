@@ -144,4 +144,4 @@ class Test_Uint256_Serialize(unittest.TestCase):
         for x in range(100):
             values.append(random.getrandbits(256))
         for n in values:
-            assert(uint256_from_bytes(uint256_to_bytes(n)) == n)
+            assert uint256_from_bytes(uint256_to_bytes(n)) == n

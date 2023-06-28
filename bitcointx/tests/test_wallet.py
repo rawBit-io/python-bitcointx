@@ -589,36 +589,36 @@ class Test_RFC6979(unittest.TestCase):
             encoded_sig = secret.sign(hashlib.sha256(vector[1].encode('utf8')).digest(),
                                       _ecdsa_sig_grind_low_r=False)
 
-            assert(encoded_sig[0] == 0x30)
-            assert(encoded_sig[1] == len(encoded_sig)-2)
-            assert(encoded_sig[2] == 0x02)
+            assert encoded_sig[0] == 0x30
+            assert encoded_sig[1] == len(encoded_sig)-2
+            assert encoded_sig[2] == 0x02
 
             rlen = encoded_sig[3]
             rpos = 4
-            assert(rlen in (32, 33))
+            assert rlen in (32, 33)
 
             if rlen == 33:
-                assert(encoded_sig[rpos] == 0)
+                assert encoded_sig[rpos] == 0
                 rpos += 1
                 rlen -= 1
 
             rval = encoded_sig[rpos:rpos+rlen]
             spos = rpos+rlen
-            assert(encoded_sig[spos] == 0x02)
+            assert encoded_sig[spos] == 0x02
 
             spos += 1
             slen = encoded_sig[spos]
-            assert(slen in (32, 33))
+            assert slen in (32, 33)
 
             spos += 1
             if slen == 33:
-                assert(encoded_sig[spos] == 0)
+                assert encoded_sig[spos] == 0
                 spos += 1
                 slen -= 1
 
             sval = encoded_sig[spos:spos+slen]
             sig = b2x(rval + sval)
-            assert(str(sig) == vector[3])
+            assert str(sig) == vector[3]
 
 
 class TestChainParams(unittest.TestCase):

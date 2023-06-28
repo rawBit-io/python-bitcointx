@@ -727,7 +727,9 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
                             .format(type(other).__name__))
         return other
 
-    def __add__(self: T_CScript, other: ScriptElement_Type) -> T_CScript:
+    # types are deliberately incomppatible with bytes.__add__,
+    # as we want to restrict the types of arguments to ScriptElement_Type
+    def __add__(self: T_CScript, other: ScriptElement_Type) -> T_CScript:  # type: ignore
         # Do the coercion outside of the try block so that errors in it are
         # noticed.
         other = self.__coerce_instance(other)
@@ -949,7 +951,8 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         """Returns the witness version on [0,16]. """
         if not self.is_witness_scriptpubkey():
             raise ValueError('not a witness scriptPubKey')
-        return next(iter(self))
+        # is_witness_scriptpubkey() has already checked self[0].is_small_int()
+        return self[0]
 
     def witness_program(self) -> bytes:
         """Returns the witness program"""
