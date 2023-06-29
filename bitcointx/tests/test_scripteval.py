@@ -23,8 +23,6 @@ from typing import List, Iterator, Tuple, Set, Optional, Sequence, Dict, Union
 
 from binascii import unhexlify
 
-import bitcointx.util
-
 from bitcointx.core import (
     coins_to_satoshi, x, ValidationError,
     CTxOut, CTxIn, CTransaction, COutPoint, CTxWitness, CTxInWitness
@@ -354,10 +352,6 @@ class Test_EvalScript(unittest.TestCase):
         # test with default-loaded handle
         self._do_test_bicoinconsensus(None, test_data_iterator)
 
-    @unittest.skipIf(
-        not bitcointx.util._allow_secp256k1_experimental_modules,
-        "secp256k1_experimental_module is not available or not enabled"
-    )
     def test_script_bitcoinconsensus_taproot_scripts(self) -> None:
         if not self._bitcoinconsensus_handle:
             self.skipTest("bitcoinconsensus library is not available")

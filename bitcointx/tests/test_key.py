@@ -17,8 +17,6 @@ import unittest
 import warnings
 import hashlib
 
-import bitcointx.util
-
 from bitcointx.core.key import CKey, CPubKey, XOnlyPubKey
 from bitcointx.core import x
 from bitcointx.core.secp256k1 import secp256k1_has_pubkey_negate
@@ -164,8 +162,6 @@ class Test_CKey(unittest.TestCase):
         self.assertTrue(small_sig_found)
 
     def test_schnorr(self) -> None:
-        if not bitcointx.util._allow_secp256k1_experimental_modules:
-            self.skipTest("secp256k1 experimental modules are not available")
         # adapted from reference code of BIP340
         # at https://github.com/bitcoin/bips/blob/master/bip-0340/reference.py
         with open(os.path.dirname(__file__) + '/data/schnorr-sig-test-vectors.csv', 'r') as fd:
