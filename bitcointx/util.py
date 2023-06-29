@@ -28,7 +28,6 @@ from typing import (
     TypeVar, Generic, cast, NoReturn, Mapping
 )
 
-_allow_secp256k1_experimental_modules = False
 _secp256k1_library_path: Optional[str] = None
 
 _attributes_of_ABC = dir(ABC)

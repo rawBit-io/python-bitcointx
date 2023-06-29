@@ -46,25 +46,22 @@ the library and v1.0.0 release in particular, and also has some code examples.
 - [libsecp256k1](https://github.com/bitcoin-core/secp256k1)
 - [libbitcoinconsensus](https://github.com/bitcoin/bitcoin/blob/master/doc/shared-libraries.md) (optional, for consensus-compatible script verification)
 
-It is recommended to build the libsecp256k1 library by hand, using the following commit:
+Tests use the following libsecp256k1 version:
 
-[//]: # (!LIBSECP256K1_COMMIT_MARKER_DO_NOT_MOVE_OR_EDIT! this marker is used by automatic tests to extract the commit hash that is in the following line from this README.md, and use it to run tests with this specific version of libsecp256k1)
-`7006f1b97fd8dbf4ef75771dd7c15185811c3f50`
+[//]: # (!LIBSECP256K1_VERSION_MARKER_DO_NOT_MOVE_OR_EDIT! this marker is used by automatic tests to extract the version that is in the following line from this README.md, and use it to run tests with this specific version of libsecp256k1)
+`v0.3.2`
 
 Libsecp256k1 is not linked as a git submodule in python-bitcointx git repository, because python-bitcointx
 can still be used with other versions of libsecp256k1 as long as experimental modules with unstable ABI
-of are not used, or are compatible with the vesion from the commit listed above. Please note that the ABI
-even for non-experimental modules of libsecp256k1 has no guarantees of not changing, as that library has no
-'release' version as of date.
+of are not used, or are compatible with the vesion listed above.
 
 While allowing dynamic linkage with libsecp256k1 adds these complications, it is at the same time allows
 more flexibility for advanced uses. For example, one can use libsecp256k1-zkp instead of libsecp256k1 to
 have access to zero-knowledge-proof related functions, as is done by python-elementstx package.
 
-For best results, use the version that corresponds to the commit hash listed above, as it is the commit
-that python-bitcointx automatic tests use to build libsecp256k1. Then make sure that this version of the
-library is loaded by python-bitcointx, by using `bitcointx.set_custom_secp256k1_path()`
-or `LD_LIBRARY_PATH ` environment variable.
+For best results, use the version listed above, as it is the version that python-bitcointx automatic tests
+use to build libsecp256k1. Then make sure that this version of the library is loaded by python-bitcointx,
+by using `bitcointx.set_custom_secp256k1_path()` or `LD_LIBRARY_PATH ` environment variable.
 
 ## Installation
 

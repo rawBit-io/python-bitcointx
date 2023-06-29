@@ -57,15 +57,10 @@ class KeyDerivationFailException(RuntimeError):
     pass
 
 
-def _experimental_module_unavailable_error(msg: str, module_name: str) -> str:
+def _module_unavailable_error(msg: str, module_name: str) -> str:
     return (
         f'{msg} handling functions from libsecp256k1 is not available. '
-        f'You should use newer version of secp256k1 library, '
-        f'configure it with --enable-experimental and '
-        f'--enable-module-{module_name}, and also enable the use '
-        f'of functions from libsecp256k1 experimental modules by '
-        f'python-bitcointx (see docstring for '
-        f'allow_secp256k1_experimental_modules() function)'
+        f'configure it libsecp256k1 with --enable-module-{module_name}'
     )
 
 
@@ -266,8 +261,7 @@ class CKeyBase:
 
         if not secp256k1_has_schnorrsig:
             raise RuntimeError(
-                _experimental_module_unavailable_error(
-                    'schnorr signature', 'schnorrsig'))
+                _module_unavailable_error('schnorr signature', 'schnorrsig'))
 
         if aux is not None:
             ensure_isinstance(aux, (bytes, bytearray), 'aux')
@@ -1988,8 +1982,7 @@ class XOnlyPubKey(bytes):
 
         if not secp256k1_has_xonly_pubkeys:
             raise RuntimeError(
-                _experimental_module_unavailable_error(
-                    'x-only pubkey', 'extrakeys'))
+                _module_unavailable_error('x-only pubkey', 'extrakeys'))
 
         if len(keydata) in (32, 0):
             ensure_isinstance(keydata, bytes, 'x-only pubkey data')
@@ -2032,8 +2025,7 @@ class XOnlyPubKey(bytes):
     def verify_schnorr(self, hash: bytes, sigbytes: bytes) -> bool:
         if not secp256k1_has_schnorrsig:
             raise RuntimeError(
-                _experimental_module_unavailable_error(
-                    'schnorr signature', 'schnorrsig'))
+                _module_unavailable_error('schnorr signature', 'schnorrsig'))
 
         ensure_isinstance(sigbytes, (bytes, bytearray), 'signature')
         ensure_isinstance(hash, (bytes, bytearray), 'hash')

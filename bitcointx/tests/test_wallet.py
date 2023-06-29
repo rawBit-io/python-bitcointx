@@ -80,14 +80,13 @@ def _test_address_implementations(
                     a = None
 
                     if getattr(aclass, 'from_xonly_pubkey', None):
-                        if bitcointx.util._allow_secp256k1_experimental_modules:
-                            xa = aclass.from_xonly_pubkey(XOnlyPubKey(pub))
-                            a = aclass.from_pubkey(pub)
-                            test.assertEqual(a, xa)
-                            xoa = aclass.from_xonly_output_pubkey(XOnlyPubKey(pub))
-                            a_from_spk = aclass.from_scriptPubKey(
-                                CScript(b'\x51\x20' + pub[1:]))
-                            test.assertEqual(a_from_spk, xoa)
+                        xa = aclass.from_xonly_pubkey(XOnlyPubKey(pub))
+                        a = aclass.from_pubkey(pub)
+                        test.assertEqual(a, xa)
+                        xoa = aclass.from_xonly_output_pubkey(XOnlyPubKey(pub))
+                        a_from_spk = aclass.from_scriptPubKey(
+                            CScript(b'\x51\x20' + pub[1:]))
+                        test.assertEqual(a_from_spk, xoa)
                     elif getattr(aclass, 'from_pubkey', None):
                         a = aclass.from_pubkey(pub)
                     elif getattr(aclass, 'from_redeemScript', None):
@@ -135,10 +134,9 @@ class Test_CCoinAddress(unittest.TestCase):
             CScript(b'\xa9' + Hash160(pub) + b'\x87'))
         self.assertEqual(P2WSHCoinAddress.get_output_size(), 43)
         self.assertEqual(a3.get_output_size(), 43)
-        if bitcointx.util._allow_secp256k1_experimental_modules:
-            a4 = P2TRCoinAddress.from_pubkey(pub)
-            self.assertEqual(P2TRCoinAddress.get_output_size(), 43)
-            self.assertEqual(a4.get_output_size(), 43)
+        a4 = P2TRCoinAddress.from_pubkey(pub)
+        self.assertEqual(P2TRCoinAddress.get_output_size(), 43)
+        self.assertEqual(a4.get_output_size(), 43)
 
     def test_scriptpubkey_type(self) -> None:
         for l1_cls in dispatcher_mapped_list(CCoinAddress):
@@ -352,8 +350,6 @@ class Test_CBitcoinAddress(unittest.TestCase):
             accept_uncompressed: bool = False
         ) -> None:
             if len(pubkey) == 32:
-                if not bitcointx.util._allow_secp256k1_experimental_modules:
-                    return
                 addr = cls.from_output_pubkey(pubkey)
             else:
                 if accept_uncompressed:
@@ -363,8 +359,6 @@ class Test_CBitcoinAddress(unittest.TestCase):
                 else:
                     assert len(pubkey) == 33
                     if issubclass(cls, P2TRCoinAddress):
-                        if not bitcointx.util._allow_secp256k1_experimental_modules:
-                            return
                         addr = cls.from_output_pubkey(pubkey)
                     else:
                         addr = cls.from_pubkey(pubkey)
@@ -398,10 +392,9 @@ class Test_CBitcoinAddress(unittest.TestCase):
           'bc1p0r2rqf60330vzvsn8q23a8e87nr8dgqghhux8rg8czmtax4nt3csc0rfcn',
           P2TRBitcoinAddress)
 
-        if bitcointx.util._allow_secp256k1_experimental_modules:
-            T(XOnlyPubKey(CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))),
-              'bc1p0r2rqf60330vzvsn8q23a8e87nr8dgqghhux8rg8czmtax4nt3csc0rfcn',
-              P2TRBitcoinAddress)
+        T(XOnlyPubKey(CPubKey(x('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71'))),
+            'bc1p0r2rqf60330vzvsn8q23a8e87nr8dgqghhux8rg8czmtax4nt3csc0rfcn',
+            P2TRBitcoinAddress)
 
     def test_from_invalid_pubkeys(self) -> None:
         """Create P2PKHBitcoinAddress's from invalid pubkeys"""
@@ -414,8 +407,6 @@ class Test_CBitcoinAddress(unittest.TestCase):
             addr: Union[P2PKHBitcoinAddress, P2WPKHBitcoinAddress,
                         P2TRBitcoinAddress]
             if issubclass(cls, P2TRCoinAddress):
-                if not bitcointx.util._allow_secp256k1_experimental_modules:
-                    return
                 addr = cls.from_output_pubkey(invalid_pubkey, accept_invalid=True)
             else:
                 addr = cls.from_pubkey(invalid_pubkey, accept_invalid=True)
@@ -445,17 +436,15 @@ class Test_CBitcoinAddress(unittest.TestCase):
                     else:
                         cls.from_pubkey(inv_pub)
 
-            if bitcointx.util._allow_secp256k1_experimental_modules:
-                with self.assertRaises(CBitcoinAddressError):
-                    P2TRCoinAddress.from_pubkey(inv_pub)
+            with self.assertRaises(CBitcoinAddressError):
+                P2TRCoinAddress.from_pubkey(inv_pub)
 
-        if bitcointx.util._allow_secp256k1_experimental_modules:
-            for inv_pub in (x(''), inv_pub_bytes[1:],
-                            XOnlyPubKey(inv_pub_bytes[1:])):
-                with self.assertRaises(CBitcoinAddressError):
-                    P2TRCoinAddress.from_xonly_output_pubkey(inv_pub)
-                with self.assertRaises(CBitcoinAddressError):
-                    P2TRCoinAddress.from_xonly_pubkey(inv_pub)
+        for inv_pub in (x(''), inv_pub_bytes[1:],
+                        XOnlyPubKey(inv_pub_bytes[1:])):
+            with self.assertRaises(CBitcoinAddressError):
+                P2TRCoinAddress.from_xonly_output_pubkey(inv_pub)
+            with self.assertRaises(CBitcoinAddressError):
+                P2TRCoinAddress.from_xonly_pubkey(inv_pub)
 
 
 class Test_P2PKHBitcoinAddress(unittest.TestCase):
@@ -661,8 +650,6 @@ class Test_BIP341_standard_vectors(unittest.TestCase):
             self.keypath_spending_cases = data['keyPathSpending']
 
     def test_bip341_scriptPubKey(self) -> None:
-        if not bitcointx.util._allow_secp256k1_experimental_modules:
-            self.skipTest("secp256k1 experimental modules are not available")
         for tcase in self.spk_cases:
             given = tcase['given']
             intermediary = tcase['intermediary']
@@ -731,8 +718,6 @@ class Test_BIP341_standard_vectors(unittest.TestCase):
                 self.assertEqual(b2x(cb), expected_cb)
 
     def test_bip341_keyPathSpending(self) -> None:
-        if not bitcointx.util._allow_secp256k1_experimental_modules:
-            self.skipTest("secp256k1 experimental modules are not available")
         for tcase in self.keypath_spending_cases:
             tx = CMutableTransaction.deserialize(
                 x(tcase['given']['rawUnsignedTx']))
