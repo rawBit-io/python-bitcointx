@@ -49,7 +49,7 @@ the library and v1.0.0 release in particular, and also has some code examples.
 Tests use the following libsecp256k1 version:
 
 [//]: # (!LIBSECP256K1_VERSION_MARKER_DO_NOT_MOVE_OR_EDIT! this marker is used by automatic tests to extract the version that is in the following line from this README.md, and use it to run tests with this specific version of libsecp256k1)
-`v0.3.2`
+`v0.4.0`
 
 Libsecp256k1 is not linked as a git submodule in python-bitcointx git repository, because python-bitcointx
 can still be used with other versions of libsecp256k1 as long as experimental modules with unstable ABI
