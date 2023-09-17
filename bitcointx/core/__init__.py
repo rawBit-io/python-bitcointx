@@ -83,7 +83,10 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
                  **kwargs: Any) -> None:
         super().__init__(name, bases, namespace, **kwargs)
         if mutable_of is None:
-            cls._immutable_cls = cls
+            if not (cls.__name__ == 'CoreCoinClass' or
+                    issubclass(cls, CoreCoinClass)):
+                raise TypeError(f'{cls.__name__} must be a subclass of CoreCoinClass')
+            cls._immutable_cls = cast(Type['CoreCoinClass'], cls)
             cls._mutable_cls = None
         else:
             if not issubclass(mutable_of, CoreCoinClass):
@@ -108,8 +111,8 @@ class CoreCoinClassDispatcher(ClassMappingDispatcher, identity='core',
             combined_dict = mutable_of.__dict__.copy()
             combined_dict.update(cls.__dict__)
 
-            def wrap(fn, mcs):
-                def wrapper(*args, **kwargs):
+            def wrap(fn: Any, mcs: Any) -> Any:
+                def wrapper(*args: Any, **kwargs: Any) -> Any:
                     # We are about to call a method of a mutable class.
                     # enable the mutable context, but save previous state.
                     prev_state = _mutable_context.mutable_context_enabled
