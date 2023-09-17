@@ -241,7 +241,7 @@ def ConsensusVerifyScript(
         raise ValueError('amount out of MoneyRange')
 
     ensure_isinstance(scriptSig, CScript, 'scriptSig')
-    if not type(scriptSig) == type(scriptPubKey):
+    if not type(scriptSig) == type(scriptPubKey):  # noqa: exact class check
         raise TypeError(
             "scriptSig and scriptPubKey must be of the same script class")
 

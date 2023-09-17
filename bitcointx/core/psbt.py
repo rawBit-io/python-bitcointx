@@ -200,7 +200,7 @@ def merge_input_output_common_fields(
                 raise ValueError(
                     f'derivation paths do not match in derivation info '
                     f'for {what}s at index {dst.index}')
-            assert (dst.derivation_map[pub] == dinfo),\
+            assert (dst.derivation_map[pub] == dinfo), \
                 "if key_ids match, pubkeys must match"
         else:
             dst.derivation_map[CPubKey(pub)] = dinfo.clone()
@@ -1253,7 +1253,7 @@ class PSBT_Input(PSBT_CoinClass, next_dispatch_final=True):
                     raise SerializationError(
                         descr(
                             f'Invalid pubkey encountered in {key_type.name}'))
-                assert pub not in partial_sigs,\
+                assert pub not in partial_sigs, \
                     ("duplicate keys should have been catched "
                      "inside read_psbt_keymap()")
                 partial_sigs[pub] = value
@@ -1275,7 +1275,7 @@ class PSBT_Input(PSBT_CoinClass, next_dispatch_final=True):
                     raise SerializationError(
                         descr(
                             f'Invalid pubkey encountered in {key_type.name}'))
-                assert pub not in derivation_map,\
+                assert pub not in derivation_map, \
                     ("duplicate keys should have been catched "
                      "inside read_psbt_keymap()")
                 derivation_map[pub] = PSBT_KeyDerivationInfo.deserialize(value)
@@ -1649,7 +1649,7 @@ class PSBT_Output(PSBT_CoinClass, next_dispatch_final=True):
                     raise SerializationError(
                         descr(
                             f'Invalid pubkey encountered in {key_type.name}'))
-                assert pub not in derivation_map,\
+                assert pub not in derivation_map, \
                     ("duplicate keys should have been catched "
                      "inside read_psbt_keymap()")
                 derivation_map[pub] = PSBT_KeyDerivationInfo.deserialize(value)
@@ -2123,7 +2123,7 @@ class PartiallySignedTransaction(PSBT_CoinClass, next_dispatch_final=True):
                         f'{pfx_msg}, got {b2x(key_data[:4])}')
 
                 xpub = CCoinExtPubKey.from_bytes(key_data[4:])
-                assert xpub not in xpubs,\
+                assert xpub not in xpubs, \
                     ("duplicate keys should have been catched "
                      "inside read_psbt_keymap()")
                 xpubs[xpub] = PSBT_KeyDerivationInfo.deserialize(value)
