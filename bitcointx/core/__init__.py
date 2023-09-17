@@ -174,7 +174,7 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
     ) -> T_CoreCoinClass:
         ensure_isinstance(other_inst, cls._immutable_cls,
                           'the argument')
-        assert issubclass(cls, cls._immutable_cls),\
+        assert issubclass(cls, cls._immutable_cls), \
             (f"_immutable_cls ({cls._immutable_cls.__name__} expected to be "
              f"the same as cls ({cls.__name__}, or be a superclass of it")
 

@@ -93,7 +93,7 @@ def _test_address_implementations(
                         a = aclass.from_redeemScript(
                             CScript(b'\xa9' + Hash160(pub) + b'\x87'))
                     else:
-                        assert len(dispatcher_mapped_list(aclass)) > 0,\
+                        assert len(dispatcher_mapped_list(aclass)) > 0, \
                             ("dispatcher mapped list for {} "
                                 "must not be empty".format(aclass))
 
