@@ -1,6 +1,6 @@
 # python-bitcointx release notes
 
-## v1.1.4.dev0
+## v1.1.4
 
 Marked bitcointx package as typed (added bitcointx/py.typed)
 
