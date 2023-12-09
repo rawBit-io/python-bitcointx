@@ -14,13 +14,14 @@ Fixed base58 and bech32 prefixes for signet addresses and keys (they had values 
 signet branch of Bitcoin Core, and they were changed afterwards, now they are the same as for testnet)
 
 Added support for taproot inputs spending:
-    * `CScript` now have `name` field and `is_witness_v1_taproot()`, `sighash_schnorr()` methods
-    * `TaprootScriptTree` class in bitcointx.core.script
-    * `XOnlyPukey` class in bitcointx.core.key
-    * `CKey` now has `xonly_pub` field and `sign_schnorr_no_tweak()`, `verify_schnorr()` methods
-    * `CCoinKey` now has `sign_schnorr_tweaked()` method (in addition to all `CKey` methods, of course)
-    * `CPubKey` now has `verify_schnorr()` and `is_null()` methods
-    * `SignatureHashSchnorr()` function to compute sighash for schnorr when no script is present
+
+- `CScript` now have `name` field and `is_witness_v1_taproot()`, `sighash_schnorr()` methods
+- `TaprootScriptTree` class in bitcointx.core.script
+- `XOnlyPukey` class in bitcointx.core.key
+- `CKey` now has `xonly_pub` field and `sign_schnorr_no_tweak()`, `verify_schnorr()` methods
+- `CCoinKey` now has `sign_schnorr_tweaked()` method (in addition to all `CKey` methods, of course)
+- `CPubKey` now has `verify_schnorr()` and `is_null()` methods
+- `SignatureHashSchnorr()` function to compute sighash for schnorr when no script is present
 
 ## v1.1.3
 
