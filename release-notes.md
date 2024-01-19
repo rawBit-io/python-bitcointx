@@ -1,5 +1,11 @@
 # python-bitcointx release notes
 
+## v1.1.4.post0
+
+Fix incorrect return value of `CScript.witness_version()` for tapscript output scripts
+For witness version 1, the returned value was 0x51. It should have been decoded as 'small int' opcode
+before returning
+
 ## v1.1.4
 
 Marked bitcointx package as typed (added bitcointx/py.typed)
