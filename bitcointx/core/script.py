@@ -952,7 +952,7 @@ class CScript(bytes, ScriptCoinClass, next_dispatch_final=True):
         if not self.is_witness_scriptpubkey():
             raise ValueError('not a witness scriptPubKey')
         # is_witness_scriptpubkey() has already checked self[0].is_small_int()
-        return self[0]
+        return CScriptOp(self[0]).decode_op_n()
 
     def witness_program(self) -> bytes:
         """Returns the witness program"""
