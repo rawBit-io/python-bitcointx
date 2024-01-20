@@ -1,5 +1,38 @@
 # python-bitcointx release notes
 
+## v1.1.5
+
+Breaking change (in case any code has depended on incorrect behavior):
+
+Fix incorrect return value of `CScript.witness_version()` for tapscript output scripts:
+For witness version 1, the returned value was 0x51. It should have been decoded as 'small int' opcode
+before returning
+
+Because this change is potentially breaking, but should be fixed as soon as possible,
+new version is released just for this change
+
+While at it, the way secp256k1 library handle and library capabilities was accessed has changed.
+This allows the path change to take effect even if `set_custom_secp256k1_path()` is called after
+bitcointx.core is imported (but before any of the functions that use library handle is called)
+
+This change too can cause breakage in the code that used functions from
+`bitcointx.core.secp256k1` module:
+
+- `load_secp256k1_library()` function was removed
+_ `secp256k1_context_*` and `secp256k1_has_*` module variables was removed
+
+The function `secp256k1_load_library()` was added, which returns an instance of `Secp256k1` dataclass.
+
+`Secp256k1` has three fields: `lib`, `ctx` and `cap`. The `lib` contains the libsecp256k1 library handle.
+The `ctx` contains two fields: `ctx.sign` and `ctx.verify` - the sign and verify contexts created
+using the librariy handle in `lib`. The `cap` field contain library capaibility flags:
+`has_pubkey_recovery`, `has_privkey_negate`, `has_pubkey_negate`, `has_ecdh`,
+`has_xonly_pubkeys`, `has_schnorrsig`
+
+The function `get_secp256k1()` was added, which calls `secp256k1_load_library()` and stores the
+instance of `Secp256k1` in the attribute of `secp256k.py` module. If such instance is already
+created and stored, it is returned right away, no new instance is created.
+
 ## v1.1.4
 
 Marked bitcointx package as typed (added bitcointx/py.typed)

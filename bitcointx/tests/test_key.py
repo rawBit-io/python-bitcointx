@@ -19,7 +19,7 @@ import hashlib
 
 from bitcointx.core.key import CKey, CPubKey, XOnlyPubKey
 from bitcointx.core import x
-from bitcointx.core.secp256k1 import secp256k1_has_pubkey_negate
+from bitcointx.core.secp256k1 import get_secp256k1
 
 
 class Test_CPubKey(unittest.TestCase):
@@ -75,7 +75,8 @@ class Test_CKey(unittest.TestCase):
         k_sum = CKey.add(k1, k2)
         pub_sum = CPubKey.add(k1.pub, k2.pub)
         self.assertEqual(pub_sum, k_sum.pub)
-        if secp256k1_has_pubkey_negate:
+        secp256k1 = get_secp256k1()
+        if secp256k1.cap.has_pubkey_negate:
             k_diff = CKey.sub(k1, k2)
             pub_diff = CPubKey.sub(k1.pub, k2.pub)
             self.assertEqual(pub_diff, k_diff.pub)

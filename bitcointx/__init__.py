@@ -313,8 +313,8 @@ def select_chain_params(params: Union[str, ChainParamsBase,
 def set_custom_secp256k1_path(path: str) -> None:
     """Set the custom path that will be used to load secp256k1 library
     by bitcointx.core.secp256k1 module. For the calling of this
-    function to have any effect, it has to be called before importing
-    any other modules except 'bitcointx' and 'bitcointx.util'."""
+    function to have any effect, it has to be called before any function
+    that uses secp256k1 library handle is called"""
 
     if not os.path.isfile(path):
         raise ValueError('supplied path does not point to a file')

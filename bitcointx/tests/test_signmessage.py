@@ -13,7 +13,7 @@ import unittest
 
 from typing import Iterator, Dict, Any
 
-from bitcointx.core.secp256k1 import secp256k1_has_pubkey_recovery
+from bitcointx.core.secp256k1 import get_secp256k1
 from bitcointx.wallet import CBitcoinKey, P2PKHCoinAddress
 from bitcointx.signmessage import BitcoinMessage, VerifyMessage, SignMessage
 import os
@@ -29,7 +29,7 @@ def load_test_vectors(name: str) -> Iterator[Dict[str, Any]]:
 class Test_SignVerifyMessage(unittest.TestCase):
 
     @unittest.skipIf(
-        not secp256k1_has_pubkey_recovery,
+        not get_secp256k1().cap.has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
     def test_verify_message_simple(self) -> None:
@@ -43,7 +43,7 @@ class Test_SignVerifyMessage(unittest.TestCase):
         self.assertTrue(VerifyMessage(address, message_to_verify, signature))
 
     @unittest.skipIf(
-        not secp256k1_has_pubkey_recovery,
+        not get_secp256k1().cap.has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
     def test_verify_message_vectors(self) -> None:
@@ -56,7 +56,7 @@ class Test_SignVerifyMessage(unittest.TestCase):
             ))
 
     @unittest.skipIf(
-        not secp256k1_has_pubkey_recovery,
+        not get_secp256k1().cap.has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
     def test_sign_message_simple(self) -> None:
@@ -73,7 +73,7 @@ class Test_SignVerifyMessage(unittest.TestCase):
         self.assertTrue(VerifyMessage(address, message_to_sign, signature))
 
     @unittest.skipIf(
-        not secp256k1_has_pubkey_recovery,
+        not get_secp256k1().cap.has_pubkey_recovery,
         "secp256k1 compiled without pubkey recovery functions"
     )
     def test_sign_message_vectors(self) -> None:
