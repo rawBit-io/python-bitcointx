@@ -29,7 +29,7 @@ import ctypes
 from typing import Optional
 
 from bitcointx.core.secp256k1 import (
-    _secp256k1, COMPACT_SIGNATURE_SIZE, secp256k1_context_verify
+    get_secp256k1, COMPACT_SIGNATURE_SIZE
 )
 
 
@@ -47,9 +47,11 @@ def ecdsa_signature_parse_der_lax(laxinput: bytes) -> Optional[bytes]:  # noqa
 
     sig = ctypes.create_string_buffer(COMPACT_SIGNATURE_SIZE)
 
+    secp256k1 = get_secp256k1()
+
     # Hack to initialize sig with a correctly-parsed but invalid signature. */
-    _secp256k1.secp256k1_ecdsa_signature_parse_compact(
-        secp256k1_context_verify, sig, bytes(tmpsig))
+    secp256k1.lib.secp256k1_ecdsa_signature_parse_compact(
+        secp256k1.ctx.verify, sig, bytes(tmpsig))
 
     # Sequence tag byte
     if pos == inputlen or laxinput[pos] != 0x30:
@@ -173,15 +175,15 @@ def ecdsa_signature_parse_der_lax(laxinput: bytes) -> Optional[bytes]:  # noqa
         tmpsig[64-slen:64] = laxinput[spos:spos+slen]
 
     if not overflow:
-        parse_result = _secp256k1.secp256k1_ecdsa_signature_parse_compact(
-            secp256k1_context_verify, sig, bytes(tmpsig))
+        parse_result = secp256k1.lib.secp256k1_ecdsa_signature_parse_compact(
+            secp256k1.ctx.verify, sig, bytes(tmpsig))
         overflow = int(not parse_result)
 
     if overflow:
         # Overwrite the result again with a correctly-parsed but invalid
         # signature if parsing failed.
         tmpsig = bytearray([0 for _ in range(64)])
-        _secp256k1.secp256k1_ecdsa_signature_parse_compact(
-            secp256k1_context_verify, sig, bytes(tmpsig))
+        secp256k1.lib.secp256k1_ecdsa_signature_parse_compact(
+            secp256k1.ctx.verify, sig, bytes(tmpsig))
 
     return sig.raw

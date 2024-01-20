@@ -34,13 +34,10 @@ from typing import (
 import bitcointx.core
 from bitcointx.util import no_bool_use_as_property, ensure_isinstance
 from bitcointx.core.secp256k1 import (
-    _secp256k1, secp256k1_context_sign, secp256k1_context_verify,
+    get_secp256k1,
     SIGNATURE_SIZE, COMPACT_SIGNATURE_SIZE,
     PUBLIC_KEY_SIZE, COMPRESSED_PUBLIC_KEY_SIZE,
     SECP256K1_EC_COMPRESSED, SECP256K1_EC_UNCOMPRESSED,
-    secp256k1_has_pubkey_recovery, secp256k1_has_ecdh,
-    secp256k1_has_privkey_negate, secp256k1_has_pubkey_negate,
-    secp256k1_has_xonly_pubkeys, secp256k1_has_schnorrsig
 )
 from bitcointx.core.ecdasig_parse_der_lax import ecdsa_signature_parse_der_lax
 
@@ -66,8 +63,9 @@ def _module_unavailable_error(msg: str, module_name: str) -> str:
 
 def _raw_sig_has_low_r(raw_sig: bytes) -> bool:
     compact_sig = ctypes.create_string_buffer(64)
-    result = _secp256k1.secp256k1_ecdsa_signature_serialize_compact(
-        secp256k1_context_sign, compact_sig, raw_sig)
+    secp256k1 = get_secp256k1()
+    result = secp256k1.lib.secp256k1_ecdsa_signature_serialize_compact(
+        secp256k1.ctx.sign, compact_sig, raw_sig)
     assert result == 1
 
     # In DER serialization, all values are interpreted as big-endian,
@@ -101,15 +99,17 @@ class CKeyBase:
         if len(self.secret_bytes) != 32:
             raise ValueError('secret data length too short')
 
-        result = _secp256k1.secp256k1_ec_seckey_verify(
-            secp256k1_context_sign, self.secret_bytes)
+        secp256k1 = get_secp256k1()
+
+        result = secp256k1.lib.secp256k1_ec_seckey_verify(
+            secp256k1.ctx.sign, self.secret_bytes)
 
         if result != 1:
             assert result == 0
             raise ValueError('Invalid private key data')
 
-        result = _secp256k1.secp256k1_ec_pubkey_create(
-            secp256k1_context_sign, raw_pubkey, self.secret_bytes)
+        result = secp256k1.lib.secp256k1_ec_pubkey_create(
+            secp256k1.ctx.sign, raw_pubkey, self.secret_bytes)
 
         if result != 1:
             assert result == 0
@@ -159,9 +159,11 @@ class CKeyBase:
             assert counter < 2**32
             return counter.to_bytes(4, byteorder="little") + b'\x00'*28
 
+        secp256k1 = get_secp256k1()
+
         while True:
-            result = _secp256k1.secp256k1_ecdsa_sign(
-                secp256k1_context_sign, raw_sig, hash, self.secret_bytes, None,
+            result = secp256k1.lib.secp256k1_ecdsa_sign(
+                secp256k1.ctx.sign, raw_sig, hash, self.secret_bytes, None,
                 maybe_extra_entropy())
             if 1 != result:
                 assert result == 0
@@ -176,8 +178,8 @@ class CKeyBase:
         sig_size0.value = SIGNATURE_SIZE
         mb_sig = ctypes.create_string_buffer(SIGNATURE_SIZE)
 
-        result = _secp256k1.secp256k1_ecdsa_signature_serialize_der(
-            secp256k1_context_sign, mb_sig, ctypes.byref(sig_size0), raw_sig)
+        result = secp256k1.lib.secp256k1_ecdsa_signature_serialize_der(
+            secp256k1.ctx.sign, mb_sig, ctypes.byref(sig_size0), raw_sig)
         if 1 != result:
             assert result == 0
             raise RuntimeError('secp256k1_ecdsa_signature_parse_der returned failure')
@@ -191,14 +193,18 @@ class CKeyBase:
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
 
-        if not secp256k1_has_pubkey_recovery:
+        secp256k1 = get_secp256k1()
+
+        if not secp256k1.cap.has_pubkey_recovery:
             raise RuntimeError('secp256k1 compiled without pubkey recovery functions. '
                                'sign_compact is not functional.')
 
+        secp256k1 = get_secp256k1()
+
         recoverable_sig = ctypes.create_string_buffer(COMPACT_SIGNATURE_SIZE)
 
-        result = _secp256k1.secp256k1_ecdsa_sign_recoverable(
-            secp256k1_context_sign, recoverable_sig, hash, self.secret_bytes, None, None)
+        result = secp256k1.lib.secp256k1_ecdsa_sign_recoverable(
+            secp256k1.ctx.sign, recoverable_sig, hash, self.secret_bytes, None, None)
 
         if 1 != result:
             assert result == 0
@@ -207,8 +213,8 @@ class CKeyBase:
         recid = ctypes.c_int()
         recid.value = 0
         output = ctypes.create_string_buffer(64)
-        result = _secp256k1.secp256k1_ecdsa_recoverable_signature_serialize_compact(
-            secp256k1_context_sign, output, ctypes.byref(recid), recoverable_sig)
+        result = secp256k1.lib.secp256k1_ecdsa_recoverable_signature_serialize_compact(
+            secp256k1.ctx.sign, output, ctypes.byref(recid), recoverable_sig)
 
         if 1 != result:
             assert result == 0
@@ -259,7 +265,8 @@ class CKeyBase:
         if len(hash) != 32:
             raise ValueError('Hash must be exactly 32 bytes long')
 
-        if not secp256k1_has_schnorrsig:
+        secp256k1 = get_secp256k1()
+        if not secp256k1.cap.has_schnorrsig:
             raise RuntimeError(
                 _module_unavailable_error('schnorr signature', 'schnorrsig'))
 
@@ -271,8 +278,10 @@ class CKeyBase:
         sizeof_keypair = 96
         keypair_buf = ctypes.create_string_buffer(sizeof_keypair)
 
-        result = _secp256k1.secp256k1_keypair_create(
-            secp256k1_context_sign, keypair_buf, self)
+        secp256k1 = get_secp256k1()
+
+        result = secp256k1.lib.secp256k1_keypair_create(
+            secp256k1.ctx.sign, keypair_buf, self)
 
         if 1 != result:
             assert result == 0
@@ -283,8 +292,8 @@ class CKeyBase:
         if merkle_root is not None:
             ensure_isinstance(merkle_root, (bytes, bytearray), 'merkle_root')
 
-            result = _secp256k1.secp256k1_keypair_xonly_pub(
-                secp256k1_context_sign, pubkey_buf, None, keypair_buf)
+            result = secp256k1.lib.secp256k1_keypair_xonly_pub(
+                secp256k1.ctx.sign, pubkey_buf, None, keypair_buf)
 
             if 1 != result:
                 assert result == 0
@@ -297,8 +306,8 @@ class CKeyBase:
             # so one extra secp256k1 call here to be close to original source
 
             serialized_pubkey_buf = ctypes.create_string_buffer(32)
-            result = _secp256k1.secp256k1_xonly_pubkey_serialize(
-                secp256k1_context_verify, serialized_pubkey_buf, pubkey_buf)
+            result = secp256k1.lib.secp256k1_xonly_pubkey_serialize(
+                secp256k1.ctx.verify, serialized_pubkey_buf, pubkey_buf)
 
             if 1 != result:
                 assert result == 0
@@ -308,17 +317,16 @@ class CKeyBase:
                 XOnlyPubKey(serialized_pubkey_buf.raw),
                 merkle_root=merkle_root)
 
-            result = _secp256k1.secp256k1_keypair_xonly_tweak_add(
-                secp256k1_context_sign, keypair_buf, tweak)
+            result = secp256k1.lib.secp256k1_keypair_xonly_tweak_add(
+                secp256k1.ctx.sign, keypair_buf, tweak)
 
             if 1 != result:
                 assert result == 0
                 raise RuntimeError('secp256k1_keypair_xonly_tweak_add returned failure')
 
         sig_buf = ctypes.create_string_buffer(64)
-        result = _secp256k1.secp256k1_schnorrsig_sign(
-            secp256k1_context_sign, sig_buf, hash, keypair_buf, aux
-        )
+        result = secp256k1.lib.secp256k1_schnorrsig_sign(
+            secp256k1.ctx.sign, sig_buf, hash, keypair_buf, aux)
 
         if 1 != result:
             assert result == 0
@@ -326,8 +334,8 @@ class CKeyBase:
 
         # The pubkey may be tweaked, so extract it from keypair
         # to do verification after signing
-        result = _secp256k1.secp256k1_keypair_xonly_pub(
-            secp256k1_context_sign, pubkey_buf, None, keypair_buf)
+        result = secp256k1.lib.secp256k1_keypair_xonly_pub(
+            secp256k1.ctx.sign, pubkey_buf, None, keypair_buf)
 
         if 1 != result:
             assert result == 0
@@ -335,10 +343,8 @@ class CKeyBase:
 
         # This check is not in Bitcoin Core's `CKey::SignSchnorr`, but
         # is recommended in BIP340 if the computation cost is not a concern
-        result = _secp256k1.secp256k1_schnorrsig_verify(
-            secp256k1_context_verify,
-            sig_buf.raw, hash, 32, pubkey_buf
-        )
+        result = secp256k1.lib.secp256k1_schnorrsig_verify(
+            secp256k1.ctx.verify, sig_buf.raw, hash, 32, pubkey_buf)
 
         if result != 1:
             assert result == 0
@@ -364,7 +370,8 @@ class CKeyBase:
         return XOnlyPubKey(self.pub).verify_schnorr(msg, sig)
 
     def ECDH(self, pub: Optional['CPubKey'] = None) -> bytes:
-        if not secp256k1_has_ecdh:
+        secp256k1 = get_secp256k1()
+        if not secp256k1.cap.has_ecdh:
             raise RuntimeError(
                 'secp256k1 compiled without ECDH shared secret computation functions. '
                 'ECDH is not functional.')
@@ -375,13 +382,16 @@ class CKeyBase:
         if not pub.is_fullyvalid():
             raise ValueError('supplied pubkey is not valid')
 
+        secp256k1 = get_secp256k1()
+
         result_data = ctypes.create_string_buffer(32)
-        ret = _secp256k1.secp256k1_ecdh(secp256k1_context_sign, result_data,
-                                        pub._to_ctypes_char_array(), self,
-                                        None, None)
+        ret = secp256k1.lib.secp256k1_ecdh(secp256k1.ctx.sign, result_data,
+                                           pub._to_ctypes_char_array(), self,
+                                           None, None)
         if 1 != ret:
             assert ret == 0
             raise RuntimeError('secp256k1_ecdh returned failure')
+
         return result_data.raw
 
     @classmethod
@@ -394,13 +404,16 @@ class CKeyBase:
             raise ValueError(
                 'each supplied privkey must be an instance of CKeyBase')
 
+        secp256k1 = get_secp256k1()
+
         result_data = ctypes.create_string_buffer((privkeys[0]).secret_bytes)
         for p in privkeys[1:]:
-            ret = _secp256k1.secp256k1_ec_privkey_tweak_add(
-                secp256k1_context_sign, result_data, p.secret_bytes)
+            ret = secp256k1.lib.secp256k1_ec_privkey_tweak_add(
+                secp256k1.ctx.sign, result_data, p.secret_bytes)
             if ret != 1:
                 assert ret == 0
                 raise ValueError('Combining the keys failed')
+
         return cls.from_secret_bytes(result_data.raw[:32], compressed=compressed)
 
     @classmethod
@@ -418,12 +431,13 @@ class CKeyBase:
         return cls.add(a, b.negated())
 
     def negated(self: T_CKeyBase) -> T_CKeyBase:
-        if not secp256k1_has_privkey_negate:
+        secp256k1 = get_secp256k1()
+        if not secp256k1.cap.has_privkey_negate:
             raise RuntimeError(
                 'secp256k1 does not export privkey negation function. '
                 'You should use newer version of secp256k1 library')
         key_buf = ctypes.create_string_buffer(self.secret_bytes)
-        ret = _secp256k1.secp256k1_ec_privkey_negate(secp256k1_context_sign, key_buf)
+        ret = secp256k1.lib.secp256k1_ec_privkey_negate(secp256k1.ctx.sign, key_buf)
         if 1 != ret:
             assert ret == 0
             raise RuntimeError('secp256k1_ec_privkey_negate returned failure')
@@ -469,8 +483,9 @@ class CPubKey(bytes):
         self.__fullyvalid = False
         if self.is_nonempty():
             tmp_pub = ctypes.create_string_buffer(64)
-            result = _secp256k1.secp256k1_ec_pubkey_parse(
-                secp256k1_context_verify, tmp_pub, self, len(self))
+            secp256k1 = get_secp256k1()
+            result = secp256k1.lib.secp256k1_ec_pubkey_parse(
+                secp256k1.ctx.verify, tmp_pub, self, len(self))
             assert result in (1, 0)
             self.__fullyvalid = (result == 1)
 
@@ -483,12 +498,15 @@ class CPubKey(bytes):
                                 compressed: bool = True) -> T_CPubKey:
         if len(raw_pubkey) != 64:
             raise ValueError('raw pubkey must be 64 bytes')
+
         pub_size0 = ctypes.c_size_t()
         pub_size0.value = PUBLIC_KEY_SIZE
         pub = ctypes.create_string_buffer(pub_size0.value)
 
-        _secp256k1.secp256k1_ec_pubkey_serialize(
-            secp256k1_context_verify, pub, ctypes.byref(pub_size0), raw_pubkey,
+        secp256k1 = get_secp256k1()
+
+        secp256k1.lib.secp256k1_ec_pubkey_serialize(
+            secp256k1.ctx.verify, pub, ctypes.byref(pub_size0), raw_pubkey,
             SECP256K1_EC_COMPRESSED if compressed else SECP256K1_EC_UNCOMPRESSED)
 
         return cls(pub.raw[:pub_size0.value])
@@ -496,11 +514,14 @@ class CPubKey(bytes):
     def _to_ctypes_char_array(self) -> 'ctypes.Array[ctypes.c_char]':
         assert self.is_fullyvalid()
         raw_pub = ctypes.create_string_buffer(64)
-        result = _secp256k1.secp256k1_ec_pubkey_parse(
-            secp256k1_context_verify, raw_pub, self, len(self))
+        secp256k1 = get_secp256k1()
+        result = secp256k1.lib.secp256k1_ec_pubkey_parse(
+            secp256k1.ctx.verify, raw_pub, self, len(self))
+
         if 1 != result:
             assert result == 0
             raise RuntimeError('secp256k1_ec_pubkey_parse returned failure')
+
         return raw_pub
 
     @classmethod
@@ -510,7 +531,8 @@ class CPubKey(bytes):
         if len(sig) != COMPACT_SIGNATURE_SIZE:
             raise ValueError("Signature should be %d characters, not [%d]" % (COMPACT_SIGNATURE_SIZE, len(sig)))
 
-        if not secp256k1_has_pubkey_recovery:
+        secp256k1 = get_secp256k1()
+        if not secp256k1.cap.has_pubkey_recovery:
             raise RuntimeError('secp256k1 compiled without pubkey recovery functions. '
                                'recover_compact is not functional.')
 
@@ -519,8 +541,8 @@ class CPubKey(bytes):
 
         rec_sig = ctypes.create_string_buffer(COMPACT_SIGNATURE_SIZE)
 
-        result = _secp256k1.secp256k1_ecdsa_recoverable_signature_parse_compact(
-            secp256k1_context_verify, rec_sig, sig[1:], recid)
+        result = secp256k1.lib.secp256k1_ecdsa_recoverable_signature_parse_compact(
+            secp256k1.ctx.verify, rec_sig, sig[1:], recid)
 
         if result != 1:
             assert result == 0
@@ -528,8 +550,8 @@ class CPubKey(bytes):
 
         raw_pubkey = ctypes.create_string_buffer(64)
 
-        result = _secp256k1.secp256k1_ecdsa_recover(
-            secp256k1_context_verify, raw_pubkey, rec_sig, hash)
+        result = secp256k1.lib.secp256k1_ecdsa_recover(
+            secp256k1.ctx.verify, raw_pubkey, rec_sig, hash)
 
         if result != 1:
             assert result == 0
@@ -594,20 +616,22 @@ class CPubKey(bytes):
         if not self.is_fullyvalid():
             return False
 
+        secp256k1 = get_secp256k1()
+
         raw_sig = ctypes.create_string_buffer(64)
-        result = _secp256k1.secp256k1_ecdsa_signature_parse_der(
-            secp256k1_context_verify, raw_sig, sig, len(sig))
+        result = secp256k1.lib.secp256k1_ecdsa_signature_parse_der(
+            secp256k1.ctx.verify, raw_sig, sig, len(sig))
 
         if result != 1:
             assert result == 0
             return False
 
-        _secp256k1.secp256k1_ecdsa_signature_normalize(
-            secp256k1_context_verify, raw_sig, raw_sig)
+        secp256k1.lib.secp256k1_ecdsa_signature_normalize(
+            secp256k1.ctx.verify, raw_sig, raw_sig)
 
         raw_pub = self._to_ctypes_char_array()
-        result = _secp256k1.secp256k1_ecdsa_verify(
-            secp256k1_context_verify, raw_sig, hash, raw_pub)
+        result = secp256k1.lib.secp256k1_ecdsa_verify(
+            secp256k1.ctx.verify, raw_sig, hash, raw_pub)
 
         if result != 1:
             assert result == 0
@@ -635,8 +659,10 @@ class CPubKey(bytes):
         sig_size0.value = SIGNATURE_SIZE
         mb_sig = ctypes.create_string_buffer(SIGNATURE_SIZE)
 
-        result = _secp256k1.secp256k1_ecdsa_signature_serialize_der(
-            secp256k1_context_verify, mb_sig, ctypes.byref(sig_size0), raw_sig)
+        secp256k1 = get_secp256k1()
+
+        result = secp256k1.lib.secp256k1_ecdsa_signature_serialize_der(
+            secp256k1.ctx.verify, mb_sig, ctypes.byref(sig_size0), raw_sig)
         if 1 != result:
             assert result == 0
             raise RuntimeError('secp256k1_ecdsa_signature_parse_der returned failure')
@@ -667,9 +693,12 @@ class CPubKey(bytes):
         for i, p in enumerate(pubkeys):
             pubkey_arr[i] = bytes(p._to_ctypes_char_array())
 
+        secp256k1 = get_secp256k1()
+
         result_data = ctypes.create_string_buffer(64)
-        ret = _secp256k1.secp256k1_ec_pubkey_combine(
-            secp256k1_context_verify, result_data, pubkey_arr, len(pubkeys))
+        ret = secp256k1.lib.secp256k1_ec_pubkey_combine(
+            secp256k1.ctx.verify, result_data, pubkey_arr, len(pubkeys))
+
         if ret != 1:
             assert ret == 0
             raise ValueError('Combining the public keys failed')
@@ -677,7 +706,8 @@ class CPubKey(bytes):
         return cls._from_ctypes_char_array(result_data, compressed=compressed)
 
     def negated(self: T_CPubKey) -> T_CPubKey:
-        if not secp256k1_has_pubkey_negate:
+        secp256k1 = get_secp256k1()
+        if not secp256k1.cap.has_pubkey_negate:
             raise RuntimeError(
                 'secp256k1 does not export pubkey negation function. '
                 'You should use newer version of secp256k1 library')
@@ -686,10 +716,12 @@ class CPubKey(bytes):
             raise ValueError('cannot negate an invalid pubkey')
 
         pubkey_buf = self._to_ctypes_char_array()
-        ret = _secp256k1.secp256k1_ec_pubkey_negate(secp256k1_context_verify, pubkey_buf)
+        ret = secp256k1.lib.secp256k1_ec_pubkey_negate(secp256k1.ctx.verify, pubkey_buf)
+
         if 1 != ret:
             assert ret == 0
             raise RuntimeError('secp256k1_ec_pubkey_negate returned failure')
+
         return self.__class__._from_ctypes_char_array(
             pubkey_buf, compressed=self.is_compressed())
 
@@ -930,8 +962,10 @@ class CExtKeyBase(CExtKeyCommonBase):
 
         child_privkey = ctypes.create_string_buffer(self.priv.secret_bytes, size=32)
 
-        result = _secp256k1.secp256k1_ec_privkey_tweak_add(
-            secp256k1_context_sign, child_privkey, bip32_hash[:32])
+        secp256k1 = get_secp256k1()
+
+        result = secp256k1.lib.secp256k1_ec_privkey_tweak_add(
+            secp256k1.ctx.sign, child_privkey, bip32_hash[:32])
 
         if result != 1:
             assert result == 0
@@ -1003,8 +1037,10 @@ class CExtPubKeyBase(CExtKeyCommonBase):
 
         raw_pub = self.pub._to_ctypes_char_array()
 
-        result = _secp256k1.secp256k1_ec_pubkey_tweak_add(
-            secp256k1_context_verify, raw_pub, bip32_hash[:32])
+        secp256k1 = get_secp256k1()
+
+        result = secp256k1.lib.secp256k1_ec_pubkey_tweak_add(
+            secp256k1.ctx.verify, raw_pub, bip32_hash[:32])
 
         if result != 1:
             assert result == 0
@@ -1014,8 +1050,8 @@ class CExtPubKeyBase(CExtKeyCommonBase):
         child_pubkey_size0.value = COMPRESSED_PUBLIC_KEY_SIZE
         child_pubkey = ctypes.create_string_buffer(child_pubkey_size0.value)
 
-        result = _secp256k1.secp256k1_ec_pubkey_serialize(
-            secp256k1_context_verify, child_pubkey, ctypes.byref(child_pubkey_size0), raw_pub,
+        result = secp256k1.lib.secp256k1_ec_pubkey_serialize(
+            secp256k1.ctx.verify, child_pubkey, ctypes.byref(child_pubkey_size0), raw_pub,
             SECP256K1_EC_COMPRESSED)
 
         if 1 != result:
@@ -1980,7 +2016,8 @@ class XOnlyPubKey(bytes):
     def __new__(cls: Type[T_XOnlyPubKey],
                 keydata: Union[bytes, CPubKey] = b'') -> T_XOnlyPubKey:
 
-        if not secp256k1_has_xonly_pubkeys:
+        secp256k1 = get_secp256k1()
+        if not secp256k1.cap.has_xonly_pubkeys:
             raise RuntimeError(
                 _module_unavailable_error('x-only pubkey', 'extrakeys'))
 
@@ -2003,8 +2040,8 @@ class XOnlyPubKey(bytes):
 
         if self.is_nonempty():
             tmpbuf = ctypes.create_string_buffer(64)
-            result = _secp256k1.secp256k1_xonly_pubkey_parse(
-                secp256k1_context_verify, tmpbuf, self)
+            result = secp256k1.lib.secp256k1_xonly_pubkey_parse(
+                secp256k1.ctx.verify, tmpbuf, self)
             assert result in (1, 0)
             self.__fullyvalid = (result == 1)
 
@@ -2023,7 +2060,8 @@ class XOnlyPubKey(bytes):
         return len(self) == 0
 
     def verify_schnorr(self, hash: bytes, sigbytes: bytes) -> bool:
-        if not secp256k1_has_schnorrsig:
+        secp256k1 = get_secp256k1()
+        if not secp256k1.cap.has_schnorrsig:
             raise RuntimeError(
                 _module_unavailable_error('schnorr signature', 'schnorrsig'))
 
@@ -2042,8 +2080,8 @@ class XOnlyPubKey(bytes):
         if len(sigbytes) != 64:
             raise ValueError('Signature must be exactly 64 bytes long')
 
-        result = _secp256k1.secp256k1_schnorrsig_verify(
-            secp256k1_context_verify,
+        result = secp256k1.lib.secp256k1_schnorrsig_verify(
+            secp256k1.ctx.verify,
             sigbytes, hash, 32, self._to_ctypes_char_array()
         )
 
@@ -2055,12 +2093,15 @@ class XOnlyPubKey(bytes):
 
     def _to_ctypes_char_array(self) -> 'ctypes.Array[ctypes.c_char]':
         assert self.is_fullyvalid()
+        secp256k1 = get_secp256k1()
         raw_pub = ctypes.create_string_buffer(64)
-        result = _secp256k1.secp256k1_xonly_pubkey_parse(
-            secp256k1_context_verify, raw_pub, self)
+        result = secp256k1.lib.secp256k1_xonly_pubkey_parse(
+            secp256k1.ctx.verify, raw_pub, self)
+
         if 1 != result:
             assert result == 0
             raise RuntimeError('secp256k1_xonly_pubkey_parse returned failure')
+
         return raw_pub
 
     def __str__(self) -> str:
@@ -2098,8 +2139,10 @@ def check_tap_tweak(tweaked_pub: XOnlyPubKey, internal_pub: XOnlyPubKey,
 
     tweak = compute_tap_tweak_hash(internal_pub, merkle_root=merkle_root)
 
-    result = _secp256k1.secp256k1_xonly_pubkey_tweak_add_check(
-        secp256k1_context_verify, tweaked_pub, int(bool(parity)),
+    secp256k1 = get_secp256k1()
+
+    result = secp256k1.lib.secp256k1_xonly_pubkey_tweak_add_check(
+        secp256k1.ctx.verify, tweaked_pub, int(bool(parity)),
         internal_pub._to_ctypes_char_array(), tweak)
 
     if result != 1:
@@ -2123,8 +2166,10 @@ def tap_tweak_pubkey(pub: XOnlyPubKey, *, merkle_root: bytes = b'',
     tweak = compute_tap_tweak_hash(pub, merkle_root=merkle_root)
     out = ctypes.create_string_buffer(64)
 
-    result = _secp256k1.secp256k1_xonly_pubkey_tweak_add(
-        secp256k1_context_verify, out, base_point, tweak)
+    secp256k1 = get_secp256k1()
+
+    result = secp256k1.lib.secp256k1_xonly_pubkey_tweak_add(
+        secp256k1.ctx.verify, out, base_point, tweak)
 
     if result != 1:
         assert result == 0
@@ -2135,8 +2180,8 @@ def tap_tweak_pubkey(pub: XOnlyPubKey, *, merkle_root: bytes = b'',
     parity_ret = ctypes.c_int()
     parity_ret.value = -1
 
-    result = _secp256k1.secp256k1_xonly_pubkey_from_pubkey(
-        secp256k1_context_verify, out_xonly, ctypes.byref(parity_ret),
+    result = secp256k1.lib.secp256k1_xonly_pubkey_from_pubkey(
+        secp256k1.ctx.verify, out_xonly, ctypes.byref(parity_ret),
         out)
 
     if result != 1:
@@ -2148,8 +2193,8 @@ def tap_tweak_pubkey(pub: XOnlyPubKey, *, merkle_root: bytes = b'',
 
     out_xonly_serialized = ctypes.create_string_buffer(32)
 
-    result = _secp256k1.secp256k1_xonly_pubkey_serialize(
-        secp256k1_context_verify, out_xonly_serialized, out_xonly)
+    result = secp256k1.lib.secp256k1_xonly_pubkey_serialize(
+        secp256k1.ctx.verify, out_xonly_serialized, out_xonly)
     assert result == 1
 
     return XOnlyPubKey(out_xonly_serialized.raw), parity

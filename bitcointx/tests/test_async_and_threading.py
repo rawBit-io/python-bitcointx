@@ -27,7 +27,7 @@ from bitcointx.core import x, Hash160, CTransaction
 from bitcointx.core.key import CPubKey
 from bitcointx.core.script import CScript
 from bitcointx.core.secp256k1 import (
-    _secp256k1, secp256k1_get_last_error, secp256k1_context_verify
+    secp256k1_get_last_error, get_secp256k1
 )
 from bitcointx.wallet import (
     P2PKHCoinAddress, P2SHCoinAddress, P2WPKHCoinAddress,
@@ -73,9 +73,11 @@ class Test_Threading(unittest.TestCase):
             # check that mutable/immutable thread-local context works
             CTransaction().to_mutable().to_immutable()
 
+            secp256k1 = get_secp256k1()
+
             # check secp256k1 error handling (which uses thread-local storage)
-            _secp256k1.secp256k1_ec_pubkey_tweak_add(
-                secp256k1_context_verify,
+            secp256k1.lib.secp256k1_ec_pubkey_tweak_add(
+                secp256k1.ctx.verify,
                 ctypes.c_char_p(0), ctypes.c_char_p(0))
             err = secp256k1_get_last_error()
             assert err['code'] == -2
