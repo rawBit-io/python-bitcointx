@@ -1320,6 +1320,7 @@ __all__ = (
     'script_verify_flags_to_string',
 )
 
+# 2 new functions for step by step script execution
 
 def _EvalScriptWithTrace(
     stack: List[bytes], 
