@@ -1321,6 +1321,8 @@ __all__ = (
 )
 
 # 2 new functions for step by step script execution
+# Add these two functions to bitcointx/core/scripteval.py
+# Make sure they appear after all the necessary imports and existing functions
 
 def _EvalScriptWithTrace(
     stack: List[bytes], 
@@ -1382,362 +1384,388 @@ def _EvalScriptWithTrace(
         # Capture the stack BEFORE execution
         stack_before = [x.hex() for x in stack]
 
-        # opcode logic proceeds exactly as in the original _EvalScript:
-
-        if sop in DISABLED_OPCODES:
-            raise EvalScriptError(
-                f'opcode {_opcode_name(sop)} is disabled',
-                get_eval_state()
-            )
-
-        if sop > OP_16:
-            nOpCount[0] += 1
-            if nOpCount[0] > MAX_SCRIPT_OPCODES:
-                raise MaxOpCountError(get_eval_state())
-
-        if sop <= OP_PUSHDATA4:
-            assert sop_data is not None
-            if len(sop_data) > MAX_SCRIPT_ELEMENT_SIZE:
+        try:
+            # opcode logic proceeds exactly as in the original _EvalScript:
+            if sop in DISABLED_OPCODES:
                 raise EvalScriptError(
-                    (f'PUSHDATA of length {len(sop_data)}; '
-                     f'maximum allowed is {MAX_SCRIPT_ELEMENT_SIZE}'),
+                    f'opcode {_opcode_name(sop)} is disabled',
                     get_eval_state()
                 )
 
-            if fExec:
-                stack.append(sop_data)
+            if sop > OP_16:
+                nOpCount[0] += 1
+                if nOpCount[0] > MAX_SCRIPT_OPCODES:
+                    raise MaxOpCountError(get_eval_state())
 
-        elif fExec or (OP_IF <= sop <= OP_ENDIF):
-            # The big if/elif block from original _EvalScript, e.g. OP_1NEGATE, OP_1..16, OP_DUP, etc.
-            # We'll rely on the same logic from the original code, copying it line by line:
+            if sop <= OP_PUSHDATA4:
+                assert sop_data is not None
+                if len(sop_data) > MAX_SCRIPT_ELEMENT_SIZE:
+                    raise EvalScriptError(
+                        (f'PUSHDATA of length {len(sop_data)}; '
+                         f'maximum allowed is {MAX_SCRIPT_ELEMENT_SIZE}'),
+                        get_eval_state()
+                    )
 
-            if sop == OP_1NEGATE or ((sop >= OP_1) and (sop <= OP_16)):
-                v_int = sop - (OP_1 - 1)
-                stack.append(bitcointx.core._bignum.bn2vch(v_int))
-
-            elif sop in _ISA_BINOP:
-                _BinOp(sop, stack, get_eval_state)
-
-            elif sop in _ISA_UNOP:
-                _UnaryOp(sop, stack, get_eval_state)
-
-            elif sop == OP_2DROP:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                stack.pop()
-                stack.pop()
-
-            elif sop == OP_2DUP:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                v1 = stack[-2]
-                v2 = stack[-1]
-                stack.append(v1)
-                stack.append(v2)
-
-            elif sop == OP_2OVER:
-                if len(stack) < 4:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=4)
-                v1 = stack[-4]
-                v2 = stack[-3]
-                stack.append(v1)
-                stack.append(v2)
-
-            elif sop == OP_2ROT:
-                if len(stack) < 6:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=6)
-                v1 = stack[-6]
-                v2 = stack[-5]
-                del stack[-6]
-                del stack[-5]
-                stack.append(v1)
-                stack.append(v2)
-
-            elif sop == OP_2SWAP:
-                if len(stack) < 4:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=4)
-                tmp = stack[-4]
-                stack[-4] = stack[-2]
-                stack[-2] = tmp
-
-                tmp = stack[-3]
-                stack[-3] = stack[-1]
-                stack[-1] = tmp
-
-            elif sop == OP_3DUP:
-                if len(stack) < 3:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=3)
-                v1 = stack[-3]
-                v2 = stack[-2]
-                v3 = stack[-1]
-                stack.append(v1)
-                stack.append(v2)
-                stack.append(v3)
-
-            elif sop == OP_CHECKMULTISIG or sop == OP_CHECKMULTISIGVERIFY:
-                tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
-                _CheckMultiSig(
-                    sop, tmpScript, stack, txTo, inIdx, flags,
-                    get_eval_state, nOpCount, amount=amount, sigversion=sigversion
-                )
-
-            elif sop == OP_CHECKSIG or sop == OP_CHECKSIGVERIFY:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                vchPubKey = stack[-1]
-                vchSig = stack[-2]
-
-                tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
-
-                if sigversion == SIGVERSION_BASE:
-                    tmpScript = FindAndDelete(tmpScript, scriptIn.__class__([vchSig]))
-
-                ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
-                               amount=amount, sigversion=sigversion)
-                if not ok and SCRIPT_VERIFY_NULLFAIL in flags and len(vchSig):
-                    raise VerifyScriptError("signature check failed, and signature is not empty")
-                if not ok and sop == OP_CHECKSIGVERIFY:
-                    raise VerifyOpFailedError(get_eval_state())
-                else:
-                    stack.pop()
-                    stack.pop()
-                    if ok:
-                        if sop != OP_CHECKSIGVERIFY:
-                            stack.append(b"\x01")
-                    else:
-                        stack.append(b"\x00")
-
-            elif sop == OP_CODESEPARATOR:
-                pbegincodehash = sop_pc
-
-            elif sop == OP_DEPTH:
-                bn = len(stack)
-                stack.append(bitcointx.core._bignum.bn2vch(bn))
-
-            elif sop == OP_DROP:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                stack.pop()
-
-            elif sop == OP_DUP:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                v_bytes = stack[-1]
-                stack.append(v_bytes)
-
-            elif sop == OP_ELSE:
-                if len(vfExec) == 0:
-                    raise EvalScriptError('ELSE found without prior IF', get_eval_state())
-                vfExec[-1] = not vfExec[-1]
-
-            elif sop == OP_ENDIF:
-                if len(vfExec) == 0:
-                    raise EvalScriptError('ENDIF found without prior IF', get_eval_state())
-                vfExec.pop()
-
-            elif sop == OP_EQUAL:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                v1 = stack.pop()
-                v2 = stack.pop()
-                if v1 == v2:
-                    stack.append(b"\x01")
-                else:
-                    stack.append(b"")
-
-            elif sop == OP_EQUALVERIFY:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                v1 = stack[-1]
-                v2 = stack[-2]
-                if v1 == v2:
-                    stack.pop()
-                    stack.pop()
-                else:
-                    raise VerifyOpFailedError(get_eval_state())
-
-            elif sop == OP_FROMALTSTACK:
-                if len(altstack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                v_bytes = altstack.pop()
-                stack.append(v_bytes)
-
-            elif sop == OP_HASH160:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                stack.append(bitcointx.core.serialize.Hash160(stack.pop()))
-
-            elif sop == OP_HASH256:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                stack.append(bitcointx.core.serialize.Hash(stack.pop()))
-
-            elif sop == OP_IF or sop == OP_NOTIF:
-                val = False
                 if fExec:
+                    stack.append(sop_data)
+
+            elif fExec or (OP_IF <= sop <= OP_ENDIF):
+                # The big if/elif block from original _EvalScript
+                if sop == OP_1NEGATE or ((sop >= OP_1) and (sop <= OP_16)):
+                    v_int = sop - (OP_1 - 1)
+                    stack.append(bitcointx.core._bignum.bn2vch(v_int))
+
+                elif sop in _ISA_BINOP:
+                    _BinOp(sop, stack, get_eval_state)
+
+                elif sop in _ISA_UNOP:
+                    _UnaryOp(sop, stack, get_eval_state)
+
+                elif sop == OP_2DROP:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    stack.pop()
+                    stack.pop()
+
+                elif sop == OP_2DUP:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    v1 = stack[-2]
+                    v2 = stack[-1]
+                    stack.append(v1)
+                    stack.append(v2)
+
+                elif sop == OP_2OVER:
+                    if len(stack) < 4:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=4)
+                    v1 = stack[-4]
+                    v2 = stack[-3]
+                    stack.append(v1)
+                    stack.append(v2)
+
+                elif sop == OP_2ROT:
+                    if len(stack) < 6:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=6)
+                    v1 = stack[-6]
+                    v2 = stack[-5]
+                    del stack[-6]
+                    del stack[-5]
+                    stack.append(v1)
+                    stack.append(v2)
+
+                elif sop == OP_2SWAP:
+                    if len(stack) < 4:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=4)
+                    tmp = stack[-4]
+                    stack[-4] = stack[-2]
+                    stack[-2] = tmp
+
+                    tmp = stack[-3]
+                    stack[-3] = stack[-1]
+                    stack[-1] = tmp
+
+                elif sop == OP_3DUP:
+                    if len(stack) < 3:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=3)
+                    v1 = stack[-3]
+                    v2 = stack[-2]
+                    v3 = stack[-1]
+                    stack.append(v1)
+                    stack.append(v2)
+                    stack.append(v3)
+
+                elif sop == OP_CHECKMULTISIG or sop == OP_CHECKMULTISIGVERIFY:
+                    tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
+                    _CheckMultiSig(
+                        sop, tmpScript, stack, txTo, inIdx, flags,
+                        get_eval_state, nOpCount, amount=amount, sigversion=sigversion
+                    )
+
+                elif sop == OP_CHECKSIG or sop == OP_CHECKSIGVERIFY:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    vchPubKey = stack[-1]
+                    vchSig = stack[-2]
+
+                    tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
+
+                    if sigversion == SIGVERSION_BASE:
+                        tmpScript = FindAndDelete(tmpScript, scriptIn.__class__([vchSig]))
+
+                    ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
+                                  amount=amount, sigversion=sigversion)
+                    if not ok and SCRIPT_VERIFY_NULLFAIL in flags and len(vchSig):
+                        raise VerifyScriptError("signature check failed, and signature is not empty")
+                    if not ok and sop == OP_CHECKSIGVERIFY:
+                        raise VerifyOpFailedError(get_eval_state())
+                    else:
+                        stack.pop()
+                        stack.pop()
+                        if ok:
+                            if sop != OP_CHECKSIGVERIFY:
+                                stack.append(b"\x01")
+                        else:
+                            stack.append(b"\x00")
+
+                elif sop == OP_CODESEPARATOR:
+                    pbegincodehash = sop_pc
+
+                elif sop == OP_DEPTH:
+                    bn = len(stack)
+                    stack.append(bitcointx.core._bignum.bn2vch(bn))
+
+                elif sop == OP_DROP:
                     if len(stack) < 1:
                         raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                    vch = stack.pop()
-                    if sigversion == SIGVERSION_WITNESS_V0 and SCRIPT_VERIFY_MINIMALIF in flags:
-                        if len(vch) > 1:
-                            raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
-                        if len(vch) == 1 and vch[0] != 1:
-                            raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
-                    val = _CastToBool(vch)
-                    if sop == OP_NOTIF:
-                        val = not val
-                vfExec.append(val)
+                    stack.pop()
 
-            elif sop == OP_IFDUP:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                vch = stack[-1]
-                if _CastToBool(vch):
-                    stack.append(vch)
+                elif sop == OP_DUP:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    v_bytes = stack[-1]
+                    stack.append(v_bytes)
 
-            elif sop == OP_NIP:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                del stack[-2]
+                elif sop == OP_ELSE:
+                    if len(vfExec) == 0:
+                        raise EvalScriptError('ELSE found without prior IF', get_eval_state())
+                    vfExec[-1] = not vfExec[-1]
 
-            elif sop == OP_NOP:
-                pass
+                elif sop == OP_ENDIF:
+                    if len(vfExec) == 0:
+                        raise EvalScriptError('ENDIF found without prior IF', get_eval_state())
+                    vfExec.pop()
 
-            elif sop >= OP_NOP1 and sop <= OP_NOP10:
-                if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
-                    raise EvalScriptError(
-                        (f"{_opcode_name(sop)} reserved for soft-fork upgrades"),
-                        get_eval_state()
-                    )
-                else:
+                elif sop == OP_EQUAL:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    v1 = stack.pop()
+                    v2 = stack.pop()
+                    if v1 == v2:
+                        stack.append(b"\x01")
+                    else:
+                        stack.append(b"")
+
+                elif sop == OP_EQUALVERIFY:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    v1 = stack[-1]
+                    v2 = stack[-2]
+                    if v1 == v2:
+                        stack.pop()
+                        stack.pop()
+                    else:
+                        raise VerifyOpFailedError(get_eval_state())
+
+                elif sop == OP_FROMALTSTACK:
+                    if len(altstack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    v_bytes = altstack.pop()
+                    stack.append(v_bytes)
+
+                elif sop == OP_HASH160:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    stack.append(bitcointx.core.serialize.Hash160(stack.pop()))
+
+                elif sop == OP_HASH256:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    stack.append(bitcointx.core.serialize.Hash(stack.pop()))
+
+                elif sop == OP_IF or sop == OP_NOTIF:
+                    val = False
+                    if fExec:
+                        if len(stack) < 1:
+                            raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                        vch = stack.pop()
+                        if sigversion == SIGVERSION_WITNESS_V0 and SCRIPT_VERIFY_MINIMALIF in flags:
+                            if len(vch) > 1:
+                                raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
+                            if len(vch) == 1 and vch[0] != 1:
+                                raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
+                        val = _CastToBool(vch)
+                        if sop == OP_NOTIF:
+                            val = not val
+                    vfExec.append(val)
+
+                elif sop == OP_IFDUP:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    vch = stack[-1]
+                    if _CastToBool(vch):
+                        stack.append(vch)
+
+                elif sop == OP_NIP:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    del stack[-2]
+
+                elif sop == OP_NOP:
                     pass
 
-            elif sop == OP_OVER:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                vch = stack[-2]
-                stack.append(vch)
+                elif sop >= OP_NOP1 and sop <= OP_NOP10:
+                    if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
+                        raise EvalScriptError(
+                            (f"{_opcode_name(sop)} reserved for soft-fork upgrades"),
+                            get_eval_state()
+                        )
+                    else:
+                        pass
 
-            elif sop == OP_PICK or sop == OP_ROLL:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                n = _CastToBigNum(stack.pop(), get_eval_state)
-                if n < 0 or n >= len(stack):
+                elif sop == OP_OVER:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    vch = stack[-2]
+                    stack.append(vch)
+
+                elif sop == OP_PICK or sop == OP_ROLL:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    n = _CastToBigNum(stack.pop(), get_eval_state)
+                    if n < 0 or n >= len(stack):
+                        raise EvalScriptError(
+                            f"Argument for {_opcode_name(sop)} out of bounds",
+                            get_eval_state()
+                        )
+                    vch = stack[-n-1]
+                    if sop == OP_ROLL:
+                        del stack[-n-1]
+                    stack.append(vch)
+
+                elif sop == OP_RETURN:
+                    raise EvalScriptError("OP_RETURN called", get_eval_state())
+
+                elif sop == OP_RIPEMD160:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    stack.append(bitcointx.core._ripemd160.ripemd160(stack.pop()))
+
+                elif sop == OP_ROT:
+                    if len(stack) < 3:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=3)
+                    tmp = stack[-3]
+                    stack[-3] = stack[-2]
+                    stack[-2] = tmp
+                    tmp = stack[-2]
+                    stack[-2] = stack[-1]
+                    stack[-1] = tmp
+
+                elif sop == OP_SIZE:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    bn = len(stack[-1])
+                    stack.append(bitcointx.core._bignum.bn2vch(bn))
+
+                elif sop == OP_SHA1:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    stack.append(hashlib.sha1(stack.pop()).digest())
+
+                elif sop == OP_SHA256:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    stack.append(hashlib.sha256(stack.pop()).digest())
+
+                elif sop == OP_SWAP:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    tmp = stack[-2]
+                    stack[-2] = stack[-1]
+                    stack[-1] = tmp
+
+                elif sop == OP_TOALTSTACK:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    v_bytes = stack.pop()
+                    altstack.append(v_bytes)
+
+                elif sop == OP_TUCK:
+                    if len(stack) < 2:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
+                    vch = stack[-1]
+                    stack.insert(len(stack) - 2, vch)
+
+                elif sop == OP_VERIFY:
+                    if len(stack) < 1:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+                    v_bool = _CastToBool(stack[-1])
+                    if v_bool:
+                        stack.pop()
+                    else:
+                        raise VerifyOpFailedError(get_eval_state())
+
+                elif sop == OP_WITHIN:
+                    if len(stack) < 3:
+                        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=3)
+                    bn3 = _CastToBigNum(stack[-1], get_eval_state)
+                    bn2 = _CastToBigNum(stack[-2], get_eval_state)
+                    bn1 = _CastToBigNum(stack[-3], get_eval_state)
+                    stack.pop()
+                    stack.pop()
+                    stack.pop()
+                    v_bool = (bn2 <= bn1) and (bn1 < bn3)
+                    if v_bool:
+                        stack.append(b"\x01")
+                    else:
+                        stack.append(b"\x00")
+                
+                else:
                     raise EvalScriptError(
-                        f"Argument for {_opcode_name(sop)} out of bounds",
+                        f'unsupported opcode 0x{sop:02x}',
                         get_eval_state()
                     )
-                vch = stack[-n-1]
-                if sop == OP_ROLL:
-                    del stack[-n-1]
-                stack.append(vch)
 
-            elif sop == OP_RETURN:
-                raise EvalScriptError("OP_RETURN called", get_eval_state())
-
-            elif sop == OP_RIPEMD160:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                stack.append(bitcointx.core._ripemd160.ripemd160(stack.pop()))
-
-            elif sop == OP_ROT:
-                if len(stack) < 3:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=3)
-                tmp = stack[-3]
-                stack[-3] = stack[-2]
-                stack[-2] = tmp
-                tmp = stack[-2]
-                stack[-2] = stack[-1]
-                stack[-1] = tmp
-
-            elif sop == OP_SIZE:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                bn = len(stack[-1])
-                stack.append(bitcointx.core._bignum.bn2vch(bn))
-
-            elif sop == OP_SHA1:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                stack.append(hashlib.sha1(stack.pop()).digest())
-
-            elif sop == OP_SHA256:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                stack.append(hashlib.sha256(stack.pop()).digest())
-
-            elif sop == OP_SWAP:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                tmp = stack[-2]
-                stack[-2] = stack[-1]
-                stack[-1] = tmp
-
-            elif sop == OP_TOALTSTACK:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                v_bytes = stack.pop()
-                altstack.append(v_bytes)
-
-            elif sop == OP_TUCK:
-                if len(stack) < 2:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
-                vch = stack[-1]
-                stack.insert(len(stack) - 2, vch)
-
-            elif sop == OP_VERIFY:
-                if len(stack) < 1:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
-                v_bool = _CastToBool(stack[-1])
-                if v_bool:
-                    stack.pop()
-                else:
-                    raise VerifyOpFailedError(get_eval_state())
-
-            elif sop == OP_WITHIN:
-                if len(stack) < 3:
-                    raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=3)
-                bn3 = _CastToBigNum(stack[-1], get_eval_state)
-                bn2 = _CastToBigNum(stack[-2], get_eval_state)
-                bn1 = _CastToBigNum(stack[-3], get_eval_state)
-                stack.pop()
-                stack.pop()
-                stack.pop()
-                v_bool = (bn2 <= bn1) and (bn1 < bn3)
-                if v_bool:
-                    stack.append(b"\x01")
-                else:
-                    stack.append(b"\x00")
-            else:
+            if len(stack) + len(altstack) > MAX_STACK_ITEMS:
                 raise EvalScriptError(
-                    f'unsupported opcode 0x{sop:02x}',
+                    'max stack items limit reached',
                     get_eval_state()
                 )
 
-        if len(stack) + len(altstack) > MAX_STACK_ITEMS:
-            raise EvalScriptError(
-                'max stack items limit reached',
-                get_eval_state()
-            )
+            # Capture the stack AFTER successful execution
+            stack_after = [x.hex() for x in stack]
 
-        # Capture the stack AFTER execution
-        stack_after = [x.hex() for x in stack]
+            steps.append({
+                'pc': sop_pc,
+                'opcode': int(sop),
+                'opcode_name': _opcode_name(sop),
+                'stack_before': stack_before,
+                'stack_after': stack_after
+            })
 
-        steps.append({
-            'pc': sop_pc,
-            'opcode': int(sop),
-            'opcode_name': _opcode_name(sop),
-            'stack_before': stack_before,
-            'stack_after': stack_after
-        })
+        except Exception as e:
+            # Capture the stack at the point of failure
+            stack_after = [x.hex() for x in stack]
+            
+            # Record the failing step
+            steps.append({
+                'pc': sop_pc,
+                'opcode': int(sop),
+                'opcode_name': _opcode_name(sop),
+                'stack_before': stack_before,
+                'stack_after': stack_after,
+                'failed': True,
+                'error': str(e)
+            })
+            
+            # Create a custom exception with the steps attached
+            if isinstance(e, EvalScriptError):
+                e.steps = steps  # Attach steps to the exception
+            else:
+                # Wrap non-EvalScriptError exceptions
+                script_error = EvalScriptError(str(e), get_eval_state())
+                script_error.steps = steps
+                e = script_error
+            raise e
 
     # Unterminated IF/NOTIF/ELSE block
     if len(vfExec):
-        raise EvalScriptError(
+        error = EvalScriptError(
             'Unterminated IF/ELSE block',
             ScriptEvalState(stack=stack, scriptIn=scriptIn,
                             txTo=txTo, inIdx=inIdx, flags=flags)
         )
+        error.steps = steps  # Attach steps to the exception
+        raise error
 
     return steps
 
@@ -1751,123 +1779,153 @@ def VerifyScriptWithTrace(
                           Set[ScriptVerifyFlag_Type]]] = None,
     amount: int = 0,
     witness: Optional[CScriptWitness] = None
-) -> Tuple[bool, List[dict]]:
+) -> Tuple[bool, List[dict], Optional[str]]:
     """
-    A new version of VerifyScript that returns (result_bool, steps_all).
-    'steps_all' is a list of dicts from both scriptSig and scriptPubKey
-    execution. Each dict has keys:
+    A version of VerifyScript that returns (result_bool, steps_all, error_message).
+    - result_bool: True if script verification passed, False if it failed
+    - steps_all: a list of dicts from both scriptSig and scriptPubKey execution
+    - error_message: None if successful, or the error message string if failed
+    
+    Each step dict has keys:
         ['pc', 'opcode', 'opcode_name', 'stack_before', 'stack_after']
-
-    If script fails, we raise VerifyScriptError (just like original).
     """
-    ensure_isinstance(scriptSig, CScript, 'scriptSig')
-    if not type(scriptSig) == type(scriptPubKey):
-        raise TypeError("scriptSig and scriptPubKey must be the same script class")
-
-    script_class = scriptSig.__class__
-
-    if flags is None:
-        flags = STANDARD_SCRIPT_VERIFY_FLAGS - UNHANDLED_SCRIPT_VERIFY_FLAGS
-    else:
-        flags = set(flags)  # might be passed as tuple
-
-    if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
-        raise VerifyScriptError(
-            "some flags cannot be handled by current code: {}"
-            .format(script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS))
-        )
-
-    stack: List[bytes] = []
-    steps_all = []  # store final combined steps
-
-    # 1) Evaluate scriptSig with trace
+    steps_all = []  # store all steps
+    error_msg = None
+    
     try:
-        steps_sig = _EvalScriptWithTrace(stack, scriptSig, txTo, inIdx, flags=flags, amount=amount)
-        steps_all.extend(steps_sig)
-    except EvalScriptError as e:
-        # collect partial steps up to point of failure, then re-raise
-        raise VerifyScriptError(str(e))
+        ensure_isinstance(scriptSig, CScript, 'scriptSig')
+        if not type(scriptSig) == type(scriptPubKey):
+            raise TypeError("scriptSig and scriptPubKey must be the same script class")
 
-    # 2) If P2SH is set, copy the stack for potential re-use
-    if SCRIPT_VERIFY_P2SH in flags:
-        stackCopy = list(stack)
+        script_class = scriptSig.__class__
 
-    # 3) Evaluate scriptPubKey with trace
-    try:
-        steps_pub = _EvalScriptWithTrace(stack, scriptPubKey, txTo, inIdx, flags=flags, amount=amount)
-        steps_all.extend(steps_pub)
-    except EvalScriptError as e:
-        raise VerifyScriptError(str(e))
+        if flags is None:
+            flags = STANDARD_SCRIPT_VERIFY_FLAGS - UNHANDLED_SCRIPT_VERIFY_FLAGS
+        else:
+            flags = set(flags)  # might be passed as tuple
 
-    if len(stack) == 0:
-        raise VerifyScriptError("scriptPubKey left an empty stack")
-    if not _CastToBool(stack[-1]):
-        raise VerifyScriptError("scriptPubKey returned false")
+        if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
+            unhandled = script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)
+            raise VerifyScriptError(f"some flags cannot be handled by current code: {unhandled}")
 
-    hadWitness = False
-    if witness is None:
-        witness = CScriptWitness([])
+        stack: List[bytes] = []
 
-    if SCRIPT_VERIFY_WITNESS in flags and scriptPubKey.is_witness_scriptpubkey():
-        hadWitness = True
-        if scriptSig:
-            raise VerifyScriptError("scriptSig is not empty")
-
-        VerifyWitnessProgram(witness,
-                             scriptPubKey.witness_version(),
-                             scriptPubKey.witness_program(),
-                             txTo, inIdx, flags=flags, amount=amount,
-                             script_class=script_class)
-        stack = stack[:1]  # bypass the cleanstack check
-
-    # P2SH check
-    if SCRIPT_VERIFY_P2SH in flags and scriptPubKey.is_p2sh():
-        if not scriptSig.is_push_only():
-            raise VerifyScriptError("P2SH scriptSig is not pushonly")
-
-        # restore stack
-        stack = stackCopy
-        if len(stack) == 0:
-            raise VerifyScriptError("P2SH redeemScript empty stack?")
-
-        pubKey2 = script_class(stack.pop())
+        # 1) Evaluate scriptSig with trace
         try:
-            # Evaluate the redeemScript
-            steps_redeem = _EvalScriptWithTrace(stack, pubKey2, txTo, inIdx, flags=flags, amount=amount)
-            steps_all.extend(steps_redeem)
+            steps_sig = _EvalScriptWithTrace(stack, scriptSig, txTo, inIdx, flags=flags, amount=amount)
+            steps_all.extend(steps_sig)
         except EvalScriptError as e:
-            raise VerifyScriptError(str(e))
+            # Collect steps up to failure if available
+            if hasattr(e, 'steps'):
+                steps_all.extend(e.steps)
+            return False, steps_all, f"EvalScript in scriptSig: {str(e)}"
 
+        # 2) If P2SH is set, copy the stack for potential re-use
+        if SCRIPT_VERIFY_P2SH in flags:
+            stackCopy = list(stack)
+
+        # 3) Evaluate scriptPubKey with trace
+        try:
+            steps_pub = _EvalScriptWithTrace(stack, scriptPubKey, txTo, inIdx, flags=flags, amount=amount)
+            steps_all.extend(steps_pub)
+        except EvalScriptError as e:
+            # Collect steps up to failure if available
+            if hasattr(e, 'steps'):
+                steps_all.extend(e.steps)
+            return False, steps_all, f"EvalScript in scriptPubKey: {str(e)}"
+
+        # Basic verification checks
         if len(stack) == 0:
-            raise VerifyScriptError("P2SH inner scriptPubKey left an empty stack")
+            return False, steps_all, "scriptPubKey left an empty stack"
         if not _CastToBool(stack[-1]):
-            raise VerifyScriptError("P2SH inner scriptPubKey returned false")
+            return False, steps_all, "scriptPubKey returned false"
 
-        # Possibly witness
-        if SCRIPT_VERIFY_WITNESS in flags and pubKey2.is_witness_scriptpubkey():
+        # Handle witness verification if needed
+        hadWitness = False
+        if witness is None:
+            witness = CScriptWitness([])
+
+        if SCRIPT_VERIFY_WITNESS in flags and scriptPubKey.is_witness_scriptpubkey():
             hadWitness = True
-            if scriptSig != script_class([pubKey2]):
-                raise VerifyScriptError("scriptSig is not exactly a single push of the redeemScript")
-            VerifyWitnessProgram(witness,
-                                 pubKey2.witness_version(),
-                                 pubKey2.witness_program(),
-                                 txTo, inIdx, flags=flags, amount=amount,
-                                 script_class=script_class)
+            if scriptSig:
+                return False, steps_all, "scriptSig is not empty"
+                
+            try:
+                VerifyWitnessProgram(witness,
+                                    scriptPubKey.witness_version(),
+                                    scriptPubKey.witness_program(),
+                                    txTo, inIdx, flags=flags, amount=amount,
+                                    script_class=script_class)
+            except Exception as e:
+                return False, steps_all, f"Witness verification failed: {str(e)}"
+                
+            # Bypass the cleanstack check
             stack = stack[:1]
 
-    if SCRIPT_VERIFY_CLEANSTACK in flags:
-        if SCRIPT_VERIFY_P2SH not in flags:
-            raise ValueError('SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH')
-        if len(stack) == 0:
-            raise VerifyScriptError("scriptPubKey left an empty stack (cleanstack)")
-        elif len(stack) != 1:
-            raise VerifyScriptError("scriptPubKey left more than one item on stack (cleanstack)")
+        # Handle P2SH verification if needed
+        if SCRIPT_VERIFY_P2SH in flags and scriptPubKey.is_p2sh():
+            if not scriptSig.is_push_only():
+                return False, steps_all, "P2SH scriptSig is not push_only()"
 
-    if SCRIPT_VERIFY_WITNESS in flags:
-        if SCRIPT_VERIFY_P2SH not in flags:
-            raise ValueError("SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH")
+            # restore stack
+            stack = stackCopy
+            if len(stack) == 0:
+                return False, steps_all, "P2SH stack empty after scriptSig"
 
-        if not hadWitness and witness:
-            raise VerifyScriptError("Unexpected witness")
+            pubKey2 = script_class(stack.pop())
+            
+            try:
+                steps_redeem = _EvalScriptWithTrace(stack, pubKey2, txTo, inIdx, flags=flags, amount=amount)
+                steps_all.extend(steps_redeem)
+            except EvalScriptError as e:
+                if hasattr(e, 'steps'):
+                    steps_all.extend(e.steps)
+                return False, steps_all, f"P2SH script evaluation failed: {str(e)}"
 
-    return (True, steps_all)
+            if len(stack) == 0:
+                return False, steps_all, "P2SH inner scriptPubKey left an empty stack"
+            if not _CastToBool(stack[-1]):
+                return False, steps_all, "P2SH inner scriptPubKey returned false"
+
+            # P2SH witness program verification
+            if SCRIPT_VERIFY_WITNESS in flags and pubKey2.is_witness_scriptpubkey():
+                hadWitness = True
+                if scriptSig != script_class([pubKey2]):
+                    return False, steps_all, "scriptSig is not exactly a single push of the redeemScript"
+                
+                try:
+                    VerifyWitnessProgram(witness,
+                                        pubKey2.witness_version(),
+                                        pubKey2.witness_program(),
+                                        txTo, inIdx, flags=flags, amount=amount,
+                                        script_class=script_class)
+                except Exception as e:
+                    return False, steps_all, f"P2SH witness verification failed: {str(e)}"
+                
+                # Bypass the cleanstack check
+                stack = stack[:1]
+
+        # CLEANSTACK verification
+        if SCRIPT_VERIFY_CLEANSTACK in flags:
+            if SCRIPT_VERIFY_P2SH not in flags:
+                return False, steps_all, "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH"
+            
+            if len(stack) == 0:
+                return False, steps_all, "scriptPubKey left an empty stack (cleanstack)"
+            elif len(stack) != 1:
+                return False, steps_all, f"scriptPubKey left {len(stack)} items on stack (cleanstack requires exactly 1)"
+
+        # WITNESS verification dependency
+        if SCRIPT_VERIFY_WITNESS in flags:
+            if SCRIPT_VERIFY_P2SH not in flags:
+                return False, steps_all, "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH"
+            
+            if not hadWitness and witness:
+                return False, steps_all, "Unexpected witness"
+
+        # If we get here, everything verified correctly
+        return True, steps_all, None
+        
+    except Exception as e:
+        # Catch any other exceptions for a clean return
+        return False, steps_all, str(e)
