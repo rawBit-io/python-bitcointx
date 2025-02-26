@@ -1321,8 +1321,7 @@ __all__ = (
 )
 
 # 2 new functions for step by step script execution
-# Add these two functions to bitcointx/core/scripteval.py
-# Make sure they appear after all the necessary imports and existing functions
+
 
 def _EvalScriptWithTrace(
     stack: List[bytes], 
@@ -1781,66 +1780,95 @@ def VerifyScriptWithTrace(
     witness: Optional[CScriptWitness] = None
 ) -> Tuple[bool, List[dict], Optional[str]]:
     """
-    A version of VerifyScript that returns (result_bool, steps_all, error_message).
-    - result_bool: True if script verification passed, False if it failed
-    - steps_all: a list of dicts from both scriptSig and scriptPubKey execution
-    - error_message: None if successful, or the error message string if failed
-    
-    Each step dict has keys:
-        ['pc', 'opcode', 'opcode_name', 'stack_before', 'stack_after']
+    Returns: (is_valid, steps, error_message)
+      - is_valid: True if script is valid, else False
+      - steps: a list of dicts from _EvalScriptWithTrace for scriptSig + scriptPubKey
+      - error_message: None if valid, or string if invalid
+
+    If the final stack fails for 'top=0', 'stack empty', or 'cleanstack' violation,
+    we *retroactively* mark the last real opcode step as failed with an 'error' field,
+    rather than adding a new step. That way, your front-end sees the final step #6 or #7
+    as 'failed: true' without introducing step #8.
     """
-    steps_all = []  # store all steps
+
+    steps_all = []
     error_msg = None
-    
+
+    def _tag_last_step_as_failed(steps: List[dict], msg: str):
+        """
+        Retroactively mark the last real opcode step as `failed: true`
+        and set its 'error' to `msg`, if steps is not empty.
+        """
+        if steps:
+            steps[-1]["failed"] = True
+            steps[-1]["error"] = msg
+
     try:
         ensure_isinstance(scriptSig, CScript, 'scriptSig')
-        if not type(scriptSig) == type(scriptPubKey):
+        if not isinstance(scriptPubKey, CScript):
+            raise TypeError("scriptPubKey must be a CScript")
+
+        if type(scriptSig) != type(scriptPubKey):
             raise TypeError("scriptSig and scriptPubKey must be the same script class")
 
         script_class = scriptSig.__class__
 
+        # Convert flags to a set if needed
         if flags is None:
             flags = STANDARD_SCRIPT_VERIFY_FLAGS - UNHANDLED_SCRIPT_VERIFY_FLAGS
         else:
-            flags = set(flags)  # might be passed as tuple
+            flags = set(flags)
 
+        # Disallow any flags we cannot handle
         if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
-            unhandled = script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)
-            raise VerifyScriptError(f"some flags cannot be handled by current code: {unhandled}")
+            unhandled_str = script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)
+            raise VerifyScriptError(f"some flags cannot be handled: {unhandled_str}")
 
+        # Main stack
         stack: List[bytes] = []
 
+        # ----------------------------------------------------------------
         # 1) Evaluate scriptSig with trace
+        # ----------------------------------------------------------------
         try:
             steps_sig = _EvalScriptWithTrace(stack, scriptSig, txTo, inIdx, flags=flags, amount=amount)
             steps_all.extend(steps_sig)
         except EvalScriptError as e:
-            # Collect steps up to failure if available
             if hasattr(e, 'steps'):
                 steps_all.extend(e.steps)
-            return False, steps_all, f"EvalScript in scriptSig: {str(e)}"
+            return False, steps_all, str(e)
 
-        # 2) If P2SH is set, copy the stack for potential re-use
+        # ----------------------------------------------------------------
+        # 2) If P2SH is set, store stack copy
+        # ----------------------------------------------------------------
         if SCRIPT_VERIFY_P2SH in flags:
             stackCopy = list(stack)
 
+        # ----------------------------------------------------------------
         # 3) Evaluate scriptPubKey with trace
+        # ----------------------------------------------------------------
         try:
             steps_pub = _EvalScriptWithTrace(stack, scriptPubKey, txTo, inIdx, flags=flags, amount=amount)
             steps_all.extend(steps_pub)
         except EvalScriptError as e:
-            # Collect steps up to failure if available
             if hasattr(e, 'steps'):
                 steps_all.extend(e.steps)
-            return False, steps_all, f"EvalScript in scriptPubKey: {str(e)}"
+            return False, steps_all, str(e)
 
-        # Basic verification checks
+        # ----------------------------------------------------------------
+        # Final checks for standard script validity
+        # ----------------------------------------------------------------
         if len(stack) == 0:
+            # Empty stack => fail
+            _tag_last_step_as_failed(steps_all, "scriptPubKey left an empty stack => script fails")
             return False, steps_all, "scriptPubKey left an empty stack"
+
         if not _CastToBool(stack[-1]):
+            # Top item is false => fail
+            _tag_last_step_as_failed(steps_all, "top of stack is false => script fails")
             return False, steps_all, "scriptPubKey returned false"
 
-        # Handle witness verification if needed
+        # Optional witness logic
         hadWitness = False
         if witness is None:
             witness = CScriptWitness([])
@@ -1848,84 +1876,96 @@ def VerifyScriptWithTrace(
         if SCRIPT_VERIFY_WITNESS in flags and scriptPubKey.is_witness_scriptpubkey():
             hadWitness = True
             if scriptSig:
-                return False, steps_all, "scriptSig is not empty"
-                
+                # Mark last step
+                _tag_last_step_as_failed(steps_all, "scriptSig must be empty for a witness program => fails")
+                return False, steps_all, "scriptSig must be empty for witness program"
             try:
-                VerifyWitnessProgram(witness,
-                                    scriptPubKey.witness_version(),
-                                    scriptPubKey.witness_program(),
-                                    txTo, inIdx, flags=flags, amount=amount,
-                                    script_class=script_class)
+                VerifyWitnessProgram(
+                    witness,
+                    scriptPubKey.witness_version(),
+                    scriptPubKey.witness_program(),
+                    txTo, inIdx, flags=flags, amount=amount,
+                    script_class=script_class
+                )
             except Exception as e:
+                # You *could* also tag last step here if you want,
+                # but normally we just return a final error
                 return False, steps_all, f"Witness verification failed: {str(e)}"
-                
-            # Bypass the cleanstack check
+            # skip CLEANSTACK check
             stack = stack[:1]
 
-        # Handle P2SH verification if needed
+        # P2SH logic
         if SCRIPT_VERIFY_P2SH in flags and scriptPubKey.is_p2sh():
             if not scriptSig.is_push_only():
+                _tag_last_step_as_failed(steps_all, "P2SH scriptSig is not push_only => fails")
                 return False, steps_all, "P2SH scriptSig is not push_only()"
 
-            # restore stack
             stack = stackCopy
             if len(stack) == 0:
+                _tag_last_step_as_failed(steps_all, "P2SH stack empty => fails")
                 return False, steps_all, "P2SH stack empty after scriptSig"
 
             pubKey2 = script_class(stack.pop())
-            
             try:
                 steps_redeem = _EvalScriptWithTrace(stack, pubKey2, txTo, inIdx, flags=flags, amount=amount)
                 steps_all.extend(steps_redeem)
             except EvalScriptError as e:
                 if hasattr(e, 'steps'):
                     steps_all.extend(e.steps)
-                return False, steps_all, f"P2SH script evaluation failed: {str(e)}"
+                return False, steps_all, str(e)
 
             if len(stack) == 0:
+                _tag_last_step_as_failed(steps_all, "P2SH inner scriptPubKey left empty stack => fails")
                 return False, steps_all, "P2SH inner scriptPubKey left an empty stack"
+
             if not _CastToBool(stack[-1]):
+                _tag_last_step_as_failed(steps_all, "P2SH inner top is false => fails")
                 return False, steps_all, "P2SH inner scriptPubKey returned false"
 
-            # P2SH witness program verification
             if SCRIPT_VERIFY_WITNESS in flags and pubKey2.is_witness_scriptpubkey():
                 hadWitness = True
                 if scriptSig != script_class([pubKey2]):
-                    return False, steps_all, "scriptSig is not exactly a single push of the redeemScript"
-                
+                    _tag_last_step_as_failed(steps_all, "scriptSig is not single push of redeemScript => fails")
+                    return False, steps_all, "scriptSig is not exactly a single push of redeemScript"
                 try:
-                    VerifyWitnessProgram(witness,
-                                        pubKey2.witness_version(),
-                                        pubKey2.witness_program(),
-                                        txTo, inIdx, flags=flags, amount=amount,
-                                        script_class=script_class)
+                    VerifyWitnessProgram(
+                        witness,
+                        pubKey2.witness_version(),
+                        pubKey2.witness_program(),
+                        txTo, inIdx, flags=flags, amount=amount,
+                        script_class=script_class
+                    )
                 except Exception as e:
                     return False, steps_all, f"P2SH witness verification failed: {str(e)}"
-                
-                # Bypass the cleanstack check
+                # skip CLEANSTACK
                 stack = stack[:1]
 
-        # CLEANSTACK verification
+        # CLEANSTACK
         if SCRIPT_VERIFY_CLEANSTACK in flags:
             if SCRIPT_VERIFY_P2SH not in flags:
+                _tag_last_step_as_failed(steps_all, "CLEANSTACK requires P2SH => fails")
                 return False, steps_all, "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH"
-            
             if len(stack) == 0:
+                _tag_last_step_as_failed(steps_all, "scriptPubKey left empty stack => fails")
                 return False, steps_all, "scriptPubKey left an empty stack (cleanstack)"
             elif len(stack) != 1:
-                return False, steps_all, f"scriptPubKey left {len(stack)} items on stack (cleanstack requires exactly 1)"
+                _tag_last_step_as_failed(steps_all, f"scriptPubKey left {len(stack)} items => fails CLEANSTACK")
+                return False, steps_all, (
+                    f"scriptPubKey left {len(stack)} items on stack (cleanstack requires exactly 1)"
+                )
 
-        # WITNESS verification dependency
+        # WITNESS requires P2SH
         if SCRIPT_VERIFY_WITNESS in flags:
             if SCRIPT_VERIFY_P2SH not in flags:
+                _tag_last_step_as_failed(steps_all, "WITNESS requires P2SH => fails")
                 return False, steps_all, "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH"
-            
             if not hadWitness and witness:
-                return False, steps_all, "Unexpected witness"
+                _tag_last_step_as_failed(steps_all, "Unexpected witness => fails")
+                return False, steps_all, "Unexpected witness data"
 
-        # If we get here, everything verified correctly
+        # If no error, success
         return True, steps_all, None
-        
+
     except Exception as e:
-        # Catch any other exceptions for a clean return
+        # For any unknown exceptions, we just return them
         return False, steps_all, str(e)
