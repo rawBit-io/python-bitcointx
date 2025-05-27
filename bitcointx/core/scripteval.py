@@ -1330,7 +1330,8 @@ def _EvalScriptWithTrace(
     inIdx: int,
     flags: Set[ScriptVerifyFlag_Type] = set(),
     amount: int = 0,
-    sigversion: SIGVERSION_Type = SIGVERSION_BASE
+    sigversion: SIGVERSION_Type = SIGVERSION_BASE,
+    phase: str = "scriptSig",          
 ) -> List[dict]:
     """
     A modified version of _EvalScript that logs each opcode execution
@@ -1728,7 +1729,8 @@ def _EvalScriptWithTrace(
                 'opcode': int(sop),
                 'opcode_name': _opcode_name(sop),
                 'stack_before': stack_before,
-                'stack_after': stack_after
+                'stack_after': stack_after,
+                'phase': phase, 
             })
 
         except Exception as e:
@@ -1831,7 +1833,7 @@ def VerifyScriptWithTrace(
         # 1) Evaluate scriptSig with trace
         # ----------------------------------------------------------------
         try:
-            steps_sig = _EvalScriptWithTrace(stack, scriptSig, txTo, inIdx, flags=flags, amount=amount)
+            steps_sig = _EvalScriptWithTrace(stack, scriptSig, txTo, inIdx, flags=flags, amount=amount, phase="scriptSig")
             steps_all.extend(steps_sig)
         except EvalScriptError as e:
             if hasattr(e, 'steps'):
@@ -1848,7 +1850,7 @@ def VerifyScriptWithTrace(
         # 3) Evaluate scriptPubKey with trace
         # ----------------------------------------------------------------
         try:
-            steps_pub = _EvalScriptWithTrace(stack, scriptPubKey, txTo, inIdx, flags=flags, amount=amount)
+            steps_pub = _EvalScriptWithTrace(stack, scriptPubKey, txTo, inIdx, flags=flags, amount=amount, phase="scriptPubKey")
             steps_all.extend(steps_pub)
         except EvalScriptError as e:
             if hasattr(e, 'steps'):
@@ -1893,6 +1895,21 @@ def VerifyScriptWithTrace(
                 return False, steps_all, f"Witness verification failed: {str(e)}"
             # skip CLEANSTACK check
             stack = stack[:1]
+            witness_script = script_class(witness.stack[-1])   # last item is the script
+            steps_wit = _EvalScriptWithTrace(
+                stack,
+                witness_script,
+                txTo,
+                inIdx,
+                flags=flags,
+                amount=amount,
+                sigversion=SIGVERSION_WITNESS_V0,
+                phase="witnessScript",
+            )
+            # expose the bytes for the outer wrapper
+            if steps_wit:
+                steps_wit[0]["script_hex"] = witness_script.hex()
+            steps_all.extend(steps_wit)
 
         # P2SH logic
         if SCRIPT_VERIFY_P2SH in flags and scriptPubKey.is_p2sh():
@@ -1907,7 +1924,12 @@ def VerifyScriptWithTrace(
 
             pubKey2 = script_class(stack.pop())
             try:
-                steps_redeem = _EvalScriptWithTrace(stack, pubKey2, txTo, inIdx, flags=flags, amount=amount)
+                steps_redeem = _EvalScriptWithTrace(
+                    stack, pubKey2, txTo, inIdx,
+                    flags=flags, amount=amount, phase="redeemScript"
+                )
+                if steps_redeem:
+                    steps_redeem[0]["script_hex"] = pubKey2.hex()
                 steps_all.extend(steps_redeem)
             except EvalScriptError as e:
                 if hasattr(e, 'steps'):
