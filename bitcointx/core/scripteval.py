@@ -33,33 +33,69 @@ import bitcointx.core._ripemd160
 from bitcointx.util import ensure_isinstance
 
 from bitcointx.core.script import (
-    CScript, OPCODE_NAMES,
-    SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
-    SIGHASH_ALL, SIGHASH_SINGLE, SIGHASH_ANYONECANPAY,
-    MAX_SCRIPT_ELEMENT_SIZE, MAX_SCRIPT_OPCODES, MAX_SCRIPT_SIZE,
-    IsLowDERSignature, FindAndDelete, DISABLED_OPCODES,
-    CScriptInvalidError, CScriptWitness, SIGVERSION_Type, CScriptOp,
+    # Script helpers & containers
+    CScript, CScriptOp, CScriptWitness, CScriptInvalidError,
+    OPCODE_NAMES, DISABLED_OPCODES,
+    FindAndDelete, IsLowDERSignature,
+    SIGVERSION_Type, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
 
-    OP_CHECKMULTISIGVERIFY, OP_CHECKMULTISIG, OP_CHECKSIG, OP_CHECKSIGVERIFY,
+    # SIGHASH flags
+    SIGHASH_ALL, SIGHASH_SINGLE, SIGHASH_ANYONECANPAY,
+
+    # Size / opcode limits
+    MAX_SCRIPT_ELEMENT_SIZE, MAX_SCRIPT_OPCODES, MAX_SCRIPT_SIZE,
+
+    # Signature opcodes
+    OP_CHECKSIG, OP_CHECKSIGVERIFY,
+    OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY,
+
+    # Arithmetic & logic
     OP_1ADD, OP_1SUB, OP_1NEGATE, OP_NEGATE, OP_ABS, OP_ADD, OP_SUB,
-    OP_BOOLAND, OP_BOOLOR, OP_NOT, OP_0NOTEQUAL, OP_EQUAL, OP_EQUALVERIFY,
-    OP_NUMEQUAL, OP_NUMEQUALVERIFY, OP_LESSTHAN, OP_LESSTHANOREQUAL,
+    OP_BOOLAND, OP_BOOLOR, OP_NOT, OP_0NOTEQUAL,
+    OP_EQUAL, OP_EQUALVERIFY,
+    OP_NUMEQUAL, OP_NUMEQUALVERIFY,
+    OP_LESSTHAN, OP_LESSTHANOREQUAL,
     OP_NUMNOTEQUAL, OP_GREATERTHAN, OP_GREATERTHANOREQUAL,
-    OP_MIN, OP_MAX, OP_PUSHDATA4,
-    OP_1, OP_16,
-    OP_IF, OP_ENDIF, OP_ELSE, OP_DROP, OP_DUP, OP_2DROP, OP_2DUP, OP_2OVER,
-    OP_2ROT, OP_2SWAP, OP_3DUP, OP_CODESEPARATOR, OP_DEPTH,
-    OP_FROMALTSTACK, OP_HASH160, OP_HASH256, OP_NOTIF, OP_IFDUP, OP_NIP,
-    OP_NOP, OP_NOP1, OP_NOP10, OP_OVER, OP_PICK, OP_ROLL, OP_RETURN,
-    OP_RIPEMD160, OP_ROT, OP_SIZE, OP_SHA1, OP_SHA256, OP_SWAP, OP_TOALTSTACK,
-    OP_TUCK, OP_VERIFY, OP_WITHIN,
+    OP_MIN, OP_MAX, OP_WITHIN,
+
+    # Constants / pushdata
+    OP_PUSHDATA4,
+    OP_0, OP_1, OP_2, OP_3, OP_4, OP_5, OP_6, OP_7, OP_8, OP_9,
+    OP_10, OP_11, OP_12, OP_13, OP_14, OP_15, OP_16,
+
+    # Flow-control
+    OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF, OP_VERIFY, OP_RETURN,
+
+    # Stack manipulation
+    OP_DROP, OP_DUP, OP_NIP, OP_OVER, OP_PICK, OP_ROLL, OP_ROT,
+    OP_SWAP, OP_TUCK,
+    OP_TOALTSTACK, OP_FROMALTSTACK, OP_DEPTH, OP_IFDUP,
+    OP_2DROP, OP_2DUP, OP_3DUP, OP_2OVER, OP_2ROT, OP_2SWAP,
+
+    # Crypto / hashing
+    OP_RIPEMD160, OP_SHA1, OP_SHA256, OP_HASH160, OP_HASH256,
+
+    # Misc / NOP family
+    OP_SIZE,
+    OP_NOP, OP_NOP1, OP_NOP2, OP_NOP3, OP_NOP4, OP_NOP5,
+    OP_NOP6, OP_NOP7, OP_NOP8, OP_NOP9, OP_NOP10,
+    OP_CODESEPARATOR,
+
+    # Lock-time & sequence
+    OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY,
 )
+
 
 T_EvalScriptError = TypeVar('T_EvalScriptError', bound='EvalScriptError')
 
 MAX_NUM_SIZE = 4
 MAX_STACK_ITEMS = 1000
 
+LOCKTIME_THRESHOLD            = 500000000      #  < → block-height, ≥ → unix time
+SEQUENCE_LOCKTIME_MASK        = 0x0000FFFF
+SEQUENCE_LOCKTIME_GRANULARITY = 9              # units of 512 s
+SEQUENCE_LOCKTIME_DISABLE_FLAG = 1 << 31      # 0x80000000
+SEQUENCE_LOCKTIME_TYPE_FLAG    = 1 << 22      # 0x00400000
 
 class ScriptVerifyFlag_Type:
     ...
@@ -89,8 +125,6 @@ _STRICT_ENCODING_FLAGS = set((SCRIPT_VERIFY_DERSIG, SCRIPT_VERIFY_LOW_S, SCRIPT_
 UNHANDLED_SCRIPT_VERIFY_FLAGS = set((
     SCRIPT_VERIFY_SIGPUSHONLY,
     SCRIPT_VERIFY_MINIMALDATA,
-    SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
-    SCRIPT_VERIFY_CHECKSEQUENCEVERIFY,
     SCRIPT_VERIFY_CONST_SCRIPTCODE,
 ))
 
@@ -1320,7 +1354,56 @@ __all__ = (
     'script_verify_flags_to_string',
 )
 
-# 2 new functions for step by step script execution
+# 4 new functions for step by step script execution
+# ----------------------------------------------------------------------
+
+
+
+def _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state):
+    """BIP-65  –  OP_CHECKLOCKTIMEVERIFY"""
+    if len(stack) < 1:
+        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+
+    nLockTime = _CastToBigNum(stack[-1], get_eval_state)
+    if nLockTime < 0:
+        raise EvalScriptError("negative lock-time", get_eval_state())
+
+    if (nLockTime <  LOCKTIME_THRESHOLD and txTo.nLockTime >= LOCKTIME_THRESHOLD) or \
+       (nLockTime >= LOCKTIME_THRESHOLD and txTo.nLockTime <  LOCKTIME_THRESHOLD):
+        raise EvalScriptError("CLTV lock-time type mismatch", get_eval_state())
+
+    if nLockTime > txTo.nLockTime:
+        raise EvalScriptError("CLTV lock-time not satisfied", get_eval_state())
+
+    if txTo.vin[inIdx].nSequence == 0xFFFFFFFF:
+        raise EvalScriptError("CLTV input is final", get_eval_state())
+
+
+def _CheckSequenceVerify(stack, txTo, inIdx, flags, get_eval_state):
+    """BIP-112 –  OP_CHECKSEQUENCEVERIFY"""
+    if len(stack) < 1:
+        raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
+
+    nSequence = _CastToBigNum(stack[-1], get_eval_state)
+    if nSequence < 0:
+        raise EvalScriptError("negative sequence", get_eval_state())
+
+    if nSequence & SEQUENCE_LOCKTIME_DISABLE_FLAG:
+        return  # “anyone-can-spend” shortcut
+
+    txSequence = txTo.vin[inIdx].nSequence
+    if txSequence & SEQUENCE_LOCKTIME_DISABLE_FLAG:
+        raise EvalScriptError("CSV not enabled in nSequence", get_eval_state())
+
+    same_type = (nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) == \
+                (txSequence & SEQUENCE_LOCKTIME_TYPE_FLAG)
+    if not same_type:
+        raise EvalScriptError("CSV type mismatch", get_eval_state())
+
+    if (nSequence & SEQUENCE_LOCKTIME_MASK) > (txSequence & SEQUENCE_LOCKTIME_MASK):
+        raise EvalScriptError("CSV lock not yet satisfied", get_eval_state())
+
+
 
 
 def _EvalScriptWithTrace(
@@ -1603,6 +1686,31 @@ def _EvalScriptWithTrace(
                 elif sop == OP_NOP:
                     pass
 
+                
+                 # --------------------------------------------------
+                # BIP-65  OP_CHECKLOCKTIMEVERIFY
+                # --------------------------------------------------
+                elif sop == OP_CHECKLOCKTIMEVERIFY:
+                    if SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY in flags:
+                        _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state)
+                    else:
+                        if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
+                            raise EvalScriptError(
+                                f"{_opcode_name(sop)} reserved for soft-fork upgrades",
+                                get_eval_state())
+
+                # --------------------------------------------------
+                # BIP-112 OP_CHECKSEQUENCEVERIFY
+                # --------------------------------------------------
+                elif sop == OP_CHECKSEQUENCEVERIFY:
+                    if SCRIPT_VERIFY_CHECKSEQUENCEVERIFY in flags:
+                        _CheckSequenceVerify(stack, txTo, inIdx, flags, get_eval_state)
+                    else:
+                        if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
+                            raise EvalScriptError(
+                                f"{_opcode_name(sop)} reserved for soft-fork upgrades",
+                                get_eval_state())
+                        
                 elif sop >= OP_NOP1 and sop <= OP_NOP10:
                     if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
                         raise EvalScriptError(
@@ -1610,8 +1718,8 @@ def _EvalScriptWithTrace(
                             get_eval_state()
                         )
                     else:
-                        pass
-
+                        pass        
+                        
                 elif sop == OP_OVER:
                     if len(stack) < 2:
                         raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=2)
@@ -1665,6 +1773,24 @@ def _EvalScriptWithTrace(
                     if len(stack) < 1:
                         raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
                     stack.append(hashlib.sha256(stack.pop()).digest())
+
+                elif sop == OP_CHECKLOCKTIMEVERIFY:
+                    if SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY in flags:
+                        _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state)
+                    else:
+                        if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
+                            raise EvalScriptError(
+                                f"{_opcode_name(sop)} reserved for soft-fork upgrades",
+                                get_eval_state())
+
+                elif sop == OP_CHECKSEQUENCEVERIFY:
+                    if SCRIPT_VERIFY_CHECKSEQUENCEVERIFY in flags:
+                        _CheckSequenceVerify(stack, txTo, inIdx, flags, get_eval_state)
+                    else:
+                        if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
+                            raise EvalScriptError(
+                                f"{_opcode_name(sop)} reserved for soft-fork upgrades",
+                                get_eval_state())    
 
                 elif sop == OP_SWAP:
                     if len(stack) < 2:
