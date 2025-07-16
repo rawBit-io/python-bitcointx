@@ -1897,6 +1897,7 @@ def _EvalScriptWithTrace(
     return steps
 
 
+
 def VerifyScriptWithTrace(
     scriptSig: CScript,
     scriptPubKey: CScript,
@@ -1909,21 +1910,14 @@ def VerifyScriptWithTrace(
 ) -> Tuple[bool, List[dict], Optional[str]]:
     """
     Returns: (is_valid, steps, error_message)
-
-    *On every failure* we retroactively mark the **last real opcode step**
-    as `failed: true` and attach the error message so the front-end shows it
-    without adding a synthetic “step #N+1”.
     """
 
     steps_all: List[dict] = []
 
-    # --------------------------------------------------------------- #
-    # Helper: mark the final recorded step as failed                  #
-    # --------------------------------------------------------------- #
     def _tag_last_step_as_failed(steps: List[dict], msg: str) -> None:
         if steps:
             steps[-1]["failed"] = True
-            steps[-1]["error"]  = msg
+            steps[-1]["error"] = msg
 
     try:
         # ---------------- sanity checks ----------------------------
@@ -2003,29 +1997,77 @@ def VerifyScriptWithTrace(
                 _tag_last_step_as_failed(
                     steps_all, "scriptSig must be empty for witness program")
                 return False, steps_all, "scriptSig must be empty for witness program"
-            try:
-                VerifyWitnessProgram(
-                    witness,
-                    scriptPubKey.witness_version(),
-                    scriptPubKey.witness_program(),
-                    txTo, inIdx, flags=flags, amount=amount,
-                    script_class=script_class
-                )
-            except Exception as e:
-                _tag_last_step_as_failed(
-                    steps_all, f"Witness verification failed: {e}")
-                return False, steps_all, f"Witness verification failed: {e}"
-
-            # run witnessScript
-            stack = stack[:1]                       # skip cleanstack here
-            witness_script = script_class(witness.stack[-1])
-            steps_wit = _EvalScriptWithTrace(
-                stack, witness_script, txTo, inIdx,
-                flags=flags, amount=amount,
-                sigversion=SIGVERSION_WITNESS_V0, phase="witnessScript")
-            if steps_wit:
-                steps_wit[0]["script_hex"] = witness_script.hex()
-            steps_all.extend(steps_wit)
+            
+            # Manually do what VerifyWitnessProgram does, but with tracing
+            witversion = scriptPubKey.witness_version()
+            program = scriptPubKey.witness_program()
+            
+            if witversion == 0:
+                witness_stack = list(witness.stack)
+                
+                if len(program) == 32:
+                    # P2WSH - witness script hash
+                    if not witness_stack:
+                        _tag_last_step_as_failed(steps_all, "witness is empty")
+                        return False, steps_all, "witness is empty"
+                    
+                    witness_script_bytes = witness_stack.pop()
+                    witness_script = script_class(witness_script_bytes)
+                    hashScriptPubKey = hashlib.sha256(witness_script_bytes).digest()
+                    
+                    if hashScriptPubKey != program:
+                        _tag_last_step_as_failed(steps_all, "witness program mismatch")
+                        return False, steps_all, "witness program mismatch"
+                
+                elif len(program) == 20:
+                    # P2WPKH - construct the equivalent script
+                    if len(witness_stack) != 2:
+                        _tag_last_step_as_failed(steps_all, "witness program mismatch")
+                        return False, steps_all, "witness program mismatch (need 2 items for P2WPKH)"
+                    
+                    witness_script = script_class([OP_DUP, OP_HASH160, program, 
+                                                   OP_EQUALVERIFY, OP_CHECKSIG])
+                else:
+                    _tag_last_step_as_failed(steps_all, "wrong length for witness program")
+                    return False, steps_all, "wrong length for witness program"
+                
+                # Execute the witness script with tracing
+                try:
+                    steps_wit = _EvalScriptWithTrace(
+                        witness_stack, witness_script, txTo, inIdx,
+                        flags=flags, amount=amount, 
+                        sigversion=SIGVERSION_WITNESS_V0, 
+                        phase="witnessScript")
+                    
+                    # Add script hex to first step
+                    if steps_wit:
+                        steps_wit[0]["script_hex"] = witness_script.hex()
+                    
+                    steps_all.extend(steps_wit)
+                    
+                    # Check final stack state
+                    if not witness_stack:
+                        _tag_last_step_as_failed(steps_all, "witnessScript left an empty stack")
+                        return False, steps_all, "witnessScript left an empty stack"
+                    elif len(witness_stack) != 1:
+                        _tag_last_step_as_failed(steps_all, "witnessScript left extra items on stack")
+                        return False, steps_all, "witnessScript left extra items on stack"
+                    
+                    if not _CastToBool(witness_stack[-1]):
+                        _tag_last_step_as_failed(steps_all, "witnessScript returned false")
+                        return False, steps_all, "witnessScript returned false"
+                        
+                except EvalScriptError as e:
+                    if hasattr(e, "steps"):
+                        steps_all.extend(e.steps)
+                    return False, steps_all, str(e)
+                
+            elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
+                _tag_last_step_as_failed(steps_all, "upgradeable witness program is not accepted")
+                return False, steps_all, "upgradeable witness program is not accepted"
+            
+            # Skip cleanstack for witness
+            stack = stack[:1]
 
         # -----------------------------------------------------------
         # 6. P2SH
@@ -2064,6 +2106,7 @@ def VerifyScriptWithTrace(
                     steps_all, "P2SH inner top is false")
                 return False, steps_all, "P2SH inner scriptPubKey returned false"
 
+            # P2SH wrapped witness
             if SCRIPT_VERIFY_WITNESS in flags and pubKey2.is_witness_scriptpubkey():
                 hadWitness = True
                 if scriptSig != script_class([pubKey2]):
@@ -2073,18 +2116,69 @@ def VerifyScriptWithTrace(
                     return False, steps_all, (
                         "scriptSig is not exactly a single push of redeemScript"
                     )
-                try:
-                    VerifyWitnessProgram(
-                        witness,
-                        pubKey2.witness_version(),
-                        pubKey2.witness_program(),
-                        txTo, inIdx, flags=flags, amount=amount,
-                        script_class=script_class
-                    )
-                except Exception as e:
-                    _tag_last_step_as_failed(
-                        steps_all, f"P2SH witness verification failed: {e}")
-                    return False, steps_all, f"P2SH witness verification failed: {e}"
+                
+                # Similar witness handling as above but for P2SH-wrapped witness
+                witversion = pubKey2.witness_version()
+                program = pubKey2.witness_program()
+                
+                if witversion == 0:
+                    witness_stack = list(witness.stack)
+                    
+                    if len(program) == 32:
+                        # P2SH-P2WSH
+                        if not witness_stack:
+                            _tag_last_step_as_failed(steps_all, "witness is empty")
+                            return False, steps_all, "witness is empty"
+                        
+                        witness_script_bytes = witness_stack.pop()
+                        witness_script = script_class(witness_script_bytes)
+                        hashScriptPubKey = hashlib.sha256(witness_script_bytes).digest()
+                        
+                        if hashScriptPubKey != program:
+                            _tag_last_step_as_failed(steps_all, "witness program mismatch")
+                            return False, steps_all, "witness program mismatch"
+                    
+                    elif len(program) == 20:
+                        # P2SH-P2WPKH
+                        if len(witness_stack) != 2:
+                            _tag_last_step_as_failed(steps_all, "witness program mismatch")
+                            return False, steps_all, "witness program mismatch (need 2 items for P2WPKH)"
+                        
+                        witness_script = script_class([OP_DUP, OP_HASH160, program, 
+                                                       OP_EQUALVERIFY, OP_CHECKSIG])
+                    else:
+                        _tag_last_step_as_failed(steps_all, "wrong length for witness program")
+                        return False, steps_all, "wrong length for witness program"
+                    
+                    # Execute the witness script with tracing
+                    try:
+                        steps_wit = _EvalScriptWithTrace(
+                            witness_stack, witness_script, txTo, inIdx,
+                            flags=flags, amount=amount, 
+                            sigversion=SIGVERSION_WITNESS_V0, 
+                            phase="witnessScript")
+                        
+                        if steps_wit:
+                            steps_wit[0]["script_hex"] = witness_script.hex()
+                        
+                        steps_all.extend(steps_wit)
+                        
+                        if not witness_stack:
+                            _tag_last_step_as_failed(steps_all, "witnessScript left an empty stack")
+                            return False, steps_all, "witnessScript left an empty stack"
+                        elif len(witness_stack) != 1:
+                            _tag_last_step_as_failed(steps_all, "witnessScript left extra items on stack")
+                            return False, steps_all, "witnessScript left extra items on stack"
+                        
+                        if not _CastToBool(witness_stack[-1]):
+                            _tag_last_step_as_failed(steps_all, "witnessScript returned false")
+                            return False, steps_all, "witnessScript returned false"
+                            
+                    except EvalScriptError as e:
+                        if hasattr(e, "steps"):
+                            steps_all.extend(e.steps)
+                        return False, steps_all, str(e)
+                
                 stack = stack[:1]  # skip cleanstack after witnesses
 
         # -----------------------------------------------------------
