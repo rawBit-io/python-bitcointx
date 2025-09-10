@@ -1,3 +1,14 @@
+# python-bitcointx Fork for rawBit
+
+> **This is a modified fork** used by rawBit
+> **Changes:** Added script execution tracing and BIP-65/112 support. See modified [`scripteval.py`](bitcointx/core/scripteval.py).
+>
+> **Installation:** `pip install git+https://github.com/rawBit-io/python-bitcointx.git@master`
+
+---
+
+# Original python-bitcointx README
+
 [![Package version](https://img.shields.io/pypi/v/python-bitcointx.svg)](https://pypi.python.org/pypi/python-bitcointx)
 [![Package license](https://img.shields.io/pypi/l/python-bitcointx.svg)](https://pypi.python.org/pypi/python-bitcointx)
 [![Python versions](https://img.shields.io/pypi/pyversions/python-bitcointx.svg)](https://pypi.python.org/pypi/python-bitcointx)
@@ -16,17 +27,17 @@ a focus on correctness, consistency, and developer ergonomics.
 
 ## Notable differences from python-bitcoinlib
 
-* Network-related code that deals with network messages and blocks is removed.
-* Some API have changed and may be not compatible with old code (see below)
-* libsecp256k1 is used for signing and verifying.
+- Network-related code that deals with network messages and blocks is removed.
+- Some API have changed and may be not compatible with old code (see below)
+- libsecp256k1 is used for signing and verifying.
   Signing by libsecp256k1 is deterministic, per RFC6979.
-* Support for PSBT (BIP174 Partially-signed transactions)
-* HD keys support
-* Easier to build code that supports and interacts with other bitcoin-based blockchains
+- Support for PSBT (BIP174 Partially-signed transactions)
+- HD keys support
+- Easier to build code that supports and interacts with other bitcoin-based blockchains
   (see https://github.com/Simplexum/python-litecointx and https://github.com/Simplexum/python-elementstx)
-* A wrapper for `libbitcoinconsensus`'s script verification function is included
-* RPC API wrapper is 'raw' - does not convert the results of the calls to the library objects.
-* Fully type-annotated and statically checked with [mypy](https://github.com/python/mypy)
+- A wrapper for `libbitcoinconsensus`'s script verification function is included
+- RPC API wrapper is 'raw' - does not convert the results of the calls to the library objects.
+- Fully type-annotated and statically checked with [mypy](https://github.com/python/mypy)
 
 ## Note on v1.0.0 release
 
@@ -48,7 +59,8 @@ the library and v1.0.0 release in particular, and also has some code examples.
 
 Tests use the following libsecp256k1 version:
 
-[//]: # (!LIBSECP256K1_VERSION_MARKER_DO_NOT_MOVE_OR_EDIT! this marker is used by automatic tests to extract the version that is in the following line from this README.md, and use it to run tests with this specific version of libsecp256k1)
+[//]: # "!LIBSECP256K1_VERSION_MARKER_DO_NOT_MOVE_OR_EDIT! this marker is used by automatic tests to extract the version that is in the following line from this README.md, and use it to run tests with this specific version of libsecp256k1"
+
 `v0.4.0`
 
 Libsecp256k1 is not linked as a git submodule in python-bitcointx git repository, because python-bitcointx
@@ -138,19 +150,19 @@ big/little-endian hex.
 
 Note: only public API changes is listed here
 
-* `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtestAddress` directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.
-* `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`, but `btc_conf_file` kwarg renamed to just `conf_file`). If old rpc.Proxy functionality is desired, it should be implemented as a separate library.
-* `CTransaction` default version changed to 2
-* `CPubKey.is_valid`, `CPubKey.is_fullyvalid` and `CPubKey.is_compressed` should now be called as methods: `pub.is_valid()`, not `pub.is_valid`. `CPubKey.is_valid()` is also deprecated, and `CPubKey.is_nonempty()` should be used instead, to avoid possible confusion `is_valid()`/`is_fullyvalid()`.
-* `CBitcoinAddressError` is removed, `CCoinAddressError` should be used instead
-* Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet', 'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
-* `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
-* `CTxWitness` is now immutable, `CMutableTxWitness` is added.
-* If mutable components supplied to CTransaction, they will be internally converted to immutable, and vise versa with CMutableTransaction
-* string representations (returned by `repr` and `str`) of various objects will often differ from that of python-bitcoinlib's.
-* `COIN`, `MAX_MONEY`, etc. moved to `CoreCoinParams` class, that can be
-subclassed and will be dispatched similar to `CTransaction` and friends. It is recommended to use `MoneyRange()` and `coins_to_satoshi()`, `satoshi_to_coins()` functions. The two former functions will also raise ValueError if supplied/returned value is outside of MoneyRange. (unless `check_range=False` is passed)
-* `MoneyRange()` function does not accept `params=` argument anymore. To get money range for different params, you can use `with ChainParams():`.
+- `CBitcoinAddress(<testnet_or_regtest_address>)` won't work: you will need to use `CCoinAddress` (universal, the class of returned instance depends on current chain params), or `CBitcoinTestnetAddress`/`CBitcoinRegtestAddress` directly. `CBitcoinAddress` is used only for Bitcoin mainnet addresses.
+- `rpc.Proxy` removed, `rpc.RPCCaller` added (same as old `rpc.RawProxy`, but `btc_conf_file` kwarg renamed to just `conf_file`). If old rpc.Proxy functionality is desired, it should be implemented as a separate library.
+- `CTransaction` default version changed to 2
+- `CPubKey.is_valid`, `CPubKey.is_fullyvalid` and `CPubKey.is_compressed` should now be called as methods: `pub.is_valid()`, not `pub.is_valid`. `CPubKey.is_valid()` is also deprecated, and `CPubKey.is_nonempty()` should be used instead, to avoid possible confusion `is_valid()`/`is_fullyvalid()`.
+- `CBitcoinAddressError` is removed, `CCoinAddressError` should be used instead
+- Chain params for bitcoin is renamed, instead of 'mainnet', 'testnet', 'regtest' it is now 'bitcoin', 'bitcoin/testnet', 'bitcoin/mainnet'
+- `CBech32Data.from_bytes` - changed arg order, witver is now kwarg
+- `CTxWitness` is now immutable, `CMutableTxWitness` is added.
+- If mutable components supplied to CTransaction, they will be internally converted to immutable, and vise versa with CMutableTransaction
+- string representations (returned by `repr` and `str`) of various objects will often differ from that of python-bitcoinlib's.
+- `COIN`, `MAX_MONEY`, etc. moved to `CoreCoinParams` class, that can be
+  subclassed and will be dispatched similar to `CTransaction` and friends. It is recommended to use `MoneyRange()` and `coins_to_satoshi()`, `satoshi_to_coins()` functions. The two former functions will also raise ValueError if supplied/returned value is outside of MoneyRange. (unless `check_range=False` is passed)
+- `MoneyRange()` function does not accept `params=` argument anymore. To get money range for different params, you can use `with ChainParams():`.
 
 ## Note on VerifyScript() usage
 
@@ -172,9 +184,9 @@ to the code in Bitcoin Core, full compatibility is far away, and most likely
 will not be ever achieved.
 
 **WARNING**: DO NOT rely on VerifyScript() in deciding if certain signed
-transaction input is valid.  In some corner cases (non-standard signature encoding,
+transaction input is valid. In some corner cases (non-standard signature encoding,
 unhandled script evaluation flags, etc) it may deem something invalid that bitcoind
-would accept as valid.  More importanty, it could accept something as valid
+would accept as valid. More importanty, it could accept something as valid
 that bitcoind would deem invalid. `ConsensusVerifyScript()` should be suitable for
 that purpose, as it is just a thin wrapper over the C library `libbitcoinconsensus`.
 
@@ -184,7 +196,6 @@ While not always good style, it's often convenient for quick scripts if
 `import *` can be used. To support that all the modules have `__all__` defined
 appropriately.
 
-
 # Example Code
 
 See `examples/` directory. For instance this example creates a transaction
@@ -192,7 +203,6 @@ spending a pay-to-script-hash transaction output:
 
     $ PYTHONPATH=. examples/spend-pay-to-script-hash-txout.py
     <hex-encoded transaction>
-
 
 ## Selecting the chain to use
 
@@ -212,6 +222,7 @@ from bitcointx import ChainParams
 with ChainParams('bitcoin/testnet') as params:
     print(f"{params.readable_name} params ({params.name}) are in effect")
 ```
+
 will print
 
 ```
