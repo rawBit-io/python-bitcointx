@@ -93,6 +93,21 @@ def _check_ressecp256k1_void_p(val: int, _func: FunctionType,
     return ctypes.c_void_p(val)
 
 
+def _bind(lib: ctypes.CDLL, func_name: str, fallback: Optional[str] = None) -> Any:
+    """Return a callable from lib, aliasing fallback names when required."""
+    func = getattr(lib, func_name, None)
+    if func is None and fallback is not None:
+        alt = getattr(lib, fallback, None)
+        if alt is not None:
+            setattr(lib, func_name, alt)
+            func = alt
+    if func is None:
+        raise Libsecp256k1Exception(
+            -1, f"libsecp256k1 missing required symbol '{func_name}'"
+        )
+    return func
+
+
 @dataclass(frozen=True)
 class Secp256k1_Capabilities:
     has_pubkey_recovery: bool
@@ -199,7 +214,7 @@ def _add_function_definitions(lib: ctypes.CDLL) -> Secp256k1_Capabilities:
     lib.secp256k1_ec_pubkey_tweak_add.restype = ctypes.c_int
     lib.secp256k1_ec_pubkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
 
-    lib.secp256k1_ec_privkey_tweak_add.restype = ctypes.c_int
+    _bind(lib, 'secp256k1_ec_privkey_tweak_add', 'secp256k1_ec_seckey_tweak_add').restype = ctypes.c_int
     lib.secp256k1_ec_privkey_tweak_add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
 
     lib.secp256k1_ec_pubkey_serialize.restype = ctypes.c_int
