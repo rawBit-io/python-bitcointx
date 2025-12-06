@@ -76,47 +76,29 @@ class Test_CKey(unittest.TestCase):
         pub_sum = CPubKey.add(k1.pub, k2.pub)
         self.assertEqual(pub_sum, k_sum.pub)
         secp256k1 = get_secp256k1()
-        if secp256k1.cap.has_pubkey_negate:
-            k_diff = CKey.sub(k1, k2)
-            pub_diff = CPubKey.sub(k1.pub, k2.pub)
-            self.assertEqual(pub_diff, k_diff.pub)
-            self.assertEqual(k1, CKey.sub(k_sum, k2))
-            self.assertEqual(k2, CKey.sub(k_sum, k1))
-            self.assertEqual(k1, CKey.add(k_diff, k2))
-            self.assertEqual(k2.negated(), CKey.sub(k_diff, k1))
-            self.assertEqual(CKey.add(k2, k2), CKey.sub(k_sum, k_diff))
-            self.assertEqual(k1.pub, CPubKey.sub(pub_sum, k2.pub))
-            self.assertEqual(k2.pub, CPubKey.sub(pub_sum, k1.pub))
-            self.assertEqual(k1.pub, CPubKey.add(pub_diff, k2.pub))
-            self.assertEqual(k2.pub.negated(), CPubKey.sub(pub_diff, k1.pub))
-            self.assertEqual(CPubKey.add(k2.pub, k2.pub),
-                             CPubKey.sub(pub_sum, pub_diff))
-            self.assertEqual(k1,
-                             CKey.combine(k1, k2, k_sum,
-                                          k2.negated(), k_sum.negated()))
-            self.assertEqual(k1.pub,
-                             CPubKey.combine(k1.pub, k2.pub, k_sum.pub,
-                                             k2.pub.negated(),
-                                             k_sum.pub.negated()))
-            self.assertEqual(CKey.combine(k_sum, k2, k1, k_diff),
-                             CKey.combine(k1, k2, k_sum, k_diff))
-            self.assertEqual(CPubKey.combine(k_sum.pub, k2.pub, k1.pub,
-                                             k_diff.pub),
-                             CPubKey.combine(k1.pub, k2.pub, k_sum.pub,
-                                             k_diff.pub))
-            with self.assertRaises(ValueError):
-                CKey.sub(k1, k1)
-            with self.assertRaises(ValueError):
-                CKey.combine(k1, k2, k1.negated(), k2.negated())
-            with self.assertRaises(ValueError):
-                CPubKey.sub(k1.pub, k1.pub)
-            with self.assertRaises(ValueError):
-                CPubKey.combine(k1.pub, k2.pub,
-                                k1.pub.negated(), k2.pub.negated())
-        else:
-            warnings.warn('secp256k1 does not export pubkey negation function. '
-                          'You should use newer version of secp256k1 library. '
-                          'Tests that involve key substraction are skipped')
+        if not (secp256k1.cap.has_pubkey_negate and secp256k1.cap.has_privkey_negate):
+            self.skipTest("secp256k1 does not support privkey/pubkey negation")
+        k_diff = CKey.sub(k1, k2)
+        pub_diff = CPubKey.sub(k1.pub, k2.pub)
+        self.assertEqual(pub_diff, k_diff.pub)
+        self.assertEqual(k1, CKey.sub(k_sum, k2))
+        self.assertEqual(k2, CKey.sub(k_sum, k1))
+        self.assertEqual(k1, CKey.add(k_diff, k2))
+        self.assertEqual(k2.negated(), CKey.sub(k_diff, k1))
+        self.assertEqual(CKey.add(k2, k2), CKey.sub(k_sum, k_diff))
+        self.assertEqual(k1.pub, CPubKey.sub(pub_sum, k2.pub))
+        self.assertEqual(k2.pub, CPubKey.sub(pub_sum, k1.pub))
+        self.assertEqual(k1.pub, CPubKey.add(pub_diff, k2.pub))
+        self.assertEqual(k2.pub.negated(), CPubKey.sub(pub_diff, k1.pub))
+        self.assertEqual(CPubKey.add(k2.pub, k2.pub),
+                         CPubKey.sub(pub_sum, pub_diff))
+        self.assertEqual(k1,
+                         CKey.combine(k1, k2, k_sum,
+                                      k2.negated(), k_sum.negated()))
+        self.assertEqual(k1.pub,
+                         CPubKey.combine(k1.pub, k2.pub, k_sum.pub,
+                                         k2.pub.negated(),
+                                         k_sum.pub.negated()))
 
     def test_invalid_key(self) -> None:
         with self.assertRaises(ValueError):

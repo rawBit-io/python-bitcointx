@@ -1555,9 +1555,11 @@ def SignatureHashSchnorr(
             raise ValueError('tapleaf_hash must be specified for SIGVERSION_TAPSCRIPT')
         if codeseparator_pos is None:
             raise ValueError('codeseparator_pos must be specified for SIGVERSION_TAPSCRIPT')
+        if codeseparator_pos < 0:
+            codeseparator_pos = 0xFFFFFFFF
         f.write(tapleaf_hash)
         f.write(bytes([key_version]))
-        f.write(struct.pack("<i", codeseparator_pos))
+        f.write(struct.pack("<I", codeseparator_pos))
 
     return bitcointx.core.CoreCoinParams.tap_sighash_hasher(f.getvalue())
 

@@ -20,14 +20,17 @@ module.
 """
 
 import hashlib
+from io import BytesIO
 from typing import (
-    Iterable, Optional, List, Tuple, Set, Type, TypeVar, Union, Callable, TypedDict
+    Iterable, Optional, List, Tuple, Set, Sequence, Type, TypeVar, Union,
+    Callable, TypedDict
 )
 
 import bitcointx.core
 import bitcointx.core._bignum
 import bitcointx.core.key
 import bitcointx.core.serialize
+from bitcointx.core.serialize import BytesSerializer, VarIntSerializer
 import bitcointx.core._ripemd160
 
 from bitcointx.util import ensure_isinstance
@@ -37,7 +40,9 @@ from bitcointx.core.script import (
     CScript, CScriptOp, CScriptWitness, CScriptInvalidError,
     OPCODE_NAMES, DISABLED_OPCODES,
     FindAndDelete, IsLowDERSignature,
+    SignatureHashSchnorr,
     SIGVERSION_Type, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
+    SIGVERSION_TAPROOT, SIGVERSION_TAPSCRIPT,
 
     # SIGHASH flags
     SIGHASH_ALL, SIGHASH_SINGLE, SIGHASH_ANYONECANPAY,
@@ -46,7 +51,7 @@ from bitcointx.core.script import (
     MAX_SCRIPT_ELEMENT_SIZE, MAX_SCRIPT_OPCODES, MAX_SCRIPT_SIZE,
 
     # Signature opcodes
-    OP_CHECKSIG, OP_CHECKSIGVERIFY,
+    OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CHECKSIGADD,
     OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY,
 
     # Arithmetic & logic
@@ -59,7 +64,7 @@ from bitcointx.core.script import (
     OP_MIN, OP_MAX, OP_WITHIN,
 
     # Constants / pushdata
-    OP_PUSHDATA4,
+    OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4,
     OP_0, OP_1, OP_2, OP_3, OP_4, OP_5, OP_6, OP_7, OP_8, OP_9,
     OP_10, OP_11, OP_12, OP_13, OP_14, OP_15, OP_16,
 
@@ -89,6 +94,18 @@ T_EvalScriptError = TypeVar('T_EvalScriptError', bound='EvalScriptError')
 
 MAX_NUM_SIZE = 4
 MAX_STACK_ITEMS = 1000
+ANNEX_TAG = 0x50
+VALIDATION_WEIGHT_PER_SIGOP_PASSED = 50
+VALIDATION_WEIGHT_OFFSET = 50
+WITNESS_V1_TAPROOT_SIZE = 32
+TAPROOT_LEAF_MASK = 0xfe
+TAPROOT_LEAF_TAPSCRIPT = 0xc0
+TAPROOT_CONTROL_BASE_SIZE = 33
+TAPROOT_CONTROL_NODE_SIZE = 32
+TAPROOT_CONTROL_MAX_NODE_COUNT = 128
+TAPROOT_CONTROL_MAX_SIZE = (
+    TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * TAPROOT_CONTROL_MAX_NODE_COUNT
+)
 
 # --- RAWBIT PATCH START: CLTV/CSV constants ----------------------------
 # These are used by _CheckLockTimeVerify / _CheckSequenceVerify
@@ -120,13 +137,14 @@ SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = ScriptVerifyFlag_Type()
 SCRIPT_VERIFY_WITNESS_PUBKEYTYPE = ScriptVerifyFlag_Type()
 SCRIPT_VERIFY_CONST_SCRIPTCODE = ScriptVerifyFlag_Type()
 SCRIPT_VERIFY_TAPROOT = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS = ScriptVerifyFlag_Type()
+SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE = ScriptVerifyFlag_Type()
 
 _STRICT_ENCODING_FLAGS = set((SCRIPT_VERIFY_DERSIG, SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_STRICTENC))
 
 # --- RAWBIT PATCH START: we handle CLTV/CSV, so they are not "unhandled"
 UNHANDLED_SCRIPT_VERIFY_FLAGS = set((
-    SCRIPT_VERIFY_SIGPUSHONLY,
-    SCRIPT_VERIFY_MINIMALDATA,
     SCRIPT_VERIFY_CONST_SCRIPTCODE,
 ))
 # --- RAWBIT PATCH END ---------------------------------------------------
@@ -149,7 +167,10 @@ STANDARD_SCRIPT_VERIFY_FLAGS = MANDATORY_SCRIPT_VERIFY_FLAGS | {
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM,
     SCRIPT_VERIFY_WITNESS_PUBKEYTYPE,
     SCRIPT_VERIFY_CONST_SCRIPTCODE,
-    SCRIPT_VERIFY_TAPROOT
+    SCRIPT_VERIFY_TAPROOT,
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION,
+    SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS,
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE
 }
 
 ALL_SCRIPT_VERIFY_FLAGS = STANDARD_SCRIPT_VERIFY_FLAGS | {
@@ -176,6 +197,9 @@ SCRIPT_VERIFY_FLAGS_BY_NAME = {
     'CONST_SCRIPTCODE': SCRIPT_VERIFY_CONST_SCRIPTCODE,
     # --- RAWBIT PATCH: completeness
     'TAPROOT': SCRIPT_VERIFY_TAPROOT,
+    'DISCOURAGE_UPGRADABLE_TAPROOT_VERSION': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION,
+    'DISCOURAGE_OP_SUCCESS': SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS,
+    'DISCOURAGE_UPGRADABLE_PUBKEYTYPE': SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE,
 }
 
 SCRIPT_VERIFY_FLAGS_NAMES = {v: k for k, v in SCRIPT_VERIFY_FLAGS_BY_NAME.items()}
@@ -217,6 +241,26 @@ class ScriptEvalState:
         self.vfExec = vfExec
         self.pbegincodehash = pbegincodehash
         self.nOpCount = nOpCount
+
+
+class ScriptExecutionData:
+    __slots__ = [
+        'tapleaf_hash', 'tapleaf_hash_init',
+        'codeseparator_pos', 'codeseparator_pos_init',
+        'annex_hash', 'annex_present', 'annex_init',
+        'validation_weight_left', 'validation_weight_left_init',
+    ]
+
+    def __init__(self) -> None:
+        self.tapleaf_hash: Optional[bytes] = None
+        self.tapleaf_hash_init: bool = False
+        self.codeseparator_pos: int = 0xFFFFFFFF
+        self.codeseparator_pos_init: bool = False
+        self.annex_hash: Optional[bytes] = None
+        self.annex_present: bool = False
+        self.annex_init: bool = False
+        self.validation_weight_left: int = 0
+        self.validation_weight_left_init: bool = False
 
 
 def script_verify_flags_to_string(flags: Iterable[ScriptVerifyFlag_Type]) -> str:
@@ -388,6 +432,60 @@ def _IsCompressedPubKey(pubkey: bytes) -> bool:
     return True
 
 
+def _IsMinimalPush(opcode: int, data: bytes) -> bool:
+    dlen = len(data)
+    if dlen == 0:
+        return opcode == OP_0
+    if dlen == 1 and data[0] == 0x81:
+        return opcode == OP_1NEGATE
+    if dlen == 1 and 1 <= data[0] <= 16:
+        return opcode == (OP_1 - 1 + data[0])
+    if dlen <= 75:
+        return opcode == dlen
+    if dlen <= 255:
+        return opcode == OP_PUSHDATA1
+    if dlen <= 65535:
+        return opcode == OP_PUSHDATA2
+    return True
+
+
+def _is_op_success(opcode: int) -> bool:
+    """OP_SUCCESSx set defined in BIP342."""
+    return opcode in (
+        80, 98,
+        126, 127, 128, 129,
+        131, 132, 133, 134,
+        137, 138,
+        141, 142,
+        149, 150, 151, 152, 153
+    ) or 187 <= opcode <= 254
+
+
+def _taproot_merkle_root(control: bytes, tapleaf_hash: bytes) -> bytes:
+    assert len(control) >= TAPROOT_CONTROL_BASE_SIZE
+    assert (len(control) - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE == 0
+    path_len = (len(control) - TAPROOT_CONTROL_BASE_SIZE) // TAPROOT_CONTROL_NODE_SIZE
+    k = tapleaf_hash
+    tbh = bitcointx.core.CoreCoinParams.tapbranch_hasher
+    for i in range(path_len):
+        node = control[TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * i:
+                       TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * (i + 1)]
+        if node < k:
+            k = tbh(node + k)
+        else:
+            k = tbh(k + node)
+    return k
+
+
+def _serialize_witness_stack_size(stack: Sequence[bytes]) -> int:
+    """Return serialized size of the witness stack."""
+    f = BytesIO()
+    VarIntSerializer.stream_serialize(len(stack), f)
+    for item in stack:
+        BytesSerializer.stream_serialize(item, f)
+    return len(f.getvalue())
+
+
 # --- RAWBIT PATCH START: CLTV / CSV helpers ----------------------------
 def _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state):
     """BIP-65  –  OP_CHECKLOCKTIMEVERIFY"""
@@ -416,7 +514,7 @@ def _CheckSequenceVerify(stack, txTo, inIdx, flags, get_eval_state):
     if len(stack) < 1:
         raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
 
-    nSequence = _CastToBigNum(stack[-1], get_eval_state)
+    nSequence = _CastToBigNum(stack[-1], get_eval_state, max_len=5)
     if nSequence < 0:
         raise EvalScriptError("negative sequence", get_eval_state())
 
@@ -447,22 +545,24 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                          flags: Set[ScriptVerifyFlag_Type] = set(),
                          amount: int = 0,
                          script_class: Type[CScript] = CScript,
+                         spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None,
+                         execdata: Optional[ScriptExecutionData] = None,
                          # --- RAWBIT PATCH START: tracing hook -----------
                          on_step: Optional[Callable[[dict], None]] = None
                          # --- RAWBIT PATCH END ---------------------------
-                         ) -> None:
+                         , *, is_p2sh_wrapped: bool = False) -> None:
 
     if script_class is None:
         raise ValueError("script class must be specified")
 
-    sigversion = None
+    if execdata is None:
+        execdata = ScriptExecutionData()
 
+    # --- Segwit v0 ------------------------------------------------------
     if witversion == 0:
         sigversion = SIGVERSION_WITNESS_V0
         stack = list(witness.stack)
         if len(program) == 32:
-            # Version 0 segregated witness program: SHA256(CScript) inside the program,
-            # CScript + inputs in witness
             if len(stack) == 0:
                 raise VerifyScriptError("witness is empty")
 
@@ -471,7 +571,6 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             if hashScriptPubKey != program:
                 raise VerifyScriptError("witness program mismatch")
         elif len(program) == 20:
-            # Special case for pay-to-pubkeyhash; signature + pubkey in witness
             if len(stack) != 2:
                 raise VerifyScriptError("witness program mismatch")  # 2 items in witness
 
@@ -479,46 +578,147 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                                          OP_EQUALVERIFY, OP_CHECKSIG])
         else:
             raise VerifyScriptError("wrong length for witness program")
-    elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
-        raise VerifyScriptError("upgradeable witness program is not accepted")
-    else:
-        # Higher version witness scripts return true for future softfork compatibility
+
+        for i, elt in enumerate(stack):
+            elt_len = len(script_class([elt])) if isinstance(elt, int) else len(elt)
+            if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
+                raise VerifyScriptError(
+                    "maximum push size exceeded by an item at position {} "
+                    "on witness stack".format(i))
+
+        EvalScript(stack, scriptPubKey, txTo, inIdx,
+                   flags=flags, amount=amount, sigversion=sigversion,
+                   on_step=on_step, phase="witnessScript",
+                   execdata=execdata, spent_outputs=spent_outputs)
+
+        if len(stack) == 0:
+            raise VerifyScriptError("scriptPubKey left an empty stack")
+        elif len(stack) != 1:
+            raise VerifyScriptError("scriptPubKey left extra items on stack")
+
+        if not _CastToBool(stack[-1]):
+            raise VerifyScriptError("scriptPubKey returned false")
         return
 
-    assert sigversion is not None
+    # --- Taproot (BIP341/342) ------------------------------------------
+    if witversion == 1 and len(program) == WITNESS_V1_TAPROOT_SIZE:
+        if SCRIPT_VERIFY_TAPROOT not in flags:
+            return
+        if is_p2sh_wrapped:
+            if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
+                raise VerifyScriptError("upgradeable witness program is not accepted")
+            return
+        stack = list(witness.stack)
+        if len(stack) == 0:
+            raise VerifyScriptError("witness is empty")
 
-    for i, elt in enumerate(stack):
-        if isinstance(elt, int):
-            elt_len = len(script_class([elt]))
+        # Optional annex
+        if len(stack) >= 2 and len(stack[-1]) > 0 and stack[-1][0] == ANNEX_TAG:
+            annex = stack.pop()
+            annex_serialized = BytesSerializer.serialize(annex)
+            execdata.annex_hash = hashlib.sha256(annex_serialized).digest()
+            execdata.annex_present = True
         else:
-            elt_len = len(elt)
+            execdata.annex_hash = None
+            execdata.annex_present = False
+        execdata.annex_init = True
 
-        # Disallow stack item size > MAX_SCRIPT_ELEMENT_SIZE in witness stack
-        if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
-            raise VerifyScriptError(
-                "maximum push size exceeded by an item at position {} "
-                "on witness stack".format(i))
+        # Key-path (only signature left)
+        if len(stack) == 1:
+            if spent_outputs is None:
+                raise VerifyScriptError("spent_outputs are required for taproot key path verification")
+            sig = stack[0]
+            if len(sig) not in (64, 65):
+                raise VerifyScriptError("invalid schnorr signature size")
+            if len(sig) == 65 and sig[-1] == 0:
+                raise VerifyScriptError("invalid schnorr hashtype")
 
-    # --- RAWBIT PATCH: forward tracing to inner script
-    EvalScript(stack, scriptPubKey, txTo, inIdx,
-               flags=flags, amount=amount, sigversion=sigversion,
-               on_step=on_step, phase="witnessScript")
+            hashtype = None if len(sig) == 64 else sig[-1]
+            sh = SignatureHashSchnorr(
+                txTo, inIdx, spent_outputs,
+                hashtype=hashtype,
+                sigversion=SIGVERSION_TAPROOT,
+                annex_hash=execdata.annex_hash
+            )
+            xpk = bitcointx.core.key.XOnlyPubKey(program)
+            if not xpk.verify_schnorr(sh, sig[:64]):
+                raise VerifyScriptError("schnorr signature check failed")
+            return
 
-    # Scripts inside witness implicitly require cleanstack behaviour
-    if len(stack) == 0:
-        raise VerifyScriptError("scriptPubKey left an empty stack")
-    elif len(stack) != 1:
-        raise VerifyScriptError("scriptPubKey left extra items on stack")
+        # Script-path (control + script + stack)
+        control = stack.pop()
+        script_bytes = stack.pop()
+        if (len(control) < TAPROOT_CONTROL_BASE_SIZE
+                or len(control) > TAPROOT_CONTROL_MAX_SIZE
+                or (len(control) - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE != 0):
+            raise VerifyScriptError("taproot control block has wrong size")
 
-    if not _CastToBool(stack[-1]):
-        raise VerifyScriptError("scriptPubKey returned false")
+        leaf_version = control[0] & TAPROOT_LEAF_MASK
+        tapleaf_hash = bitcointx.core.CoreCoinParams.tapleaf_hasher(
+            bytes([leaf_version]) + BytesSerializer.serialize(script_bytes)
+        )
+        execdata.tapleaf_hash = tapleaf_hash
+        execdata.tapleaf_hash_init = True
+        execdata.codeseparator_pos = 0xFFFFFFFF
+        execdata.codeseparator_pos_init = True
 
+        merkle_root = _taproot_merkle_root(control, tapleaf_hash)
+        internal_pub = bitcointx.core.key.XOnlyPubKey(control[1:33])
+        tweaked = bitcointx.core.key.XOnlyPubKey(program)
+        if not bitcointx.core.key.check_tap_tweak(
+                tweaked, internal_pub, merkle_root=merkle_root, parity=bool(control[0] & 1)):
+            raise VerifyScriptError("witness program mismatch")
+
+        if leaf_version != TAPROOT_LEAF_TAPSCRIPT:
+            if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION in flags:
+                raise VerifyScriptError("taproot leaf version not supported")
+            return
+
+        if spent_outputs is None:
+            raise VerifyScriptError("spent_outputs are required for tapscript verification")
+
+        # OP_SUCCESSx pre-scan
+        for (opcode, data, sop_idx) in script_class(script_bytes).raw_iter():
+            if _is_op_success(int(opcode)):
+                if SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags:
+                    raise VerifyScriptError("OP_SUCCESSx discouraged by policy")
+                return
+
+        for i, elt in enumerate(stack):
+            elt_len = len(script_class([elt])) if isinstance(elt, int) else len(elt)
+            if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
+                raise VerifyScriptError(
+                    "maximum push size exceeded by an item at position {} "
+                    "on witness stack".format(i))
+        if len(stack) > MAX_STACK_ITEMS:
+            raise VerifyScriptError("witness stack exceeds maximum items")
+
+        execdata.validation_weight_left = _serialize_witness_stack_size(witness.stack) + VALIDATION_WEIGHT_OFFSET
+        execdata.validation_weight_left_init = True
+
+        exec_script = script_class(script_bytes)
+        EvalScript(stack, exec_script, txTo, inIdx, flags=flags,
+                   amount=amount, sigversion=SIGVERSION_TAPSCRIPT,
+                   on_step=on_step, phase="witnessScript",
+                   execdata=execdata, spent_outputs=spent_outputs)
+
+        if len(stack) == 0:
+            raise VerifyScriptError("scriptPubKey left an empty stack")
+        elif len(stack) != 1:
+            raise VerifyScriptError("scriptPubKey left extra items on stack")
+        if not _CastToBool(stack[-1]):
+            raise VerifyScriptError("scriptPubKey returned false")
+        return
+
+    if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
+        raise VerifyScriptError("upgradeable witness program is not accepted")
+    # Higher version witness scripts return true for future softfork compatibility
     return
 
 
-def _CastToBigNum(b: bytes, get_eval_state: Callable[[], ScriptEvalState]
-                  ) -> int:
-    if len(b) > MAX_NUM_SIZE:
+def _CastToBigNum(b: bytes, get_eval_state: Callable[[], ScriptEvalState],
+                  *, max_len: int = MAX_NUM_SIZE) -> int:
+    if len(b) > max_len:
         raise EvalScriptError('CastToBigNum() : overflow', get_eval_state())
     v = bitcointx.core._bignum.vch2bn(b)
     if v is None:
@@ -835,13 +1035,15 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 amount: int = 0, sigversion: SIGVERSION_Type = SIGVERSION_BASE,
                 # --- RAWBIT PATCH START: tracing hook + phase ----------
                 on_step: Optional[Callable[[TraceStep], None]] = None,
-                phase: str = "script"
+                phase: str = "script",
+                execdata: Optional[ScriptExecutionData] = None,
+                spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None
                 # --- RAWBIT PATCH END ----------------------------------
                 ) -> None:
     """Evaluate a script
 
     """
-    if len(scriptIn) > MAX_SCRIPT_SIZE:
+    if sigversion != SIGVERSION_TAPSCRIPT and len(scriptIn) > MAX_SCRIPT_SIZE:
         raise EvalScriptError((f'script too large; got {len(scriptIn)} bytes; '
                                f'maximum {MAX_SCRIPT_SIZE} bytes'),
                               ScriptEvalState(stack=stack, scriptIn=scriptIn,
@@ -854,7 +1056,10 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
     nOpCount = [0]
     v_bytes: bytes
     v_int: int
+    if execdata is None:
+        execdata = ScriptExecutionData()
     v_bool: bool
+    opcode_pos = 0
     for (sop, sop_data, sop_pc) in scriptIn.raw_iter():
         fExec = _CheckExec(vfExec)
 
@@ -879,11 +1084,17 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
             stack_before = [x.hex() for x in stack]
 
         try:
+            if sigversion == SIGVERSION_TAPSCRIPT and _is_op_success(int(sop)):
+                if SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags:
+                    raise EvalScriptError('OP_SUCCESSx encountered', get_eval_state())
+                # Short-circuit success for OP_SUCCESSx
+                stack[:] = [b"\x01"]
+                return
             if sop in DISABLED_OPCODES:
                 raise EvalScriptError(f'opcode {_opcode_name(sop)} is disabled',
                                       get_eval_state())
 
-            if sop > OP_16:
+            if sop > OP_16 and sigversion != SIGVERSION_TAPSCRIPT:
                 nOpCount[0] += 1
                 if nOpCount[0] > MAX_SCRIPT_OPCODES:
                     raise MaxOpCountError(get_eval_state())
@@ -902,6 +1113,9 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                         get_eval_state())
 
                 elif fExec:
+                    if SCRIPT_VERIFY_MINIMALDATA in flags:
+                        if not _IsMinimalPush(int(sop), sop_data):
+                            raise VerifyScriptError("non-minimal data push")
                     stack.append(sop_data)
                     # --- RAWBIT: record step before continue (to preserve original flow)
                     if on_step is not None:
@@ -913,6 +1127,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                             "stack_after": [x.hex() for x in stack],
                             "phase": phase,
                         })
+                    opcode_pos += 1
                     continue
 
             elif fExec or (OP_IF <= sop <= OP_ENDIF):
@@ -975,6 +1190,9 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                     stack.append(v3)
 
                 elif sop == OP_CHECKMULTISIG or sop == OP_CHECKMULTISIGVERIFY:
+                    if sigversion == SIGVERSION_TAPSCRIPT:
+                        raise EvalScriptError("OP_CHECKMULTISIG invalid in tapscript",
+                                              get_eval_state())
                     tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
                     _CheckMultiSig(sop, tmpScript, stack, txTo, inIdx, flags,
                                    get_eval_state, nOpCount,
@@ -985,35 +1203,120 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                     vchPubKey = stack[-1]
                     vchSig = stack[-2]
 
-                    # Subset of script starting at the most recent codeseparator
-                    tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
-
-                    if sigversion == SIGVERSION_BASE:
-                        # Drop the signature in pre-segwit scripts but not segwit scripts
-                        tmpScript = FindAndDelete(tmpScript,
-                                                  scriptIn.__class__([vchSig]))
-
-                    ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
-                                   amount=amount, sigversion=sigversion)
-                    if not ok and SCRIPT_VERIFY_NULLFAIL in flags and len(vchSig):
-                        raise VerifyScriptError("signature check failed, and signature is not empty")
-                    if not ok and sop == OP_CHECKSIGVERIFY:
-                        raise VerifyOpFailedError(get_eval_state())
-
-                    else:
-                        stack.pop()
-                        stack.pop()
-
-                        if ok:
-                            if sop != OP_CHECKSIGVERIFY:
-                                stack.append(b"\x01")
+                    if sigversion == SIGVERSION_TAPSCRIPT:
+                        if execdata is None or not execdata.validation_weight_left_init:
+                            raise EvalScriptError("missing tapscript execdata", get_eval_state())
+                        success = len(vchSig) != 0
+                        if success:
+                            execdata.validation_weight_left -= VALIDATION_WEIGHT_PER_SIGOP_PASSED
+                            if execdata.validation_weight_left < 0:
+                                raise VerifyScriptError("tapscript validation weight exceeded")
+                        if len(vchPubKey) == 0:
+                            raise VerifyScriptError("pubkey is empty")
+                        elif len(vchPubKey) == 32:
+                            if success:
+                                if spent_outputs is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
+                                    raise EvalScriptError("missing taproot context for sighash", get_eval_state())
+                                if len(vchSig) not in (64, 65):
+                                    raise VerifyScriptError("invalid schnorr signature size")
+                                if len(vchSig) == 65 and vchSig[-1] == 0:
+                                    raise VerifyScriptError("invalid schnorr hashtype")
+                                hashtype = None if len(vchSig) == 64 else vchSig[-1]
+                                sh = SignatureHashSchnorr(
+                                    txTo, inIdx, spent_outputs,
+                                    hashtype=hashtype,
+                                    sigversion=SIGVERSION_TAPSCRIPT,
+                                    tapleaf_hash=execdata.tapleaf_hash,
+                                    codeseparator_pos=execdata.codeseparator_pos,
+                                    annex_hash=execdata.annex_hash
+                                )
+                                xpk = bitcointx.core.key.XOnlyPubKey(vchPubKey)
+                                if not xpk.verify_schnorr(sh, vchSig[:64]):
+                                    raise VerifyScriptError("schnorr signature verification failed")
                         else:
-                            # FIXME: this is incorrect, but not caught by existing
-                            # test cases
-                            stack.append(b"\x00")
+                            if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE in flags:
+                                raise VerifyScriptError("upgradable pubkey type discouraged")
+
+                        stack.pop()
+                        stack.pop()
+                        if sop == OP_CHECKSIGVERIFY:
+                            if not success:
+                                raise VerifyOpFailedError(get_eval_state())
+                        else:
+                            stack.append(b"\x01" if success else b"")
+                    else:
+                        # legacy / segwit v0 path
+                        tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
+
+                        if sigversion == SIGVERSION_BASE:
+                            tmpScript = FindAndDelete(tmpScript,
+                                                      scriptIn.__class__([vchSig]))
+
+                        ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
+                                       amount=amount, sigversion=sigversion)
+                        if not ok and SCRIPT_VERIFY_NULLFAIL in flags and len(vchSig):
+                            raise VerifyScriptError("signature check failed, and signature is not empty")
+                        if not ok and sop == OP_CHECKSIGVERIFY:
+                            raise VerifyOpFailedError(get_eval_state())
+                        else:
+                            stack.pop()
+                            stack.pop()
+                            if ok:
+                                if sop != OP_CHECKSIGVERIFY:
+                                    stack.append(b"\x01")
+                            else:
+                                stack.append(b"\x00")
+
+                elif sop == OP_CHECKSIGADD:
+                    if sigversion != SIGVERSION_TAPSCRIPT:
+                        raise EvalScriptError("OP_CHECKSIGADD invalid before tapscript",
+                                              get_eval_state())
+                    check_args(3)
+                    sig = stack[-3]
+                    num = _CastToBigNum(stack[-2], get_eval_state)
+                    pubkey = stack[-1]
+                    success = len(sig) != 0
+                    if len(pubkey) == 0:
+                        raise VerifyScriptError("pubkey is empty")
+                    if success:
+                        if execdata is None or not execdata.validation_weight_left_init:
+                            raise EvalScriptError("missing tapscript execdata", get_eval_state())
+                        execdata.validation_weight_left -= VALIDATION_WEIGHT_PER_SIGOP_PASSED
+                        if execdata.validation_weight_left < 0:
+                            raise VerifyScriptError("tapscript validation weight exceeded")
+                        if len(sig) not in (64, 65):
+                            raise VerifyScriptError("invalid schnorr signature size")
+                        if len(sig) == 65 and sig[-1] == 0:
+                            raise VerifyScriptError("invalid schnorr hashtype")
+                        if len(pubkey) == 32:
+                            if spent_outputs is None or execdata is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
+                                raise EvalScriptError("missing taproot context for sighash", get_eval_state())
+                            hashtype = None if len(sig) == 64 else sig[-1]
+                            sh = SignatureHashSchnorr(
+                                txTo, inIdx, spent_outputs,
+                                hashtype=hashtype,
+                                sigversion=SIGVERSION_TAPSCRIPT,
+                                tapleaf_hash=execdata.tapleaf_hash,
+                                codeseparator_pos=execdata.codeseparator_pos,
+                                annex_hash=execdata.annex_hash
+                            )
+                            xpk = bitcointx.core.key.XOnlyPubKey(pubkey)
+                            if not xpk.verify_schnorr(sh, sig[:64]):
+                                raise VerifyScriptError("schnorr signature verification failed")
+                        elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE in flags:
+                            raise VerifyScriptError("upgradable pubkey type discouraged")
+
+                    # consume arguments
+                    stack.pop()
+                    stack.pop()
+                    stack.pop()
+                    stack.append(bitcointx.core._bignum.bn2vch(num + (1 if success else 0)))
 
                 elif sop == OP_CODESEPARATOR:
                     pbegincodehash = sop_pc
+                    if sigversion == SIGVERSION_TAPSCRIPT:
+                        execdata.codeseparator_pos = opcode_pos
+                        execdata.codeseparator_pos_init = True
 
                 elif sop == OP_DEPTH:
                     bn = len(stack)
@@ -1083,7 +1386,10 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                         check_args(1)
                         vch = stack.pop()
 
-                        if sigversion == SIGVERSION_WITNESS_V0 and SCRIPT_VERIFY_MINIMALIF in flags:
+                        if sigversion == SIGVERSION_TAPSCRIPT:
+                            if len(vch) > 1 or (len(vch) == 1 and vch[0] != 1):
+                                raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
+                        elif sigversion == SIGVERSION_WITNESS_V0 and SCRIPT_VERIFY_MINIMALIF in flags:
                             if len(vch) > 1:
                                 raise VerifyScriptError("SCRIPT_VERIFY_MINIMALIF check failed")
                             if len(vch) == 1 and vch[0] != 1:
@@ -1259,6 +1565,8 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 })
             raise
 
+        opcode_pos += 1
+
     # Unterminated IF/NOTIF/ELSE block
     if len(vfExec):
         raise EvalScriptError(
@@ -1273,7 +1581,9 @@ def EvalScript(stack: List[bytes], scriptIn: CScript,
                amount: int = 0, sigversion: SIGVERSION_Type = SIGVERSION_BASE,
                # --- RAWBIT PATCH START: optional tracing hook ----------
                on_step: Optional[Callable[[TraceStep], None]] = None,
-               phase: str = "script"
+               phase: str = "script",
+               execdata: Optional[ScriptExecutionData] = None,
+               spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None
                # --- RAWBIT PATCH END ----------------------------------
                ) -> None:
     """Evaluate a script
@@ -1293,7 +1603,8 @@ def EvalScript(stack: List[bytes], scriptIn: CScript,
 
     try:
         _EvalScript(stack, scriptIn, txTo, inIdx, flags=flags, amount=amount,
-                    sigversion=sigversion, on_step=on_step, phase=phase)
+                    sigversion=sigversion, on_step=on_step, phase=phase,
+                    execdata=execdata, spent_outputs=spent_outputs)
     except CScriptInvalidError as err:
         raise EvalScriptError(
             repr(err), ScriptEvalState(stack=stack, scriptIn=scriptIn,
@@ -1308,7 +1619,8 @@ def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
                  txTo: 'bitcointx.core.CTransaction', inIdx: int,
                  flags: Optional[Union[Tuple[ScriptVerifyFlag_Type, ...],
                                        Set[ScriptVerifyFlag_Type]]] = None,
-                 amount: int = 0, witness: Optional[CScriptWitness] = None
+                 amount: int = 0, witness: Optional[CScriptWitness] = None,
+                 spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None
                  ) -> None:
     """Verify a scriptSig satisfies a scriptPubKey
 
@@ -1335,16 +1647,23 @@ def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
     else:
         flags = set(flags)  # might be passed as tuple
 
+    if SCRIPT_VERIFY_SIGPUSHONLY in flags and not scriptSig.is_push_only():
+        raise VerifyScriptError("scriptSig is not push-only")
+
     if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
         raise VerifyScriptError(
             "some of the flags cannot be handled by current code: {}"
             .format(script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)))
 
+    execdata = ScriptExecutionData()
+
     stack: List[bytes] = []
-    EvalScript(stack, scriptSig, txTo, inIdx, flags=flags, phase="scriptSig")
+    EvalScript(stack, scriptSig, txTo, inIdx, flags=flags, phase="scriptSig",
+               execdata=execdata, spent_outputs=spent_outputs)
     if SCRIPT_VERIFY_P2SH in flags:
         stackCopy = list(stack)
-    EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, phase="scriptPubKey")
+    EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, phase="scriptPubKey",
+               execdata=execdata, spent_outputs=spent_outputs)
     if len(stack) == 0:
         raise VerifyScriptError("scriptPubKey left an empty stack")
     if not _CastToBool(stack[-1]):
@@ -1364,7 +1683,10 @@ def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
                              scriptPubKey.witness_version(),
                              scriptPubKey.witness_program(),
                              txTo, inIdx, flags=flags, amount=amount,
-                             script_class=script_class)
+                             script_class=script_class,
+                             spent_outputs=spent_outputs,
+                             execdata=execdata,
+                             is_p2sh_wrapped=False)
 
         # Bypass the cleanstack check at the end. The actual stack is obviously not clean
         # for witness programs.
@@ -1385,7 +1707,8 @@ def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
 
         pubKey2 = script_class(stack.pop())
 
-        EvalScript(stack, pubKey2, txTo, inIdx, flags=flags, phase="redeemScript")
+        EvalScript(stack, pubKey2, txTo, inIdx, flags=flags, phase="redeemScript",
+                   execdata=execdata, spent_outputs=spent_outputs)
 
         if not len(stack):
             raise VerifyScriptError("P2SH inner scriptPubKey left an empty stack")
@@ -1404,7 +1727,10 @@ def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
                                  pubKey2.witness_version(),
                                  pubKey2.witness_program(),
                                  txTo, inIdx, flags=flags, amount=amount,
-                                 script_class=script_class)
+                                 script_class=script_class,
+                                 spent_outputs=spent_outputs,
+                                 execdata=execdata,
+                                 is_p2sh_wrapped=True)
 
             # Bypass the cleanstack check at the end. The actual stack is obviously not clean
             # for witness programs.
@@ -1477,7 +1803,8 @@ def VerifyScriptWithTrace(
     flags: Optional[Union[Tuple[ScriptVerifyFlag_Type, ...],
                           Set[ScriptVerifyFlag_Type]]] = None,
     amount: int = 0,
-    witness: Optional[CScriptWitness] = None
+    witness: Optional[CScriptWitness] = None,
+    spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None
 ) -> Tuple[bool, List[TraceStep], Optional[str]]:
     """
     Verify like VerifyScript, but collect per-opcode trace steps.
@@ -1511,8 +1838,10 @@ def VerifyScriptWithTrace(
 
         # Execute scriptSig
         stack: List[bytes] = []
+        execdata = ScriptExecutionData()
         try:
-            EvalScript(stack, scriptSig, txTo, inIdx, flags=flags, on_step=_record, phase="scriptSig")
+            EvalScript(stack, scriptSig, txTo, inIdx, flags=flags, on_step=_record,
+                       phase="scriptSig", execdata=execdata, spent_outputs=spent_outputs)
         except Exception as e:
             return False, steps, str(e)
 
@@ -1522,7 +1851,8 @@ def VerifyScriptWithTrace(
 
         # Execute scriptPubKey
         try:
-            EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, on_step=_record, phase="scriptPubKey")
+            EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, on_step=_record,
+                       phase="scriptPubKey", execdata=execdata, spent_outputs=spent_outputs)
         except Exception as e:
             return False, steps, str(e)
 
@@ -1546,7 +1876,9 @@ def VerifyScriptWithTrace(
                                      scriptPubKey.witness_program(),
                                      txTo, inIdx, flags=flags, amount=amount,
                                      script_class=script_class,
-                                     on_step=_record)
+                                     on_step=_record,
+                                     spent_outputs=spent_outputs,
+                                     execdata=execdata)
             except Exception as e:
                 return False, steps, str(e)
             # Bypass cleanstack after witness
@@ -1563,7 +1895,8 @@ def VerifyScriptWithTrace(
 
             pubKey2 = script_class(stack.pop())
             try:
-                EvalScript(stack, pubKey2, txTo, inIdx, flags=flags, on_step=_record, phase="redeemScript")
+                EvalScript(stack, pubKey2, txTo, inIdx, flags=flags, on_step=_record,
+                           phase="redeemScript", execdata=execdata, spent_outputs=spent_outputs)
             except Exception as e:
                 return False, steps, str(e)
 
@@ -1583,7 +1916,9 @@ def VerifyScriptWithTrace(
                                          pubKey2.witness_program(),
                                          txTo, inIdx, flags=flags, amount=amount,
                                          script_class=script_class,
-                                         on_step=_record)
+                                         on_step=_record,
+                                         spent_outputs=spent_outputs,
+                                         execdata=execdata)
                 except Exception as e:
                     return False, steps, str(e)
                 stack = stack[:1]
@@ -1620,7 +1955,12 @@ __all__ = (
     'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS',
     'SCRIPT_VERIFY_CLEANSTACK',
     'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',
+    'SCRIPT_VERIFY_TAPROOT',
+    'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION',
+    'SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS',
+    'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE',
     'SCRIPT_VERIFY_FLAGS_BY_NAME',
+    'ScriptExecutionData',
     'EvalScriptError',
     'MaxOpCountError',
     'MissingOpArgumentsError',

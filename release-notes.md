@@ -33,6 +33,11 @@ The function `get_secp256k1()` was added, which calls `secp256k1_load_library()`
 instance of `Secp256k1` in the attribute of `secp256k.py` module. If such instance is already
 created and stored, it is returned right away, no new instance is created.
 
+Add Taproot/Tapscript (BIP341/BIP342) script verification in the Python interpreter:
+key-path and script-path spends are now evaluated with Schnorr signatures, OP_CHECKSIGADD,
+Taproot control block/merkle checks, and tapscript resource limits. libbitcoinconsensus still
+does not expose Taproot verification, so this path is implemented in pure Python.
+
 ## v1.1.4
 
 Marked bitcointx package as typed (added bitcointx/py.typed)
@@ -894,4 +899,3 @@ Other changes:
 Finally starting this release, git tags will be of the form
 'python-bitcoinlib-(version)', replacing the less specific '(version)' form
 previously used.
-

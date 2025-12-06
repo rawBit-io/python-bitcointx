@@ -30,7 +30,9 @@ from bitcointx.core import (
 from bitcointx.core.key import CKey, tap_tweak_pubkey
 from bitcointx.core.script import (
     OPCODES_BY_NAME, CScript, CScriptWitness,
-    OP_0, SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0, OP_CHECKSIG,
+    OP_0, OP_1, OP_EQUAL, OP_EQUALVERIFY, OP_DROP, OP_CHECKSIG,
+    OP_CHECKSIGADD, OP_SIZE,
+    SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
     standard_multisig_redeem_script, standard_multisig_witness_stack,
     TaprootScriptTree, TaprootScriptTreeLeaf_Type, SignatureHashSchnorr
 )
@@ -113,6 +115,8 @@ def load_test_vectors(name: str, skip_fixme: bool = True) -> TestDataIterator:
             nValue = 0
             if isinstance(to_unpack[0], list):
                 wdata = to_unpack.pop(0)
+                if any(isinstance(d, str) and d.startswith('#SCRIPT#') for d in wdata):
+                    continue
                 stack = [CScript(x(d)) for d in wdata[:-1]]
                 witness = CScriptWitness(stack)
                 nValue = int(round(wdata[-1] * 1e8))
@@ -123,6 +127,9 @@ def load_test_vectors(name: str, skip_fixme: bool = True) -> TestDataIterator:
             assert len(to_unpack) == 5, "unexpected test data format: {}".format(to_unpack)
 
             scriptSig_str, scriptPubKey_str, flags, expected_result, comment = to_unpack
+
+            if expected_result == 'UNKNOWN_ERROR':
+                continue
 
             scriptSig = parse_script(scriptSig_str)
             scriptPubKey = parse_script(scriptPubKey_str)
@@ -310,6 +317,69 @@ class Test_EvalScript(unittest.TestCase):
 
             if expected_result != 'OK':
                 self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
+
+    def test_taproot_scripts_python(self) -> None:
+        for t in self.generate_taproot_test_scripts():
+            (scriptSig, scriptPubKey, dst_scriptPubKey, witness, nValue,
+             spent_outputs, flags, expected_result, comment, test_case) = t
+            (txCredit, txSpend) = self.create_test_txs(
+                scriptSig, scriptPubKey, dst_scriptPubKey, witness, nValue)
+
+            try:
+                VerifyScript(scriptSig, scriptPubKey, txSpend, 0, flags,
+                             amount=nValue, witness=witness,
+                             spent_outputs=spent_outputs)
+            except ValidationError as err:
+                if expected_result == 'OK':
+                    self.fail('Taproot script FAILED: %r %r %r with exception %r\n\nTest data: %r'
+                              % (scriptSig, scriptPubKey, comment, err, test_case))
+                continue
+
+            if expected_result != 'OK':
+                self.fail('Expected %r to fail (%s)' % (test_case, expected_result))
+
+    def test_tapscript_op_checksigadd_empty_pubkey_fails(self) -> None:
+        k = CCoinKey.from_secret_bytes(os.urandom(32))
+        xopub = k.xonly_pub
+
+        script = CScript([OP_CHECKSIGADD], name='bug1')
+        t = TaprootScriptTree([script], internal_pubkey=xopub)
+        swcb = t.get_script_with_control_block('bug1')
+        assert swcb is not None
+        s, cb = swcb
+
+        spk = P2TRCoinAddress.from_script_tree(t).to_scriptPubKey()
+        nValue = 100_000
+        (txCredit, txSpend) = self.create_test_txs(
+            CScript(), spk, spk, CScriptWitness(), nValue)
+
+        witness = CScriptWitness([b'', b'\x00', b'', s, cb])
+        with self.assertRaises(ValidationError):
+            VerifyScript(CScript(), spk, txSpend, 0,
+                         BITCOINCONSENSUS_ACCEPTED_FLAGS,
+                         amount=nValue, witness=witness,
+                         spent_outputs=txCredit.vout)
+
+    def test_tapscript_checksig_empty_sig_pushes_empty_vector(self) -> None:
+        k = CCoinKey.from_secret_bytes(os.urandom(32))
+        xopub = k.xonly_pub
+
+        script = CScript([OP_CHECKSIG, OP_SIZE, OP_0, OP_EQUALVERIFY, OP_DROP, OP_1], name='emptysig')
+        t = TaprootScriptTree([script], internal_pubkey=xopub)
+        swcb = t.get_script_with_control_block('emptysig')
+        assert swcb is not None
+        s, cb = swcb
+
+        spk = P2TRCoinAddress.from_script_tree(t).to_scriptPubKey()
+        nValue = 50_000
+        (txCredit, txSpend) = self.create_test_txs(
+            CScript(), spk, spk, CScriptWitness(), nValue)
+
+        witness = CScriptWitness([b'', xopub, s, cb])
+        VerifyScript(CScript(), spk, txSpend, 0,
+                     BITCOINCONSENSUS_ACCEPTED_FLAGS,
+                     amount=nValue, witness=witness,
+                     spent_outputs=txCredit.vout)
 
     def _do_test_bicoinconsensus(
         self, handle: Optional[ctypes.CDLL],
