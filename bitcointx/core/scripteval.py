@@ -45,6 +45,7 @@ from bitcointx.core.script import (
     SIGVERSION_TAPROOT, SIGVERSION_TAPSCRIPT,
 
     # SIGHASH flags
+    SIGHASH_Type,
     SIGHASH_ALL, SIGHASH_SINGLE, SIGHASH_ANYONECANPAY,
 
     # Size / opcode limits
@@ -98,6 +99,7 @@ ANNEX_TAG = 0x50
 VALIDATION_WEIGHT_PER_SIGOP_PASSED = 50
 VALIDATION_WEIGHT_OFFSET = 50
 WITNESS_V1_TAPROOT_SIZE = 32
+VALID_SCHNORR_HASHTYPES = {1, 2, 3, 0x81, 0x82, 0x83}
 TAPROOT_LEAF_MASK = 0xfe
 TAPROOT_LEAF_TAPSCRIPT = 0xc0
 TAPROOT_CONTROL_BASE_SIZE = 33
@@ -492,7 +494,7 @@ def _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state):
     if len(stack) < 1:
         raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
 
-    nLockTime = _CastToBigNum(stack[-1], get_eval_state)
+    nLockTime = _CastToBigNum(stack[-1], get_eval_state, max_len=5)
     if nLockTime < 0:
         raise EvalScriptError("negative lock-time", get_eval_state())
 
@@ -521,6 +523,9 @@ def _CheckSequenceVerify(stack, txTo, inIdx, flags, get_eval_state):
     # disabled flag means "anyone-can-spend" in CSV context
     if nSequence & SEQUENCE_LOCKTIME_DISABLE_FLAG:
         return
+
+    if txTo.nVersion < 2:
+        raise EvalScriptError("CSV requires transaction version >= 2", get_eval_state())
 
     txSequence = txTo.vin[inIdx].nSequence
     if txSequence & SEQUENCE_LOCKTIME_DISABLE_FLAG:
@@ -603,6 +608,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
     # --- Taproot (BIP341/342) ------------------------------------------
     if witversion == 1 and len(program) == WITNESS_V1_TAPROOT_SIZE:
         if SCRIPT_VERIFY_TAPROOT not in flags:
+            if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
+                raise VerifyScriptError("upgradeable witness program is not accepted")
             return
         if is_p2sh_wrapped:
             if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
@@ -630,10 +637,10 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             sig = stack[0]
             if len(sig) not in (64, 65):
                 raise VerifyScriptError("invalid schnorr signature size")
-            if len(sig) == 65 and sig[-1] == 0:
+            if len(sig) == 65 and (sig[-1] == 0 or sig[-1] not in VALID_SCHNORR_HASHTYPES):
                 raise VerifyScriptError("invalid schnorr hashtype")
 
-            hashtype = None if len(sig) == 64 else sig[-1]
+            hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
             sh = SignatureHashSchnorr(
                 txTo, inIdx, spent_outputs,
                 hashtype=hashtype,
@@ -718,12 +725,24 @@ def VerifyWitnessProgram(witness: CScriptWitness,
 
 def _CastToBigNum(b: bytes, get_eval_state: Callable[[], ScriptEvalState],
                   *, max_len: int = MAX_NUM_SIZE) -> int:
+    state = get_eval_state()
+    flags = state.flags or set()
     if len(b) > max_len:
-        raise EvalScriptError('CastToBigNum() : overflow', get_eval_state())
+        raise EvalScriptError('CastToBigNum() : overflow', state)
+
+    if SCRIPT_VERIFY_MINIMALDATA in flags and len(b) > 0:
+        # Reject non-minimal numeric encodings
+        # - Zero must be encoded as empty
+        # - No redundant sign/parity bytes
+        if (b[-1] & 0x7f) == 0:
+            if len(b) == 1:
+                raise VerifyScriptError("non-minimally encoded number")
+            if (b[-2] & 0x80) == 0:
+                raise VerifyScriptError("non-minimally encoded number")
+
     v = bitcointx.core._bignum.vch2bn(b)
     if v is None:
-        raise EvalScriptError('CastToBigNum() : invalid value',
-                              get_eval_state())
+        raise EvalScriptError('CastToBigNum() : invalid value', state)
     return v
 
 
@@ -872,9 +891,7 @@ def _CheckMultiSig(opcode: CScriptOp, script: CScript,
         if success:
             stack.append(b"\x01")
         else:
-            # FIXME: this is incorrect, but not caught by existing
-            # test cases
-            stack.append(b"\x00")
+            stack.append(b"")
 
 
 # OP_2MUL and OP_2DIV are *not* included in this list as they are disabled
@@ -1117,6 +1134,9 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                         if not _IsMinimalPush(int(sop), sop_data):
                             raise VerifyScriptError("non-minimal data push")
                     stack.append(sop_data)
+                    if len(stack) + len(altstack) > MAX_STACK_ITEMS:
+                        raise EvalScriptError('max stack items limit reached',
+                                              get_eval_state())
                     # --- RAWBIT: record step before continue (to preserve original flow)
                     if on_step is not None:
                         on_step({
@@ -1219,9 +1239,9 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                                     raise EvalScriptError("missing taproot context for sighash", get_eval_state())
                                 if len(vchSig) not in (64, 65):
                                     raise VerifyScriptError("invalid schnorr signature size")
-                                if len(vchSig) == 65 and vchSig[-1] == 0:
+                                if len(vchSig) == 65 and (vchSig[-1] == 0 or vchSig[-1] not in VALID_SCHNORR_HASHTYPES):
                                     raise VerifyScriptError("invalid schnorr hashtype")
-                                hashtype = None if len(vchSig) == 64 else vchSig[-1]
+                                hashtype = None if len(vchSig) == 64 else SIGHASH_Type(vchSig[-1])
                                 sh = SignatureHashSchnorr(
                                     txTo, inIdx, spent_outputs,
                                     hashtype=hashtype,
@@ -1265,7 +1285,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                                 if sop != OP_CHECKSIGVERIFY:
                                     stack.append(b"\x01")
                             else:
-                                stack.append(b"\x00")
+                                stack.append(b"")
 
                 elif sop == OP_CHECKSIGADD:
                     if sigversion != SIGVERSION_TAPSCRIPT:
@@ -1278,20 +1298,22 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                     success = len(sig) != 0
                     if len(pubkey) == 0:
                         raise VerifyScriptError("pubkey is empty")
+                    if len(pubkey) != 32 and SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE in flags:
+                        raise VerifyScriptError("upgradable pubkey type discouraged")
                     if success:
                         if execdata is None or not execdata.validation_weight_left_init:
                             raise EvalScriptError("missing tapscript execdata", get_eval_state())
                         execdata.validation_weight_left -= VALIDATION_WEIGHT_PER_SIGOP_PASSED
                         if execdata.validation_weight_left < 0:
                             raise VerifyScriptError("tapscript validation weight exceeded")
-                        if len(sig) not in (64, 65):
-                            raise VerifyScriptError("invalid schnorr signature size")
-                        if len(sig) == 65 and sig[-1] == 0:
-                            raise VerifyScriptError("invalid schnorr hashtype")
                         if len(pubkey) == 32:
+                            if len(sig) not in (64, 65):
+                                raise VerifyScriptError("invalid schnorr signature size")
+                            if len(sig) == 65 and (sig[-1] == 0 or sig[-1] not in VALID_SCHNORR_HASHTYPES):
+                                raise VerifyScriptError("invalid schnorr hashtype")
                             if spent_outputs is None or execdata is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
                                 raise EvalScriptError("missing taproot context for sighash", get_eval_state())
-                            hashtype = None if len(sig) == 64 else sig[-1]
+                            hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
                             sh = SignatureHashSchnorr(
                                 txTo, inIdx, spent_outputs,
                                 hashtype=hashtype,
@@ -1303,8 +1325,6 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                             xpk = bitcointx.core.key.XOnlyPubKey(pubkey)
                             if not xpk.verify_schnorr(sh, sig[:64]):
                                 raise VerifyScriptError("schnorr signature verification failed")
-                        elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE in flags:
-                            raise VerifyScriptError("upgradable pubkey type discouraged")
 
                     # consume arguments
                     stack.pop()
@@ -1526,9 +1546,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                     if v_bool:
                         stack.append(b"\x01")
                     else:
-                        # FIXME: this is incorrect, but not caught by existing
-                        # test cases
-                        stack.append(b"\x00")
+                        stack.append(b"")
 
                 else:
                     raise EvalScriptError('unsupported opcode 0x%x' % sop,
@@ -1836,6 +1854,9 @@ def VerifyScriptWithTrace(
             bad = script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)
             return False, steps, f"some of the flags cannot be handled by current code: {bad}"
 
+        if SCRIPT_VERIFY_SIGPUSHONLY in flags and not scriptSig.is_push_only():
+            return False, steps, "scriptSig is not push-only"
+
         # Execute scriptSig
         stack: List[bytes] = []
         execdata = ScriptExecutionData()
@@ -1918,7 +1939,8 @@ def VerifyScriptWithTrace(
                                          script_class=script_class,
                                          on_step=_record,
                                          spent_outputs=spent_outputs,
-                                         execdata=execdata)
+                                         execdata=execdata,
+                                         is_p2sh_wrapped=True)
                 except Exception as e:
                     return False, steps, str(e)
                 stack = stack[:1]
@@ -1955,6 +1977,7 @@ __all__ = (
     'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS',
     'SCRIPT_VERIFY_CLEANSTACK',
     'SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY',
+    'SCRIPT_VERIFY_CHECKSEQUENCEVERIFY',
     'SCRIPT_VERIFY_TAPROOT',
     'SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION',
     'SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS',
