@@ -13,3 +13,4 @@ venv/
 *.egg-info
 .idea
 .python-version
+script_vector_results.txt
