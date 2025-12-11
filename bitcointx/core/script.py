@@ -1542,7 +1542,8 @@ def SignatureHashSchnorr(
         f.write(struct.pack('<I', inIdx))
 
     if annex_hash is not None:
-        BytesSerializer.stream_serialize(annex_hash, f)
+        # Annex hash is already a 32-byte digest; no length prefix here.
+        f.write(annex_hash)
 
     if output_type == SIGHASH_SINGLE:
         outIdx = inIdx

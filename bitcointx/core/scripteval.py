@@ -623,6 +623,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
         if len(stack) >= 2 and len(stack[-1]) > 0 and stack[-1][0] == ANNEX_TAG:
             annex = stack.pop()
             annex_serialized = BytesSerializer.serialize(annex)
+            # BIP341: annex hash over compact_size(annex) || annex
             execdata.annex_hash = hashlib.sha256(annex_serialized).digest()
             execdata.annex_present = True
         else:

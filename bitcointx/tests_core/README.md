@@ -10,6 +10,8 @@
 
 - **BIP341 script-path tapscript (phase 4)**: `test_taproot_scriptpath.py` filters relevant tapscript/script-path cases from `data/script_assets_test.json` (OP_SUCCESS, unknown leaf versions, MINIMALIF, cleanstack, control blocks, etc.) and checks both success and expected-fail variants. Run with `pytest bitcointx/tests_core/test_taproot_scriptpath.py -vv`.
 
+- **BIP342 validation weight budget (phase 5)**: `test_tapscript_budget.py` runs the `tapscript/sigopsratio_*` cases from `data/script_assets_test.json` to exercise tapscript sigops/validation weight limits. Run with `pytest bitcointx/tests_core/test_tapscript_budget.py -vv`.
+
 General suite (bitcointx/tests): the main repository tests (wallet, PSBT, scripteval, serialize, etc.) live in `bitcointx/tests`. Run them alone with `python -m pytest bitcointx/tests -vv` (or `python3 -m pytest ...`).
 
 Run the full suite (general + tests_core) via `./bitcointx/tests_core/run_all.sh`.
