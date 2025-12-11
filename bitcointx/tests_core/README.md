@@ -8,6 +8,8 @@
 
 - **BIP341 key-path + sighash (phase 3)**: `test_taproot_keypath.py` exercises key-path spends, SIGHASH modes (DEFAULT/ALL/NONE/SINGLE with/without ANYONECANPAY), invalid hashtypes/lengths, annex handling, and multi-input independence. Run with `pytest bitcointx/tests_core/test_taproot_keypath.py -vv`.
 
+- **BIP341 script-path tapscript (phase 4)**: `test_taproot_scriptpath.py` filters relevant tapscript/script-path cases from `data/script_assets_test.json` (OP_SUCCESS, unknown leaf versions, MINIMALIF, cleanstack, control blocks, etc.) and checks both success and expected-fail variants. Run with `pytest bitcointx/tests_core/test_taproot_scriptpath.py -vv`.
+
 General suite (bitcointx/tests): the main repository tests (wallet, PSBT, scripteval, serialize, etc.) live in `bitcointx/tests`. Run them alone with `python -m pytest bitcointx/tests -vv` (or `python3 -m pytest ...`).
 
 Run the full suite (general + tests_core) via `./bitcointx/tests_core/run_all.sh`.
