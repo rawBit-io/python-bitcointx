@@ -14,3 +14,4 @@ venv/
 .idea
 .python-version
 script_vector_results.txt
+plan.md

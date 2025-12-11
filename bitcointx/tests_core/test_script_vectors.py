@@ -236,7 +236,7 @@ def _classify_exception(exc: Exception) -> str:
 
 
 def _load_vectors() -> List[ScriptVector]:
-    path = Path(__file__).with_name("script_tests.json")
+    path = Path(__file__).with_name("data") / "script_tests.json"
     data = json.loads(path.read_text())
     vectors: List[ScriptVector] = []
     section: Optional[str] = None

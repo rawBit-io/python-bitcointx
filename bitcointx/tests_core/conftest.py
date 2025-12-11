@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List
+from typing import Iterable, List
 
 import pytest
 
 
-_RESULT_PATH = Path(__file__).with_name("script_vector_results.txt")
+_RESULT_DIR = Path(__file__).with_name("results")
+_RESULT_FILES: Iterable[Path] = (
+    _RESULT_DIR / "last_run.txt",
+    # Kept for backward compatibility with previous docs/logs
+    _RESULT_DIR / "script_vector_results.txt",
+)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -18,7 +23,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus: int) -> None:
     stats = terminalreporter.stats
     summary: List[str] = []
 
-    summary.append(f"timestamp_utc={datetime.utcnow().isoformat()}Z")
+    summary.append(f"timestamp_utc={datetime.now(UTC).isoformat()}")
     summary.append(f"collected={terminalreporter._numcollected}")  # type: ignore[attr-defined]
     summary.append(f"passed={len(stats.get('passed', []))}")
     summary.append(f"failed={len(stats.get('failed', []))}")
@@ -33,4 +38,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus: int) -> None:
         summary.append("failed_tests:")
         summary.extend(f"- {rep.nodeid}" for rep in failed)
 
-    _RESULT_PATH.write_text("\n".join(summary))
+    _RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    payload = "\n".join(summary)
+    for path in _RESULT_FILES:
+        path.write_text(payload)
