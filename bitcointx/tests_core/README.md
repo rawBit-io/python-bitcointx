@@ -6,4 +6,8 @@
 
 - **BIP341 construction (phase 2)**: `test_bip341_construction.py` checks wallet/address construction against `data/wallet-test-vectors.json` (tweaks, tapleaf hashes, merkle root, control blocks, scriptPubKey, Bech32m addresses). Run with `pytest bitcointx/tests_core/test_bip341_construction.py -vv`.
 
-Run everything in this directory at once via `./bitcointx/tests_core/run_all.sh`.
+- **BIP341 key-path + sighash (phase 3)**: `test_taproot_keypath.py` exercises key-path spends, SIGHASH modes (DEFAULT/ALL/NONE/SINGLE with/without ANYONECANPAY), invalid hashtypes/lengths, annex handling, and multi-input independence. Run with `pytest bitcointx/tests_core/test_taproot_keypath.py -vv`.
+
+General suite (bitcointx/tests): the main repository tests (wallet, PSBT, scripteval, serialize, etc.) live in `bitcointx/tests`. Run them alone with `python -m pytest bitcointx/tests -vv` (or `python3 -m pytest ...`).
+
+Run the full suite (general + tests_core) via `./bitcointx/tests_core/run_all.sh`.
