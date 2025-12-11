@@ -1547,7 +1547,7 @@ def SignatureHashSchnorr(
 
     if output_type == SIGHASH_SINGLE:
         outIdx = inIdx
-        if outIdx > len(txTo.vout):
+        if outIdx >= len(txTo.vout):
             raise ValueError(f'outIdx {outIdx} out of range ({len(txTo.vout)})')
         f.write(hashlib.sha256(txTo.vout[outIdx].serialize()).digest())
 
