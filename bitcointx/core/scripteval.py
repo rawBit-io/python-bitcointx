@@ -642,14 +642,33 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 raise VerifyScriptError("invalid schnorr hashtype")
 
             hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
+            hashtype_int = int(hashtype) if hashtype is not None else 0
             sh = SignatureHashSchnorr(
                 txTo, inIdx, spent_outputs,
                 hashtype=hashtype,
                 sigversion=SIGVERSION_TAPROOT,
                 annex_hash=execdata.annex_hash
             )
+            if on_step is not None:
+                on_step({
+                    "phase": "taproot",
+                    "step": "sighash",
+                    "sigversion": "tapsighash",
+                    "hashtype": hashtype_int,
+                    "sighash": sh.hex(),
+                })
             xpk = bitcointx.core.key.XOnlyPubKey(program)
-            if not xpk.verify_schnorr(sh, sig[:64]):
+            ok = xpk.verify_schnorr(sh, sig[:64])
+            if on_step is not None:
+                on_step({
+                    "phase": "taproot",
+                    "step": "schnorr_verify",
+                    "pubkey": bytes(xpk).hex(),
+                    "signature": sig[:64].hex(),
+                    "hashtype": hashtype_int,
+                    "result": ok,
+                })
+            if not ok:
                 raise VerifyScriptError("schnorr signature check failed")
             return
 
@@ -673,11 +692,34 @@ def VerifyWitnessProgram(witness: CScriptWitness,
         merkle_root = _taproot_merkle_root(control, tapleaf_hash)
         internal_pub = bitcointx.core.key.XOnlyPubKey(control[1:33])
         tweaked = bitcointx.core.key.XOnlyPubKey(program)
-        if not bitcointx.core.key.check_tap_tweak(
-                tweaked, internal_pub, merkle_root=merkle_root, parity=bool(control[0] & 1)):
+        parity = bool(control[0] & 1)
+        tweak_ok = bitcointx.core.key.check_tap_tweak(
+            tweaked, internal_pub, merkle_root=merkle_root, parity=parity)
+        if on_step is not None:
+            on_step({
+                "phase": "taproot",
+                "step": "control_block",
+                "leaf_version": leaf_version,
+                "tapleaf_hash": tapleaf_hash.hex(),
+                "merkle_root": merkle_root.hex(),
+                "internal_pubkey": bytes(internal_pub).hex(),
+                "tweaked_pubkey": bytes(tweaked).hex(),
+                "parity": parity,
+                "result": tweak_ok,
+            })
+        if not tweak_ok:
             raise VerifyScriptError("witness program mismatch")
 
         if leaf_version != TAPROOT_LEAF_TAPSCRIPT:
+            if on_step is not None:
+                on_step({
+                    "phase": "taproot",
+                    "step": "leaf_version",
+                    "leaf_version": leaf_version,
+                    "policy": ("reject"
+                               if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION in flags
+                               else "skip"),
+                })
             if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION in flags:
                 raise VerifyScriptError("taproot leaf version not supported")
             return
@@ -1044,6 +1086,20 @@ class TraceStep(TypedDict, total=False):
     phase: str
     failed: bool
     error: str
+    step: str
+    sigversion: str
+    hashtype: int
+    sighash: str
+    pubkey: str
+    signature: str
+    result: bool
+    leaf_version: int
+    tapleaf_hash: str
+    merkle_root: str
+    internal_pubkey: str
+    tweaked_pubkey: str
+    policy: str
+    parity: bool
 # --- RAWBIT PATCH END ---------------------------------------------------
 
 
