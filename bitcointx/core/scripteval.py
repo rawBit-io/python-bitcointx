@@ -643,6 +643,16 @@ def VerifyWitnessProgram(witness: CScriptWitness,
 
             hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
             hashtype_int = int(hashtype) if hashtype is not None else 0
+            hashtype_name = "DEFAULT" if hashtype_int == 0 else getattr(hashtype, "name", str(hashtype_int))
+            if on_step is not None:
+                on_step({
+                    "pc": -1,
+                    "opcode_name": "taproot_witness",
+                    "phase": "taproot",
+                    "step": "witness_stack",
+                    "stack_before": [sig.hex()],
+                    "stack_after": [sig.hex()],
+                })
             sh = SignatureHashSchnorr(
                 txTo, inIdx, spent_outputs,
                 hashtype=hashtype,
@@ -651,28 +661,47 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             )
             if on_step is not None:
                 on_step({
+                    "pc": -1,
+                    "opcode_name": "taproot_sighash",
                     "phase": "taproot",
                     "step": "sighash",
                     "sigversion": "tapsighash",
                     "hashtype": hashtype_int,
+                    "hashtype_name": hashtype_name,
                     "sighash": sh.hex(),
+                    "stack_before": [sig.hex()],
+                    "stack_after": [sig.hex()],
                 })
             xpk = bitcointx.core.key.XOnlyPubKey(program)
             ok = xpk.verify_schnorr(sh, sig[:64])
             if on_step is not None:
                 on_step({
+                    "pc": -1,
+                    "opcode_name": "taproot_schnorr_verify",
                     "phase": "taproot",
                     "step": "schnorr_verify",
                     "pubkey": bytes(xpk).hex(),
                     "signature": sig[:64].hex(),
                     "hashtype": hashtype_int,
+                    "hashtype_name": hashtype_name,
                     "result": ok,
+                    "stack_before": [sig.hex()],
+                    "stack_after": [b"\x01".hex() if ok else b"".hex()],
                 })
             if not ok:
                 raise VerifyScriptError("schnorr signature check failed")
             return
 
         # Script-path (control + script + stack)
+        if on_step is not None:
+            on_step({
+                "pc": -1,
+                "opcode_name": "taproot_witness",
+                "phase": "taproot",
+                "step": "witness_stack",
+                "stack_before": [x.hex() for x in stack],
+                "stack_after": [x.hex() for x in stack],
+            })
         control = stack.pop()
         script_bytes = stack.pop()
         if (len(control) < TAPROOT_CONTROL_BASE_SIZE
@@ -697,6 +726,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             tweaked, internal_pub, merkle_root=merkle_root, parity=parity)
         if on_step is not None:
             on_step({
+                "pc": -1,
+                "opcode_name": "taproot_control_block",
                 "phase": "taproot",
                 "step": "control_block",
                 "leaf_version": leaf_version,
