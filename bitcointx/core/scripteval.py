@@ -575,6 +575,17 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             hashScriptPubKey = hashlib.sha256(scriptPubKey).digest()
             if hashScriptPubKey != program:
                 raise VerifyScriptError("witness program mismatch")
+            if on_step is not None:
+                script_hex = scriptPubKey.hex()
+                on_step({
+                    "pc": -1,
+                    "opcode_name": "witness_script",
+                    "phase": "witnessScript",
+                    "step": "witness_script",
+                    "script_hex": script_hex,
+                    "stack_before": [script_hex],
+                    "stack_after": [script_hex],
+                })
         elif len(program) == 20:
             if len(stack) != 2:
                 raise VerifyScriptError("witness program mismatch")  # 2 items in witness
@@ -704,6 +715,16 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             })
         control = stack.pop()
         script_bytes = stack.pop()
+        if on_step is not None:
+            on_step({
+                "pc": -1,
+                "opcode_name": "witness_script",
+                "phase": "witnessScript",
+                "step": "witness_script",
+                "script_hex": script_bytes.hex(),
+                "stack_before": [x.hex() for x in stack],
+                "stack_after": [x.hex() for x in stack],
+            })
         if (len(control) < TAPROOT_CONTROL_BASE_SIZE
                 or len(control) > TAPROOT_CONTROL_MAX_SIZE
                 or (len(control) - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE != 0):
@@ -1131,6 +1152,7 @@ class TraceStep(TypedDict, total=False):
     tweaked_pubkey: str
     policy: str
     parity: bool
+    script_hex: str
 # --- RAWBIT PATCH END ---------------------------------------------------
 
 
