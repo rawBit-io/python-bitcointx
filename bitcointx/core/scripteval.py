@@ -592,6 +592,17 @@ def VerifyWitnessProgram(witness: CScriptWitness,
 
             scriptPubKey = script_class([OP_DUP, OP_HASH160, program,
                                          OP_EQUALVERIFY, OP_CHECKSIG])
+            if on_step is not None:
+                script_hex = scriptPubKey.hex()
+                on_step({
+                    "pc": -1,
+                    "opcode_name": "witness_script",
+                    "phase": "witnessScript",
+                    "step": "witness_script",
+                    "script_hex": script_hex,
+                    "stack_before": [x.hex() for x in stack],
+                    "stack_after": [x.hex() for x in stack],
+                })
         else:
             raise VerifyScriptError("wrong length for witness program")
 
