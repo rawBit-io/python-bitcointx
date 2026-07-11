@@ -35,7 +35,7 @@ import bitcointx.core._ripemd160
 
 from bitcointx.util import ensure_isinstance
 
-from bitcointx.core.script import (
+from bitcointx.core.script import (  # noqa: F401
     # Script helpers & containers
     CScript, CScriptOp, CScriptWitness, CScriptInvalidError,
     OPCODE_NAMES, DISABLED_OPCODES,
@@ -111,11 +111,12 @@ TAPROOT_CONTROL_MAX_SIZE = (
 
 # --- RAWBIT PATCH START: CLTV/CSV constants ----------------------------
 # These are used by _CheckLockTimeVerify / _CheckSequenceVerify
-LOCKTIME_THRESHOLD            = 500000000      #  < → block-height, ≥ → unix time
-SEQUENCE_LOCKTIME_MASK        = 0x0000FFFF
-SEQUENCE_LOCKTIME_DISABLE_FLAG = 1 << 31      # 0x80000000
-SEQUENCE_LOCKTIME_TYPE_FLAG    = 1 << 22      # 0x00400000
+LOCKTIME_THRESHOLD = 500000000  # < means block height, >= means Unix time
+SEQUENCE_LOCKTIME_MASK = 0x0000FFFF
+SEQUENCE_LOCKTIME_DISABLE_FLAG = 1 << 31  # 0x80000000
+SEQUENCE_LOCKTIME_TYPE_FLAG = 1 << 22  # 0x00400000
 # --- RAWBIT PATCH END ---------------------------------------------------
+
 
 class ScriptVerifyFlag_Type:
     ...
@@ -489,7 +490,13 @@ def _serialize_witness_stack_size(stack: Sequence[bytes]) -> int:
 
 
 # --- RAWBIT PATCH START: CLTV / CSV helpers ----------------------------
-def _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state):
+def _CheckLockTimeVerify(
+    stack: List[bytes],
+    txTo: 'bitcointx.core.CTransaction',
+    inIdx: int,
+    flags: Set[ScriptVerifyFlag_Type],
+    get_eval_state: Callable[[], ScriptEvalState],
+) -> None:
     """BIP-65  –  OP_CHECKLOCKTIMEVERIFY"""
     if len(stack) < 1:
         raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
@@ -511,7 +518,13 @@ def _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state):
         raise EvalScriptError("CLTV input is final", get_eval_state())
 
 
-def _CheckSequenceVerify(stack, txTo, inIdx, flags, get_eval_state):
+def _CheckSequenceVerify(
+    stack: List[bytes],
+    txTo: 'bitcointx.core.CTransaction',
+    inIdx: int,
+    flags: Set[ScriptVerifyFlag_Type],
+    get_eval_state: Callable[[], ScriptEvalState],
+) -> None:
     """BIP-112 –  OP_CHECKSEQUENCEVERIFY"""
     if len(stack) < 1:
         raise MissingOpArgumentsError(get_eval_state(), expected_stack_depth=1)
@@ -553,9 +566,11 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                          spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None,
                          execdata: Optional[ScriptExecutionData] = None,
                          # --- RAWBIT PATCH START: tracing hook -----------
-                         on_step: Optional[Callable[[dict], None]] = None
+                         on_step: Optional[
+                             Callable[['TraceStep'], None]
+                         ] = None,
                          # --- RAWBIT PATCH END ---------------------------
-                         , *, is_p2sh_wrapped: bool = False) -> None:
+                         *, is_p2sh_wrapped: bool = False) -> None:
 
     if script_class is None:
         raise ValueError("script class must be specified")
@@ -567,24 +582,86 @@ def VerifyWitnessProgram(witness: CScriptWitness,
     if witversion == 0:
         sigversion = SIGVERSION_WITNESS_V0
         stack = list(witness.stack)
+
+        # --- RAWBIT PATCH: validator steps (kind="validator") ----------
+        # These are consensus-rule actions performed by the validation
+        # engine, not opcodes; the UI renders them distinctly.
+        if on_step is not None:
+            # 1. The scriptPubKey (or P2SH redeemScript) matched the
+            #    v0 witness-program pattern; witness validation begins
+            #    on a fresh stack.
+            on_step({
+                "pc": -1,
+                "opcode_name": "witness_program_match",
+                "kind": "validator",
+                "step": "witness_program_match",
+                "phase": "witness",
+                "witness_version": 0,
+                "program_hex": program.hex(),
+                "p2sh_wrapped": is_p2sh_wrapped,
+                "stack_before": [],
+                "stack_after": [],
+            })
+            # 2. The witness items are deserialized onto the stack —
+            #    VarInt-framed data, nothing executes.
+            witness_total = len(stack)
+            loaded: List[str] = []
+            for wit_idx, elt in enumerate(stack):
+                item_hex = (script_class([elt]) if isinstance(elt, int)
+                            else bytes(elt)).hex()
+                on_step({
+                    "pc": -1,
+                    "opcode_name": f"witness item {wit_idx + 1}/{witness_total}",
+                    "kind": "validator",
+                    "step": "witness_load",
+                    "phase": "witness",
+                    "witness_index": wit_idx,
+                    "witness_total": witness_total,
+                    "stack_before": list(loaded),
+                    "stack_after": loaded + [item_hex],
+                })
+                loaded.append(item_hex)
+        # --- RAWBIT PATCH END -------------------------------------------
+
         if len(program) == 32:
             if len(stack) == 0:
                 raise VerifyScriptError("witness is empty")
 
+            if on_step is not None:
+                stack_before_check = [bytes(x).hex() for x in stack]
             scriptPubKey = script_class(stack.pop())
             hashScriptPubKey = hashlib.sha256(scriptPubKey).digest()
             if hashScriptPubKey != program:
+                if on_step is not None:
+                    on_step({
+                        "pc": -1,
+                        "opcode_name": "witness_script_check",
+                        "kind": "validator",
+                        "step": "witness_script_check",
+                        "phase": "witness",
+                        "script_hex": scriptPubKey.hex(),
+                        "sha256_hex": hashScriptPubKey.hex(),
+                        "program_hex": program.hex(),
+                        "stack_before": stack_before_check,
+                        "stack_after": [bytes(x).hex() for x in stack],
+                        "failed": True,
+                        "error": "witness program mismatch",
+                    })
                 raise VerifyScriptError("witness program mismatch")
             if on_step is not None:
-                script_hex = scriptPubKey.hex()
+                # 3a. The last witness item hash-checked against the
+                #     program and becomes the executable witnessScript.
                 on_step({
                     "pc": -1,
-                    "opcode_name": "witness_script",
-                    "phase": "witnessScript",
-                    "step": "witness_script",
-                    "script_hex": script_hex,
-                    "stack_before": [script_hex],
-                    "stack_after": [script_hex],
+                    "opcode_name": "witness_script_check",
+                    "kind": "validator",
+                    "step": "witness_script_check",
+                    "phase": "witness",
+                    "script_hex": scriptPubKey.hex(),
+                    "sha256_hex": hashScriptPubKey.hex(),
+                    "program_hex": program.hex(),
+                    "stack_before": stack_before_check,
+                    "stack_after": [bytes(x).hex() for x in stack],
                 })
         elif len(program) == 20:
             if len(stack) != 2:
@@ -593,15 +670,18 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             scriptPubKey = script_class([OP_DUP, OP_HASH160, program,
                                          OP_EQUALVERIFY, OP_CHECKSIG])
             if on_step is not None:
-                script_hex = scriptPubKey.hex()
+                # 3b. BIP143: the 20-byte program expands to the implied
+                #     P2PKH template (scriptCode) — never transmitted.
                 on_step({
                     "pc": -1,
-                    "opcode_name": "witness_script",
-                    "phase": "witnessScript",
-                    "step": "witness_script",
-                    "script_hex": script_hex,
-                    "stack_before": [x.hex() for x in stack],
-                    "stack_after": [x.hex() for x in stack],
+                    "opcode_name": "scriptcode_derive",
+                    "kind": "validator",
+                    "step": "scriptcode_derive",
+                    "phase": "witness",
+                    "script_hex": scriptPubKey.hex(),
+                    "program_hex": program.hex(),
+                    "stack_before": [bytes(x).hex() for x in stack],
+                    "stack_after": [bytes(x).hex() for x in stack],
                 })
         else:
             raise VerifyScriptError("wrong length for witness program")
@@ -682,7 +762,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 annex_hash=execdata.annex_hash
             )
             if on_step is not None:
-                on_step({
+                on_step({  # type: ignore[typeddict-unknown-key]
                     "pc": -1,
                     "opcode_name": "taproot_sighash",
                     "phase": "taproot",
@@ -697,7 +777,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             xpk = bitcointx.core.key.XOnlyPubKey(program)
             ok = xpk.verify_schnorr(sh, sig[:64])
             if on_step is not None:
-                on_step({
+                on_step({  # type: ignore[typeddict-unknown-key]
                     "pc": -1,
                     "opcode_name": "taproot_schnorr_verify",
                     "phase": "taproot",
@@ -1164,6 +1244,16 @@ class TraceStep(TypedDict, total=False):
     policy: str
     parity: bool
     script_hex: str
+    # "opcode" (default when absent) = executed by the script engine;
+    # "validator" = a consensus rule applied by the validation engine,
+    # not an instruction (BIP141/BIP143 witness handling, etc.)
+    kind: str
+    witness_index: int
+    witness_total: int
+    program_hex: str
+    sha256_hex: str
+    witness_version: int
+    p2sh_wrapped: bool
 # --- RAWBIT PATCH END ---------------------------------------------------
 
 
