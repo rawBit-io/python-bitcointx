@@ -201,6 +201,7 @@ def _assert_terminal_failure(
     *,
     step: Optional[str] = None,
     opcode_name: Optional[str] = None,
+    failure_phase: Optional[str] = None,
 ) -> Dict[str, object]:
     ok, typed_steps, error = result
     steps: List[Dict[str, object]] = [dict(item) for item in typed_steps]
@@ -216,8 +217,11 @@ def _assert_terminal_failure(
     assert failure['failed'] is True, context
     assert failure['error'] == error, context
     assert failure['error_code'] == error_code, context
-    assert failure['phase'] in VISIBLE_FAILURE_PHASES, context
-    assert failure['phase'] != 'witness', context
+    if failure_phase is None:
+        assert failure['phase'] in VISIBLE_FAILURE_PHASES, context
+        assert failure['phase'] != 'witness', context
+    else:
+        assert failure['phase'] == failure_phase, context
     assert isinstance(failure['stack_before'], list), context
     assert isinstance(failure['stack_after'], list), context
     assert isinstance(failure['step'], str), context
@@ -245,6 +249,7 @@ def test_v0_witness_program_boundary_failures_are_terminal() -> None:
             ),
             'WITNESS_PROGRAM_WITNESS_EMPTY',
             None,
+            None,
         ),
         (
             'wrong v0 program length',
@@ -253,6 +258,7 @@ def test_v0_witness_program_boundary_failures_are_terminal() -> None:
                 witness=CScriptWitness([b'item']),
             ),
             'WITNESS_PROGRAM_WRONG_LENGTH',
+            None,
             None,
         ),
         (
@@ -263,6 +269,7 @@ def test_v0_witness_program_boundary_failures_are_terminal() -> None:
             ),
             'WITNESS_PROGRAM_MISMATCH',
             None,
+            None,
         ),
         (
             'P2WSH commitment mismatch',
@@ -272,16 +279,18 @@ def test_v0_witness_program_boundary_failures_are_terminal() -> None:
             ),
             'WITNESS_PROGRAM_MISMATCH',
             'witness_script_check',
+            'witness',
         ),
     )
 
-    for name, result, error_code, step in cases:
+    for name, result, error_code, step, failure_phase in cases:
         _assert_terminal_failure(
             result,
             error_code,
             name,
             step=step,
             opcode_name=step,
+            failure_phase=failure_phase,
         )
 
 

@@ -233,8 +233,16 @@ class TestScriptEvaluationTrace(unittest.TestCase):
             ],
         )
         failed_check = validator_steps[-1]
+        self.assertEqual(set(failed_check), {
+            'pc', 'opcode_name', 'kind', 'step', 'phase', 'script_hex',
+            'sha256_hex', 'program_hex', 'stack_before', 'stack_after',
+            'failed', 'error', 'error_code',
+        })
+        self.assertEqual(failed_check['phase'], 'witness')
         self.assertTrue(failed_check['failed'])
         self.assertEqual(failed_check['error'], 'witness program mismatch')
+        self.assertEqual(failed_check['error_code'],
+                         'WITNESS_PROGRAM_MISMATCH')
         self.assertEqual(failed_check['sha256_hex'], program.hex())
         self.assertEqual(failed_check['program_hex'], corrupted_program.hex())
         self.assertEqual(failed_check['stack_before'], [witness_script_hex])
