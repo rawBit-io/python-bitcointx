@@ -251,8 +251,10 @@ class TestScriptEvaluationTrace(unittest.TestCase):
         self.assertIn('witness program mismatch', error or '')
         self.assertEqual(
             [step.get('step') for step in steps if 'kind' in step],
-            ['witness_program_match', 'witness_load'],
+            ['witness_program_match', 'witness_load', 'witness_stack'],
         )
+        self.assertEqual(steps[-1].get('error_code'),
+                         'WITNESS_PROGRAM_MISMATCH')
 
     def test_p2sh_wrapped_witness_marks_validator_step(self) -> None:
         transaction = self._dummy_transaction()

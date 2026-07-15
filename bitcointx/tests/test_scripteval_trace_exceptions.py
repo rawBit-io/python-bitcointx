@@ -80,7 +80,10 @@ class TestScriptEvaluationTraceExceptions(unittest.TestCase):
         )
 
         self.assertFalse(is_valid)
-        self.assertEqual(steps, [])
+        self.assertEqual(len(steps), 1)
+        self.assertTrue(steps[0]['failed'])
+        self.assertEqual(steps[0]['error_code'], 'BAD_OPCODE')
+        self.assertEqual(steps[0]['phase'], 'scriptPubKey')
         self.assertIn('truncated data', error or '')
 
     def test_verdict_parity_for_valid_and_validation_invalid_inputs(

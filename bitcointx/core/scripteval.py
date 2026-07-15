@@ -147,10 +147,8 @@ SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE = ScriptVerifyFlag_Type()
 
 _STRICT_ENCODING_FLAGS = set((SCRIPT_VERIFY_DERSIG, SCRIPT_VERIFY_LOW_S, SCRIPT_VERIFY_STRICTENC))
 
-# --- RAWBIT PATCH START: we handle CLTV/CSV, so they are not "unhandled"
-UNHANDLED_SCRIPT_VERIFY_FLAGS = set((
-    SCRIPT_VERIFY_CONST_SCRIPTCODE,
-))
+# --- RAWBIT PATCH START: all declared script flags are handled
+UNHANDLED_SCRIPT_VERIFY_FLAGS: Set[ScriptVerifyFlag_Type] = set()
 # --- RAWBIT PATCH END ---------------------------------------------------
 
 MANDATORY_SCRIPT_VERIFY_FLAGS = {SCRIPT_VERIFY_P2SH}
@@ -576,6 +574,13 @@ def VerifyWitnessProgram(witness: CScriptWitness,
     if script_class is None:
         raise ValueError("script class must be specified")
 
+    if (on_step is not None
+            and not isinstance(
+                on_step,
+                (_BoundedTraceRecorder, _FailureTrackingTraceCallback),
+            )):
+        on_step = _FailureTrackingTraceCallback(on_step)
+
     if execdata is None:
         execdata = ScriptExecutionData()
 
@@ -583,6 +588,9 @@ def VerifyWitnessProgram(witness: CScriptWitness,
     if witversion == 0:
         sigversion = SIGVERSION_WITNESS_V0
         stack = list(witness.stack)
+        program_phase = (
+            'redeemScript' if is_p2sh_wrapped else 'scriptPubKey'
+        )
 
         # --- RAWBIT PATCH: validator steps (kind="validator") ----------
         # These are consensus-rule actions performed by the validation
@@ -630,6 +638,14 @@ def VerifyWitnessProgram(witness: CScriptWitness,
 
         if len(program) == 32:
             if len(stack) == 0:
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='witness_stack',
+                    phase=program_phase,
+                    stack_before=stack,
+                    error="witness is empty",
+                    error_code='WITNESS_PROGRAM_WITNESS_EMPTY',
+                )
                 raise VerifyScriptError("witness is empty")
 
             stack_before_check: Optional[List[bytes]] = None
@@ -643,7 +659,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                     "opcode_name": "witness_script_check",
                     "kind": "validator",
                     "step": "witness_script_check",
-                    "phase": "witness",
+                    "phase": program_phase,
                     "script_hex": scriptPubKey.hex(),
                     "sha256_hex": hashScriptPubKey.hex(),
                     "program_hex": program.hex(),
@@ -653,6 +669,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                     "stack_after": [bytes(x).hex() for x in stack],
                     "failed": True,
                     "error": "witness program mismatch",
+                    "error_code": "WITNESS_PROGRAM_MISMATCH",
                 })
                 raise VerifyScriptError("witness program mismatch")
             # 3a. The last witness item hash-checked against the
@@ -673,6 +690,14 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             })
         elif len(program) == 20:
             if len(stack) != 2:
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='witness_stack',
+                    phase=program_phase,
+                    stack_before=stack,
+                    error="witness program mismatch",
+                    error_code='WITNESS_PROGRAM_MISMATCH',
+                )
                 raise VerifyScriptError("witness program mismatch")  # 2 items in witness
 
             scriptPubKey = script_class([OP_DUP, OP_HASH160, program,
@@ -691,26 +716,81 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 "stack_after": [bytes(x).hex() for x in stack],
             })
         else:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='witness_program',
+                phase=program_phase,
+                stack_before=stack,
+                error="wrong length for witness program",
+                error_code='WITNESS_PROGRAM_WRONG_LENGTH',
+            )
             raise VerifyScriptError("wrong length for witness program")
 
         for i, elt in enumerate(stack):
             elt_len = len(script_class([elt])) if isinstance(elt, int) else len(elt)
             if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
-                raise VerifyScriptError(
+                message = (
                     "maximum push size exceeded by an item at position {} "
-                    "on witness stack".format(i))
+                    "on witness stack".format(i)
+                )
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='witness_element_size',
+                    phase='witnessScript',
+                    stack_before=stack,
+                    error=message,
+                    error_code='PUSH_SIZE',
+                )
+                raise VerifyScriptError(message)
 
-        EvalScript(stack, scriptPubKey, txTo, inIdx,
-                   flags=flags, amount=amount, sigversion=sigversion,
-                   on_step=on_step, phase="witnessScript",
-                   execdata=execdata, spent_outputs=spent_outputs)
+        try:
+            EvalScript(stack, scriptPubKey, txTo, inIdx,
+                       flags=flags, amount=amount, sigversion=sigversion,
+                       on_step=on_step, phase="witnessScript",
+                       execdata=execdata, spent_outputs=spent_outputs)
+        except (bitcointx.core.ValidationError,
+                CScriptInvalidError) as err:
+            machine_name, error_code = _trace_validation_error_identity(err)
+            _emit_terminal_failure(
+                on_step,
+                machine_name=machine_name,
+                phase='witnessScript',
+                stack_before=stack,
+                error=str(err),
+                error_code=error_code,
+            )
+            raise
 
         if len(stack) == 0:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='final_stack',
+                phase='witnessScript',
+                stack_before=stack,
+                error="scriptPubKey left an empty stack",
+                error_code='EVAL_FALSE',
+            )
             raise VerifyScriptError("scriptPubKey left an empty stack")
         elif len(stack) != 1:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='final_stack',
+                phase='witnessScript',
+                stack_before=stack,
+                error="scriptPubKey left extra items on stack",
+                error_code='CLEANSTACK',
+            )
             raise VerifyScriptError("scriptPubKey left extra items on stack")
 
         if not _CastToBool(stack[-1]):
+            _emit_terminal_failure(
+                on_step,
+                machine_name='final_stack',
+                phase='witnessScript',
+                stack_before=stack,
+                error="scriptPubKey returned false",
+                error_code='EVAL_FALSE',
+            )
             raise VerifyScriptError("scriptPubKey returned false")
         return
 
@@ -721,17 +801,47 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             return
         if SCRIPT_VERIFY_TAPROOT not in flags:
             if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='witness_program',
+                    phase='redeemScript',
+                    stack_before=witness.stack,
+                    error="upgradeable witness program is not accepted",
+                    error_code=(
+                        'DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM'
+                    ),
+                )
                 raise VerifyScriptError("upgradeable witness program is not accepted")
             return
         if is_p2sh_wrapped:
             if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='witness_program',
+                    phase='redeemScript',
+                    stack_before=witness.stack,
+                    error="upgradeable witness program is not accepted",
+                    error_code=(
+                        'DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM'
+                    ),
+                )
                 raise VerifyScriptError("upgradeable witness program is not accepted")
             return
-        stack = list(witness.stack)
+        original_stack = list(witness.stack)
+        stack = list(original_stack)
         if len(stack) == 0:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='witness_stack',
+                phase='taproot',
+                stack_before=stack,
+                error="witness is empty",
+                error_code='WITNESS_PROGRAM_WITNESS_EMPTY',
+            )
             raise VerifyScriptError("witness is empty")
 
         # Optional annex
+        annex: Optional[bytes] = None
         if len(stack) >= 2 and len(stack[-1]) > 0 and stack[-1][0] == ANNEX_TAG:
             annex = stack.pop()
             annex_serialized = BytesSerializer.serialize(annex)
@@ -743,33 +853,88 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             execdata.annex_present = False
         execdata.annex_init = True
 
+        _emit_trace(on_step, 'taproot', lambda: {
+            "pc": -1,
+            "opcode_name": "taproot_witness",
+            "phase": "taproot",
+            "step": "witness_stack",
+            "stack_before": [x.hex() for x in original_stack],
+            "stack_after": [x.hex() for x in original_stack],
+        })
+        if annex is not None:
+            annex_hash = execdata.annex_hash
+            assert annex_hash is not None
+            _emit_trace(on_step, 'taproot', lambda: {
+                "pc": -1,
+                "kind": "validator",
+                "opcode_name": "taproot_annex",
+                "step": "taproot_annex",
+                "phase": "taproot",
+                "annex_hex": annex.hex(),
+                "annex_hash": annex_hash.hex(),
+                "stack_before": [x.hex() for x in original_stack],
+                "stack_after": [x.hex() for x in stack],
+            })
+
         # Key-path (only signature left)
         if len(stack) == 1:
             sig = stack[0]
             if len(sig) not in (64, 65):
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='schnorr_signature',
+                    phase='taproot',
+                    stack_before=stack,
+                    error="invalid schnorr signature size",
+                    error_code='SCHNORR_SIG_SIZE',
+                )
                 raise VerifyScriptError("invalid schnorr signature size")
             if len(sig) == 65 and (sig[-1] == 0 or sig[-1] not in VALID_SCHNORR_HASHTYPES):
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='schnorr_signature',
+                    phase='taproot',
+                    stack_before=stack,
+                    error="invalid schnorr hashtype",
+                    error_code='SCHNORR_SIG_HASHTYPE',
+                )
                 raise VerifyScriptError("invalid schnorr hashtype")
             if spent_outputs is None:
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='taproot_context',
+                    phase='taproot',
+                    stack_before=stack,
+                    error=(
+                        "spent_outputs are required for taproot key path "
+                        "verification"
+                    ),
+                    error_code='MISSING_SPENT_OUTPUTS',
+                )
                 raise VerifyScriptError("spent_outputs are required for taproot key path verification")
 
             hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
             hashtype_int = int(hashtype) if hashtype is not None else 0
             hashtype_name = "DEFAULT" if hashtype_int == 0 else getattr(hashtype, "name", str(hashtype_int))
-            _emit_trace(on_step, 'taproot', lambda: {
-                "pc": -1,
-                "opcode_name": "taproot_witness",
-                "phase": "taproot",
-                "step": "witness_stack",
-                "stack_before": [sig.hex()],
-                "stack_after": [sig.hex()],
-            })
-            sh = SignatureHashSchnorr(
-                txTo, inIdx, spent_outputs,
-                hashtype=hashtype,
-                sigversion=SIGVERSION_TAPROOT,
-                annex_hash=execdata.annex_hash
-            )
+            try:
+                sh = SignatureHashSchnorr(
+                    txTo, inIdx, spent_outputs,
+                    hashtype=hashtype,
+                    sigversion=SIGVERSION_TAPROOT,
+                    annex_hash=execdata.annex_hash
+                )
+            except bitcointx.core.ValidationError as err:
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='taproot_sighash',
+                    opcode_name='taproot_sighash',
+                    step='sighash',
+                    phase='taproot',
+                    stack_before=stack,
+                    error=str(err),
+                    error_code='SIGHASH_ERROR',
+                )
+                raise
             _emit_trace(on_step, 'taproot', lambda: {  # type: ignore[typeddict-unknown-key]
                 "pc": -1,
                 "opcode_name": "taproot_sighash",
@@ -796,22 +961,59 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 "result": ok,
                 "stack_before": [sig.hex()],
                 "stack_after": [b"\x01".hex() if ok else b"".hex()],
+                **({
+                    "kind": "validator",
+                    "failed": True,
+                    "error": "schnorr signature check failed",
+                    "error_code": "SCHNORR_SIG",
+                } if not ok else {}),
             })
             if not ok:
                 raise VerifyScriptError("schnorr signature check failed")
             return
 
         # Script-path (control + script + stack)
-        _emit_trace(on_step, 'taproot', lambda: {
-            "pc": -1,
-            "opcode_name": "taproot_witness",
-            "phase": "taproot",
-            "step": "witness_stack",
-            "stack_before": [x.hex() for x in stack],
-            "stack_after": [x.hex() for x in stack],
-        })
         control = stack.pop()
         script_bytes = stack.pop()
+
+        control_size_valid = (
+            len(control) >= TAPROOT_CONTROL_BASE_SIZE
+            and len(control) <= TAPROOT_CONTROL_MAX_SIZE
+            and (len(control) - TAPROOT_CONTROL_BASE_SIZE)
+            % TAPROOT_CONTROL_NODE_SIZE == 0
+        )
+        leaf_version: Optional[int] = None
+        tapleaf_hash: Optional[bytes] = None
+        merkle_root: Optional[bytes] = None
+        internal_pub: Optional[bitcointx.core.key.XOnlyPubKey] = None
+        tweaked: Optional[bitcointx.core.key.XOnlyPubKey] = None
+        parity: Optional[bool] = None
+        internal_pub_valid = False
+        tweaked_valid = False
+        tweak_ok = False
+
+        if control_size_valid:
+            leaf_version = control[0] & TAPROOT_LEAF_MASK
+            tapleaf_hash = bitcointx.core.CoreCoinParams.tapleaf_hasher(
+                bytes([leaf_version])
+                + BytesSerializer.serialize(script_bytes)
+            )
+            merkle_root = _taproot_merkle_root(control, tapleaf_hash)
+            internal_pub = bitcointx.core.key.XOnlyPubKey(control[1:33])
+            internal_pub_valid = internal_pub.is_fullyvalid()
+            tweaked = bitcointx.core.key.XOnlyPubKey(program)
+            tweaked_valid = tweaked.is_fullyvalid()
+            parity = bool(control[0] & 1)
+            if internal_pub_valid and tweaked_valid:
+                tweak_ok = bitcointx.core.key.check_tap_tweak(
+                    tweaked,
+                    internal_pub,
+                    merkle_root=merkle_root,
+                    parity=parity,
+                )
+
+        committed = control_size_valid and tweak_ok
+        executed = committed and leaf_version == TAPROOT_LEAF_TAPSCRIPT
         _emit_trace(on_step, 'witnessScript', lambda: {
             "pc": -1,
             "opcode_name": "witness_script",
@@ -820,31 +1022,57 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             "script_hex": script_bytes.hex(),
             "stack_before": [x.hex() for x in stack],
             "stack_after": [x.hex() for x in stack],
+            "committed": committed,
+            "executed": executed,
         })
-        if (len(control) < TAPROOT_CONTROL_BASE_SIZE
-                or len(control) > TAPROOT_CONTROL_MAX_SIZE
-                or (len(control) - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE != 0):
+        if not control_size_valid:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='taproot_control_block',
+                opcode_name='taproot_control_block',
+                step='control_block',
+                phase='taproot',
+                stack_before=stack,
+                error="taproot control block has wrong size",
+                error_code='TAPROOT_WRONG_CONTROL_SIZE',
+            )
             raise VerifyScriptError("taproot control block has wrong size")
 
-        leaf_version = control[0] & TAPROOT_LEAF_MASK
-        tapleaf_hash = bitcointx.core.CoreCoinParams.tapleaf_hasher(
-            bytes([leaf_version]) + BytesSerializer.serialize(script_bytes)
-        )
+        assert leaf_version is not None
+        assert tapleaf_hash is not None
+        assert merkle_root is not None
+        assert internal_pub is not None
+        assert tweaked is not None
+        assert parity is not None
         execdata.tapleaf_hash = tapleaf_hash
         execdata.tapleaf_hash_init = True
         execdata.codeseparator_pos = 0xFFFFFFFF
         execdata.codeseparator_pos_init = True
 
-        merkle_root = _taproot_merkle_root(control, tapleaf_hash)
-        internal_pub = bitcointx.core.key.XOnlyPubKey(control[1:33])
-        if not internal_pub.is_fullyvalid():
+        if not internal_pub_valid:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='taproot_control_block',
+                opcode_name='taproot_control_block',
+                step='control_block',
+                phase='taproot',
+                stack_before=stack,
+                error="witness program mismatch",
+                error_code='WITNESS_PROGRAM_MISMATCH',
+            )
             raise VerifyScriptError("witness program mismatch")
-        tweaked = bitcointx.core.key.XOnlyPubKey(program)
-        if not tweaked.is_fullyvalid():
+        if not tweaked_valid:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='taproot_control_block',
+                opcode_name='taproot_control_block',
+                step='control_block',
+                phase='taproot',
+                stack_before=stack,
+                error="witness program mismatch",
+                error_code='WITNESS_PROGRAM_MISMATCH',
+            )
             raise VerifyScriptError("witness program mismatch")
-        parity = bool(control[0] & 1)
-        tweak_ok = bitcointx.core.key.check_tap_tweak(
-            tweaked, internal_pub, merkle_root=merkle_root, parity=parity)
         _emit_trace(on_step, 'taproot', lambda: {
             "pc": -1,
             "opcode_name": "taproot_control_block",
@@ -857,6 +1085,14 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             "tweaked_pubkey": bytes(tweaked).hex(),
             "parity": parity,
             "result": tweak_ok,
+            **({
+                "kind": "validator",
+                "stack_before": [x.hex() for x in stack],
+                "stack_after": [x.hex() for x in stack],
+                "failed": True,
+                "error": "witness program mismatch",
+                "error_code": "TWEAK_MISMATCH",
+            } if not tweak_ok else {}),
         })
         if not tweak_ok:
             raise VerifyScriptError("witness program mismatch")
@@ -878,6 +1114,9 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 **({
                     "failed": True,
                     "error": "taproot leaf version not supported",
+                    "error_code": (
+                        "DISCOURAGE_UPGRADABLE_TAPROOT_VERSION"
+                    ),
                 } if reject_unknown_leaf else {}),
             })
             if reject_unknown_leaf:
@@ -888,35 +1127,119 @@ def VerifyWitnessProgram(witness: CScriptWitness,
         try:
             for (opcode, data, sop_idx) in script_class(script_bytes).raw_iter():
                 if _is_op_success(int(opcode)):
-                    if SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags:
-                        raise VerifyScriptError("OP_SUCCESSx discouraged by policy")
+                    discouraged = SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags
+                    _emit_trace(on_step, 'taproot', lambda: {
+                        "pc": sop_idx,
+                        "kind": "validator",
+                        "opcode_name": "op_success",
+                        "step": "op_success",
+                        "phase": "taproot",
+                        "stack_before": [x.hex() for x in stack],
+                        "stack_after": [x.hex() for x in stack],
+                        "policy": "discouraged" if discouraged else "ok",
+                    })
+                    if discouraged:
+                        message = "OP_SUCCESSx discouraged by policy"
+                        _emit_terminal_failure(
+                            on_step,
+                            machine_name='op_success_policy',
+                            phase='taproot',
+                            stack_before=stack,
+                            error=message,
+                            error_code='DISCOURAGE_OP_SUCCESS',
+                        )
+                        raise VerifyScriptError(message)
                     return
         except CScriptInvalidError as err:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='script_parse',
+                phase='witnessScript',
+                stack_before=stack,
+                error=repr(err),
+                error_code='BAD_OPCODE',
+            )
             raise VerifyScriptError(repr(err))
 
         for i, elt in enumerate(stack):
             elt_len = len(script_class([elt])) if isinstance(elt, int) else len(elt)
             if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
-                raise VerifyScriptError(
+                message = (
                     "maximum push size exceeded by an item at position {} "
-                    "on witness stack".format(i))
+                    "on witness stack".format(i)
+                )
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='witness_element_size',
+                    phase='witnessScript',
+                    stack_before=stack,
+                    error=message,
+                    error_code='PUSH_SIZE',
+                )
+                raise VerifyScriptError(message)
         if len(stack) > MAX_STACK_ITEMS:
-            raise VerifyScriptError("witness stack exceeds maximum items")
+            message = "witness stack exceeds maximum items"
+            _emit_terminal_failure(
+                on_step,
+                machine_name='witness_stack_size',
+                phase='witnessScript',
+                stack_before=stack,
+                error=message,
+                error_code='STACK_SIZE',
+            )
+            raise VerifyScriptError(message)
 
         execdata.validation_weight_left = _serialize_witness_stack_size(witness.stack) + VALIDATION_WEIGHT_OFFSET
         execdata.validation_weight_left_init = True
 
         exec_script = script_class(script_bytes)
-        EvalScript(stack, exec_script, txTo, inIdx, flags=flags,
-                   amount=amount, sigversion=SIGVERSION_TAPSCRIPT,
-                   on_step=on_step, phase="witnessScript",
-                   execdata=execdata, spent_outputs=spent_outputs)
+        try:
+            EvalScript(stack, exec_script, txTo, inIdx, flags=flags,
+                       amount=amount, sigversion=SIGVERSION_TAPSCRIPT,
+                       on_step=on_step, phase="witnessScript",
+                       execdata=execdata, spent_outputs=spent_outputs)
+        except (bitcointx.core.ValidationError,
+                CScriptInvalidError) as err:
+            machine_name, error_code = _trace_validation_error_identity(err)
+            _emit_terminal_failure(
+                on_step,
+                machine_name=machine_name,
+                phase='witnessScript',
+                stack_before=stack,
+                error=str(err),
+                error_code=error_code,
+            )
+            raise
 
         if len(stack) == 0:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='final_stack',
+                phase='witnessScript',
+                stack_before=stack,
+                error="scriptPubKey left an empty stack",
+                error_code='EVAL_FALSE',
+            )
             raise VerifyScriptError("scriptPubKey left an empty stack")
         elif len(stack) != 1:
+            _emit_terminal_failure(
+                on_step,
+                machine_name='final_stack',
+                phase='witnessScript',
+                stack_before=stack,
+                error="scriptPubKey left extra items on stack",
+                error_code='CLEANSTACK',
+            )
             raise VerifyScriptError("scriptPubKey left extra items on stack")
         if not _CastToBool(stack[-1]):
+            _emit_terminal_failure(
+                on_step,
+                machine_name='final_stack',
+                phase='witnessScript',
+                stack_before=stack,
+                error="scriptPubKey returned false",
+                error_code='EVAL_FALSE',
+            )
             raise VerifyScriptError("scriptPubKey returned false")
         return
 
@@ -925,7 +1248,16 @@ def VerifyWitnessProgram(witness: CScriptWitness,
         return
 
     if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
-        raise VerifyScriptError("upgradeable witness program is not accepted")
+        message = "upgradeable witness program is not accepted"
+        _emit_terminal_failure(
+            on_step,
+            machine_name='witness_program',
+            phase='redeemScript' if is_p2sh_wrapped else 'scriptPubKey',
+            stack_before=witness.stack,
+            error=message,
+            error_code='DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM',
+        )
+        raise VerifyScriptError(message)
     # Higher version witness scripts return true for future softfork compatibility
     return
 
@@ -1052,7 +1384,13 @@ def _CheckMultiSig(opcode: CScriptOp, script: CScript,
         # Drop the signature in pre-segwit scripts but not segwit scripts
         for k in range(sigs_count):
             sig = stack[-isig - k]
-            script = FindAndDelete(script, script.__class__([sig]))
+            cleaned_script = FindAndDelete(
+                script, script.__class__([sig]))
+            if (SCRIPT_VERIFY_CONST_SCRIPTCODE in flags
+                    and cleaned_script != script):
+                raise EvalScriptError(
+                    "Signature is found in scriptCode", get_eval_state())
+            script = cleaned_script
 
     success = True
 
@@ -1277,7 +1615,29 @@ class TraceStep(TypedDict, total=False):
     sha256_hex: str
     witness_version: int
     p2sh_wrapped: bool
+    branch_active: bool
+    error_code: str
+    annex_hex: str
+    annex_hash: str
+    committed: bool
+    executed: bool
 # --- RAWBIT PATCH END ---------------------------------------------------
+
+
+class _FailureTrackingTraceCallback:
+    """Forward trace steps while remembering whether failure was emitted."""
+
+    def __init__(self, callback: Callable[[TraceStep], None]) -> None:
+        self._callback = callback
+        self._failure_recorded = False
+
+    def __call__(self, step: TraceStep) -> None:
+        self._callback(step)
+        if step.get('failed') is True:
+            self._failure_recorded = True
+
+    def _trace_failure_recorded(self) -> bool:
+        return self._failure_recorded
 
 
 class _BoundedTraceRecorder:
@@ -1300,6 +1660,8 @@ class _BoundedTraceRecorder:
         self._max_trace_bytes = max_trace_bytes
         self._trace_bytes = 0
         self._active = True
+        self._failure_recorded = False
+        self._truncated = False
 
     @staticmethod
     def _normalized_phase(phase: str) -> str:
@@ -1325,6 +1687,7 @@ class _BoundedTraceRecorder:
             ),
         })
         self._active = False
+        self._truncated = True
 
     def _trace_is_active(self) -> bool:
         if not self._active:
@@ -1371,6 +1734,14 @@ class _BoundedTraceRecorder:
 
         self._steps.append(step)
         self._trace_bytes += step_size
+        if step.get('failed') is True:
+            self._failure_recorded = True
+
+    def _trace_failure_recorded(self) -> bool:
+        return self._failure_recorded
+
+    def _trace_was_truncated(self) -> bool:
+        return self._truncated
 
 
 def _trace_is_active(
@@ -1393,12 +1764,85 @@ def _trace_wants_step(
     return True
 
 
+def _trace_failure_recorded(
+    on_step: Optional[Callable[[TraceStep], None]]
+) -> bool:
+    if isinstance(
+        on_step, (_BoundedTraceRecorder, _FailureTrackingTraceCallback)
+    ):
+        return on_step._trace_failure_recorded()
+    return False
+
+
+def _trace_was_truncated(
+    on_step: Optional[Callable[[TraceStep], None]]
+) -> bool:
+    if isinstance(on_step, _BoundedTraceRecorder):
+        return on_step._trace_was_truncated()
+    return False
+
+
 def _emit_trace(
     on_step: Optional[Callable[[TraceStep], None]], phase: str,
     step_factory: Callable[[], TraceStep]
 ) -> None:
     if on_step is not None and _trace_wants_step(on_step, phase):
         on_step(step_factory())
+
+
+def _visible_trace_phase(phase: str) -> str:
+    if phase == 'witness':
+        return 'scriptPubKey'
+    return phase
+
+
+def _emit_terminal_failure(
+    on_step: Optional[Callable[[TraceStep], None]], *,
+    machine_name: str,
+    phase: str,
+    stack_before: Sequence[bytes],
+    stack_after: Optional[Sequence[bytes]] = None,
+    error: str,
+    error_code: str,
+    opcode_name: Optional[str] = None,
+    step: Optional[str] = None,
+) -> None:
+    if (_trace_failure_recorded(on_step)
+            or _trace_was_truncated(on_step)):
+        return
+
+    visible_phase = _visible_trace_phase(phase)
+    if stack_after is None:
+        stack_after = stack_before
+
+    _emit_trace(on_step, visible_phase, lambda: {
+        'pc': -1,
+        'kind': 'validator',
+        'opcode_name': opcode_name or machine_name,
+        'step': step or machine_name,
+        'phase': visible_phase,
+        'stack_before': [bytes(x).hex() for x in stack_before],
+        'stack_after': [bytes(x).hex() for x in stack_after or ()],
+        'failed': True,
+        'error': error,
+        'error_code': error_code,
+    })
+
+
+def _trace_validation_error_identity(
+    error: BaseException,
+) -> Tuple[str, str]:
+    message = str(error).lower()
+    if 'script too large' in message:
+        return 'script_size', 'SCRIPT_SIZE'
+    if (isinstance(error, CScriptInvalidError)
+            or 'truncated data' in message
+            or 'cscriptinvaliderror' in message
+            or 'cscripttruncatedpushdataerror' in message):
+        return 'script_parse', 'BAD_OPCODE'
+    if 'unterminated if/else block' in message:
+        return 'conditional_balance', 'UNBALANCED_CONDITIONAL'
+    return 'verification', 'VALIDATION_ERROR'
 
 
 def _EvalScript(stack: List[bytes], scriptIn: CScript,
@@ -1471,6 +1915,13 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 if nOpCount[0] > MAX_SCRIPT_OPCODES:
                     raise MaxOpCountError(get_eval_state())
 
+            if (sop == OP_CODESEPARATOR
+                    and sigversion == SIGVERSION_BASE
+                    and SCRIPT_VERIFY_CONST_SCRIPTCODE in flags):
+                raise EvalScriptError(
+                    "Using OP_CODESEPARATOR in non-witness script",
+                    get_eval_state())
+
             def check_args(n: int) -> None:
                 if len(stack) < n:
                     raise MissingOpArgumentsError(get_eval_state(),
@@ -1502,6 +1953,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                         ],
                         "stack_after": [x.hex() for x in stack],
                         "phase": phase,
+                        "branch_active": fExec,
                     })
                     opcode_pos += 1
                     continue
@@ -1625,8 +2077,14 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                         tmpScript = scriptIn.__class__(scriptIn[pbegincodehash:])
 
                         if sigversion == SIGVERSION_BASE:
-                            tmpScript = FindAndDelete(tmpScript,
-                                                      scriptIn.__class__([vchSig]))
+                            cleaned_script = FindAndDelete(
+                                tmpScript, scriptIn.__class__([vchSig]))
+                            if (SCRIPT_VERIFY_CONST_SCRIPTCODE in flags
+                                    and cleaned_script != tmpScript):
+                                raise EvalScriptError(
+                                    "Signature is found in scriptCode",
+                                    get_eval_state())
+                            tmpScript = cleaned_script
 
                         ok = _CheckSig(vchSig, vchPubKey, tmpScript, txTo, inIdx, flags,
                                        amount=amount, sigversion=sigversion)
@@ -1911,6 +2369,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 "stack_before": [x.hex() for x in stack_before or []],
                 "stack_after": [x.hex() for x in stack],
                 "phase": phase,
+                "branch_active": fExec,
             })
 
         except Exception as e:
@@ -2186,14 +2645,42 @@ def VerifyScriptWithTrace(
         max_trace_steps=max_trace_steps,
         max_trace_bytes=max_trace_bytes,
     )
+    stack: List[bytes] = []
+    current_phase = 'scriptSig'
+
+    def reject(
+        message: str, error_code: str, *,
+        machine_name: str = 'verification',
+        phase: Optional[str] = None,
+        failure_stack: Optional[Sequence[bytes]] = None,
+    ) -> Tuple[bool, List[TraceStep], Optional[str]]:
+        _emit_terminal_failure(
+            recorder,
+            machine_name=machine_name,
+            phase=phase or current_phase,
+            stack_before=stack if failure_stack is None else failure_stack,
+            error=message,
+            error_code=error_code,
+        )
+        return False, steps, message
 
     try:
         # Argument checks mirror VerifyScript
         ensure_isinstance(scriptSig, CScript, 'scriptSig')
         if not isinstance(scriptPubKey, CScript):
-            return False, steps, "scriptPubKey must be a CScript"
+            return reject(
+                "scriptPubKey must be a CScript",
+                'INVALID_SCRIPT_TYPE',
+                machine_name='script_type',
+                phase='scriptPubKey',
+            )
         if type(scriptSig) is not type(scriptPubKey):
-            return False, steps, "scriptSig and scriptPubKey must be the same script class"
+            return reject(
+                "scriptSig and scriptPubKey must be the same script class",
+                'SCRIPT_CLASS_MISMATCH',
+                machine_name='script_type',
+                phase='scriptPubKey',
+            )
 
         script_class = scriptSig.__class__
 
@@ -2205,35 +2692,66 @@ def VerifyScriptWithTrace(
 
         if flags & UNHANDLED_SCRIPT_VERIFY_FLAGS:
             bad = script_verify_flags_to_string(flags & UNHANDLED_SCRIPT_VERIFY_FLAGS)
-            return False, steps, f"some of the flags cannot be handled by current code: {bad}"
+            return reject(
+                f"some of the flags cannot be handled by current code: {bad}",
+                'UNHANDLED_SCRIPT_VERIFY_FLAGS',
+                machine_name='verify_flags',
+                phase='scriptSig',
+            )
 
         if SCRIPT_VERIFY_SIGPUSHONLY in flags and not scriptSig.is_push_only():
-            return False, steps, "scriptSig is not push-only"
+            return reject(
+                "scriptSig is not push-only",
+                'SIG_PUSHONLY',
+                machine_name='script_push_only',
+                phase='scriptSig',
+            )
 
         # Execute scriptSig
-        stack: List[bytes] = []
         execdata = ScriptExecutionData()
+        current_phase = 'scriptSig'
         try:
             EvalScript(stack, scriptSig, txTo, inIdx, flags=flags, on_step=recorder,
                        phase="scriptSig", execdata=execdata, spent_outputs=spent_outputs)
         except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
-            return False, steps, str(e)
+            machine_name, error_code = _trace_validation_error_identity(e)
+            return reject(
+                str(e), error_code,
+                machine_name=machine_name,
+                phase='scriptSig',
+            )
 
         # P2SH stack copy
         if SCRIPT_VERIFY_P2SH in flags:
             stackCopy = list(stack)
 
         # Execute scriptPubKey
+        current_phase = 'scriptPubKey'
         try:
             EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, on_step=recorder,
                        phase="scriptPubKey", execdata=execdata, spent_outputs=spent_outputs)
         except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
-            return False, steps, str(e)
+            machine_name, error_code = _trace_validation_error_identity(e)
+            return reject(
+                str(e), error_code,
+                machine_name=machine_name,
+                phase='scriptPubKey',
+            )
 
         if not stack:
-            return False, steps, "scriptPubKey left an empty stack"
+            return reject(
+                "scriptPubKey left an empty stack",
+                'EVAL_FALSE',
+                machine_name='final_stack',
+                phase='scriptPubKey',
+            )
         if not _CastToBool(stack[-1]):
-            return False, steps, "scriptPubKey returned false"
+            return reject(
+                "scriptPubKey returned false",
+                'EVAL_FALSE',
+                machine_name='final_stack',
+                phase='scriptPubKey',
+            )
 
         hadWitness = False
         if witness is None:
@@ -2243,7 +2761,17 @@ def VerifyScriptWithTrace(
         if SCRIPT_VERIFY_WITNESS in flags and scriptPubKey.is_witness_scriptpubkey():
             hadWitness = True
             if scriptSig:
-                return False, steps, "scriptSig is not empty"
+                return reject(
+                    "scriptSig is not empty",
+                    'WITNESS_MALLEATED',
+                    machine_name='witness_program',
+                    phase='scriptPubKey',
+                )
+            current_phase = 'taproot' if (
+                scriptPubKey.witness_version() == 1
+                and len(scriptPubKey.witness_program())
+                == WITNESS_V1_TAPROOT_SIZE
+            ) else 'witnessScript'
             try:
                 VerifyWitnessProgram(witness,
                                      scriptPubKey.witness_version(),
@@ -2254,36 +2782,73 @@ def VerifyScriptWithTrace(
                                      spent_outputs=spent_outputs,
                                      execdata=execdata)
             except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
-                return False, steps, str(e)
+                machine_name, error_code = _trace_validation_error_identity(e)
+                return reject(
+                    str(e), error_code,
+                    machine_name=machine_name,
+                    phase=current_phase,
+                )
             # Bypass cleanstack after witness
             stack = stack[:1]
 
         # P2SH branch
         if SCRIPT_VERIFY_P2SH in flags and scriptPubKey.is_p2sh():
             if not scriptSig.is_push_only():
-                return False, steps, "P2SH scriptSig not is_push_only()"
+                return reject(
+                    "P2SH scriptSig not is_push_only()",
+                    'SIG_PUSHONLY',
+                    machine_name='script_push_only',
+                    phase='scriptSig',
+                )
 
             stack = stackCopy
             if not stack:
-                return False, steps, "P2SH stack empty after scriptSig"
+                return reject(
+                    "P2SH stack empty after scriptSig",
+                    'EVAL_FALSE',
+                    machine_name='final_stack',
+                    phase='redeemScript',
+                )
 
             pubKey2 = script_class(stack.pop())
+            current_phase = 'redeemScript'
             try:
                 EvalScript(stack, pubKey2, txTo, inIdx, flags=flags, on_step=recorder,
                            phase="redeemScript", execdata=execdata, spent_outputs=spent_outputs)
             except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
-                return False, steps, str(e)
+                machine_name, error_code = _trace_validation_error_identity(e)
+                return reject(
+                    str(e), error_code,
+                    machine_name=machine_name,
+                    phase='redeemScript',
+                )
 
             if not stack:
-                return False, steps, "P2SH inner scriptPubKey left an empty stack"
+                return reject(
+                    "P2SH inner scriptPubKey left an empty stack",
+                    'EVAL_FALSE',
+                    machine_name='final_stack',
+                    phase='redeemScript',
+                )
             if not _CastToBool(stack[-1]):
-                return False, steps, "P2SH inner scriptPubKey returned false"
+                return reject(
+                    "P2SH inner scriptPubKey returned false",
+                    'EVAL_FALSE',
+                    machine_name='final_stack',
+                    phase='redeemScript',
+                )
 
             # P2SH-wrapped witness
             if SCRIPT_VERIFY_WITNESS in flags and pubKey2.is_witness_scriptpubkey():
                 hadWitness = True
                 if scriptSig != script_class([pubKey2]):
-                    return False, steps, "scriptSig is not exactly a single push of the redeemScript"
+                    return reject(
+                        "scriptSig is not exactly a single push of the redeemScript",
+                        'WITNESS_MALLEATED_P2SH',
+                        machine_name='witness_program',
+                        phase='redeemScript',
+                    )
+                current_phase = 'redeemScript'
                 try:
                     VerifyWitnessProgram(witness,
                                          pubKey2.witness_version(),
@@ -2296,30 +2861,65 @@ def VerifyScriptWithTrace(
                                          is_p2sh_wrapped=True)
                 except (bitcointx.core.ValidationError,
                         CScriptInvalidError) as e:
-                    return False, steps, str(e)
+                    machine_name, error_code = _trace_validation_error_identity(e)
+                    return reject(
+                        str(e), error_code,
+                        machine_name=machine_name,
+                        phase='redeemScript',
+                    )
                 stack = stack[:1]
 
         # CLEANSTACK
         if SCRIPT_VERIFY_CLEANSTACK in flags:
             if SCRIPT_VERIFY_P2SH not in flags:
-                return False, steps, "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH"
+                return reject(
+                    "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH",
+                    'CLEANSTACK_REQUIRES_P2SH',
+                    machine_name='verify_flags',
+                    phase='scriptPubKey',
+                )
             if SCRIPT_VERIFY_WITNESS not in flags:
-                return False, steps, "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_WITNESS"
+                return reject(
+                    "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_WITNESS",
+                    'CLEANSTACK_REQUIRES_WITNESS',
+                    machine_name='verify_flags',
+                    phase='scriptPubKey',
+                )
             if len(stack) != 1:
-                return (False, steps,
-                        f"scriptPubKey left {len(stack)} items on stack (cleanstack requires exactly 1)")
+                return reject(
+                    f"scriptPubKey left {len(stack)} items on stack "
+                    "(cleanstack requires exactly 1)",
+                    'CLEANSTACK',
+                    machine_name='final_stack',
+                    phase='scriptPubKey',
+                )
 
         # Unexpected witness data
         if SCRIPT_VERIFY_WITNESS in flags:
             if SCRIPT_VERIFY_P2SH not in flags:
-                return False, steps, "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH"
+                return reject(
+                    "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH",
+                    'WITNESS_REQUIRES_P2SH',
+                    machine_name='verify_flags',
+                    phase='scriptPubKey',
+                )
             if not hadWitness and witness:
-                return False, steps, "Unexpected witness"
+                return reject(
+                    "Unexpected witness",
+                    'WITNESS_UNEXPECTED',
+                    machine_name='witness_program',
+                    phase='scriptPubKey',
+                )
 
         return True, steps, None
 
     except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
-        return False, steps, str(e)
+        machine_name, error_code = _trace_validation_error_identity(e)
+        return reject(
+            str(e), error_code,
+            machine_name=machine_name,
+            phase=current_phase,
+        )
 # --- RAWBIT PATCH END ---------------------------------------------------
 
 

@@ -131,6 +131,7 @@ class TestUnknownTaprootLeafVersionTrace(unittest.TestCase):
                 'stack_after': ['aa'],
                 'failed': True,
                 'error': 'taproot leaf version not supported',
+                'error_code': 'DISCOURAGE_UPGRADABLE_TAPROOT_VERSION',
             }],
         )
 

@@ -259,11 +259,11 @@ class TestScriptEvaluationTraceLimits(unittest.TestCase):
         expected = (
             '[{"pc":0,"opcode":0,"opcode_name":"OP_0",'
             '"stack_before":[],"stack_after":[""],'
-            '"phase":"scriptPubKey"},'
+            '"phase":"scriptPubKey","branch_active":true},'
             '{"pc":1,"opcode":32,"opcode_name":"unknown opcode",'
             '"stack_before":[""],"stack_after":["",'
             '"4ae81572f06e1b88fd5ced7a1a000945432e83e1551e6f721ee9c00b8cc3'
-            '3260"],"phase":"scriptPubKey"},'
+            '3260"],"phase":"scriptPubKey","branch_active":true},'
             '{"pc":-1,"opcode_name":"witness_program_match",'
             '"kind":"validator","step":"witness_program_match",'
             '"phase":"witness","witness_version":0,"program_hex":'
@@ -283,7 +283,7 @@ class TestScriptEvaluationTraceLimits(unittest.TestCase):
             '3260","stack_before":["51"],"stack_after":[]},'
             '{"pc":0,"opcode":81,"opcode_name":"OP_1",'
             '"stack_before":[],"stack_after":["01"],'
-            '"phase":"witnessScript"}]'
+            '"phase":"witnessScript","branch_active":true}]'
         )
         for name, (ok, steps, error) in (
             ('default', default_result),
