@@ -20,6 +20,7 @@ module.
 """
 
 import hashlib
+import json
 from io import BytesIO
 from typing import (
     Iterable, Optional, List, Tuple, Set, Sequence, Type, TypeVar, Union,
@@ -590,7 +591,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             # 1. The scriptPubKey (or P2SH redeemScript) matched the
             #    v0 witness-program pattern; witness validation begins
             #    on a fresh stack.
-            on_step({
+            _emit_trace(on_step, 'witness', lambda: {
                 "pc": -1,
                 "opcode_name": "witness_program_match",
                 "kind": "validator",
@@ -607,6 +608,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             witness_total = len(stack)
             loaded: List[str] = []
             for wit_idx, elt in enumerate(stack):
+                if not _trace_wants_step(on_step, 'witness'):
+                    break
                 item_hex = (script_class([elt]) if isinstance(elt, int)
                             else bytes(elt)).hex()
                 on_step({
@@ -620,6 +623,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                     "stack_before": list(loaded),
                     "stack_after": loaded + [item_hex],
                 })
+                if not _trace_is_active(on_step):
+                    break
                 loaded.append(item_hex)
         # --- RAWBIT PATCH END -------------------------------------------
 
@@ -627,31 +632,13 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             if len(stack) == 0:
                 raise VerifyScriptError("witness is empty")
 
-            if on_step is not None:
-                stack_before_check = [bytes(x).hex() for x in stack]
+            stack_before_check: Optional[List[bytes]] = None
+            if _trace_is_active(on_step):
+                stack_before_check = list(stack)
             scriptPubKey = script_class(stack.pop())
             hashScriptPubKey = hashlib.sha256(scriptPubKey).digest()
             if hashScriptPubKey != program:
-                if on_step is not None:
-                    on_step({
-                        "pc": -1,
-                        "opcode_name": "witness_script_check",
-                        "kind": "validator",
-                        "step": "witness_script_check",
-                        "phase": "witness",
-                        "script_hex": scriptPubKey.hex(),
-                        "sha256_hex": hashScriptPubKey.hex(),
-                        "program_hex": program.hex(),
-                        "stack_before": stack_before_check,
-                        "stack_after": [bytes(x).hex() for x in stack],
-                        "failed": True,
-                        "error": "witness program mismatch",
-                    })
-                raise VerifyScriptError("witness program mismatch")
-            if on_step is not None:
-                # 3a. The last witness item hash-checked against the
-                #     program and becomes the executable witnessScript.
-                on_step({
+                _emit_trace(on_step, 'witness', lambda: {
                     "pc": -1,
                     "opcode_name": "witness_script_check",
                     "kind": "validator",
@@ -660,29 +647,49 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                     "script_hex": scriptPubKey.hex(),
                     "sha256_hex": hashScriptPubKey.hex(),
                     "program_hex": program.hex(),
-                    "stack_before": stack_before_check,
+                    "stack_before": [
+                        bytes(x).hex() for x in stack_before_check or []
+                    ],
                     "stack_after": [bytes(x).hex() for x in stack],
+                    "failed": True,
+                    "error": "witness program mismatch",
                 })
+                raise VerifyScriptError("witness program mismatch")
+            # 3a. The last witness item hash-checked against the
+            #     program and becomes the executable witnessScript.
+            _emit_trace(on_step, 'witness', lambda: {
+                "pc": -1,
+                "opcode_name": "witness_script_check",
+                "kind": "validator",
+                "step": "witness_script_check",
+                "phase": "witness",
+                "script_hex": scriptPubKey.hex(),
+                "sha256_hex": hashScriptPubKey.hex(),
+                "program_hex": program.hex(),
+                "stack_before": [
+                    bytes(x).hex() for x in stack_before_check or []
+                ],
+                "stack_after": [bytes(x).hex() for x in stack],
+            })
         elif len(program) == 20:
             if len(stack) != 2:
                 raise VerifyScriptError("witness program mismatch")  # 2 items in witness
 
             scriptPubKey = script_class([OP_DUP, OP_HASH160, program,
                                          OP_EQUALVERIFY, OP_CHECKSIG])
-            if on_step is not None:
-                # 3b. BIP143: the 20-byte program expands to the implied
-                #     P2PKH template (scriptCode) — never transmitted.
-                on_step({
-                    "pc": -1,
-                    "opcode_name": "scriptcode_derive",
-                    "kind": "validator",
-                    "step": "scriptcode_derive",
-                    "phase": "witness",
-                    "script_hex": scriptPubKey.hex(),
-                    "program_hex": program.hex(),
-                    "stack_before": [bytes(x).hex() for x in stack],
-                    "stack_after": [bytes(x).hex() for x in stack],
-                })
+            # 3b. BIP143: the 20-byte program expands to the implied
+            #     P2PKH template (scriptCode) — never transmitted.
+            _emit_trace(on_step, 'witness', lambda: {
+                "pc": -1,
+                "opcode_name": "scriptcode_derive",
+                "kind": "validator",
+                "step": "scriptcode_derive",
+                "phase": "witness",
+                "script_hex": scriptPubKey.hex(),
+                "program_hex": program.hex(),
+                "stack_before": [bytes(x).hex() for x in stack],
+                "stack_after": [bytes(x).hex() for x in stack],
+            })
         else:
             raise VerifyScriptError("wrong length for witness program")
 
@@ -749,76 +756,71 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
             hashtype_int = int(hashtype) if hashtype is not None else 0
             hashtype_name = "DEFAULT" if hashtype_int == 0 else getattr(hashtype, "name", str(hashtype_int))
-            if on_step is not None:
-                on_step({
-                    "pc": -1,
-                    "opcode_name": "taproot_witness",
-                    "phase": "taproot",
-                    "step": "witness_stack",
-                    "stack_before": [sig.hex()],
-                    "stack_after": [sig.hex()],
-                })
+            _emit_trace(on_step, 'taproot', lambda: {
+                "pc": -1,
+                "opcode_name": "taproot_witness",
+                "phase": "taproot",
+                "step": "witness_stack",
+                "stack_before": [sig.hex()],
+                "stack_after": [sig.hex()],
+            })
             sh = SignatureHashSchnorr(
                 txTo, inIdx, spent_outputs,
                 hashtype=hashtype,
                 sigversion=SIGVERSION_TAPROOT,
                 annex_hash=execdata.annex_hash
             )
-            if on_step is not None:
-                on_step({  # type: ignore[typeddict-unknown-key]
-                    "pc": -1,
-                    "opcode_name": "taproot_sighash",
-                    "phase": "taproot",
-                    "step": "sighash",
-                    "sigversion": "tapsighash",
-                    "hashtype": hashtype_int,
-                    "hashtype_name": hashtype_name,
-                    "sighash": sh.hex(),
-                    "stack_before": [sig.hex()],
-                    "stack_after": [sig.hex()],
-                })
+            _emit_trace(on_step, 'taproot', lambda: {  # type: ignore[typeddict-unknown-key]
+                "pc": -1,
+                "opcode_name": "taproot_sighash",
+                "phase": "taproot",
+                "step": "sighash",
+                "sigversion": "tapsighash",
+                "hashtype": hashtype_int,
+                "hashtype_name": hashtype_name,
+                "sighash": sh.hex(),
+                "stack_before": [sig.hex()],
+                "stack_after": [sig.hex()],
+            })
             xpk = bitcointx.core.key.XOnlyPubKey(program)
             ok = xpk.verify_schnorr(sh, sig[:64])
-            if on_step is not None:
-                on_step({  # type: ignore[typeddict-unknown-key]
-                    "pc": -1,
-                    "opcode_name": "taproot_schnorr_verify",
-                    "phase": "taproot",
-                    "step": "schnorr_verify",
-                    "pubkey": bytes(xpk).hex(),
-                    "signature": sig[:64].hex(),
-                    "hashtype": hashtype_int,
-                    "hashtype_name": hashtype_name,
-                    "result": ok,
-                    "stack_before": [sig.hex()],
-                    "stack_after": [b"\x01".hex() if ok else b"".hex()],
-                })
+            _emit_trace(on_step, 'taproot', lambda: {  # type: ignore[typeddict-unknown-key]
+                "pc": -1,
+                "opcode_name": "taproot_schnorr_verify",
+                "phase": "taproot",
+                "step": "schnorr_verify",
+                "pubkey": bytes(xpk).hex(),
+                "signature": sig[:64].hex(),
+                "hashtype": hashtype_int,
+                "hashtype_name": hashtype_name,
+                "result": ok,
+                "stack_before": [sig.hex()],
+                "stack_after": [b"\x01".hex() if ok else b"".hex()],
+            })
             if not ok:
                 raise VerifyScriptError("schnorr signature check failed")
             return
 
         # Script-path (control + script + stack)
-        if on_step is not None:
-            on_step({
-                "pc": -1,
-                "opcode_name": "taproot_witness",
-                "phase": "taproot",
-                "step": "witness_stack",
-                "stack_before": [x.hex() for x in stack],
-                "stack_after": [x.hex() for x in stack],
-            })
+        _emit_trace(on_step, 'taproot', lambda: {
+            "pc": -1,
+            "opcode_name": "taproot_witness",
+            "phase": "taproot",
+            "step": "witness_stack",
+            "stack_before": [x.hex() for x in stack],
+            "stack_after": [x.hex() for x in stack],
+        })
         control = stack.pop()
         script_bytes = stack.pop()
-        if on_step is not None:
-            on_step({
-                "pc": -1,
-                "opcode_name": "witness_script",
-                "phase": "witnessScript",
-                "step": "witness_script",
-                "script_hex": script_bytes.hex(),
-                "stack_before": [x.hex() for x in stack],
-                "stack_after": [x.hex() for x in stack],
-            })
+        _emit_trace(on_step, 'witnessScript', lambda: {
+            "pc": -1,
+            "opcode_name": "witness_script",
+            "phase": "witnessScript",
+            "step": "witness_script",
+            "script_hex": script_bytes.hex(),
+            "stack_before": [x.hex() for x in stack],
+            "stack_after": [x.hex() for x in stack],
+        })
         if (len(control) < TAPROOT_CONTROL_BASE_SIZE
                 or len(control) > TAPROOT_CONTROL_MAX_SIZE
                 or (len(control) - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE != 0):
@@ -841,34 +843,42 @@ def VerifyWitnessProgram(witness: CScriptWitness,
         parity = bool(control[0] & 1)
         tweak_ok = bitcointx.core.key.check_tap_tweak(
             tweaked, internal_pub, merkle_root=merkle_root, parity=parity)
-        if on_step is not None:
-            on_step({
-                "pc": -1,
-                "opcode_name": "taproot_control_block",
-                "phase": "taproot",
-                "step": "control_block",
-                "leaf_version": leaf_version,
-                "tapleaf_hash": tapleaf_hash.hex(),
-                "merkle_root": merkle_root.hex(),
-                "internal_pubkey": bytes(internal_pub).hex(),
-                "tweaked_pubkey": bytes(tweaked).hex(),
-                "parity": parity,
-                "result": tweak_ok,
-            })
+        _emit_trace(on_step, 'taproot', lambda: {
+            "pc": -1,
+            "opcode_name": "taproot_control_block",
+            "phase": "taproot",
+            "step": "control_block",
+            "leaf_version": leaf_version,
+            "tapleaf_hash": tapleaf_hash.hex(),
+            "merkle_root": merkle_root.hex(),
+            "internal_pubkey": bytes(internal_pub).hex(),
+            "tweaked_pubkey": bytes(tweaked).hex(),
+            "parity": parity,
+            "result": tweak_ok,
+        })
         if not tweak_ok:
             raise VerifyScriptError("witness program mismatch")
 
         if leaf_version != TAPROOT_LEAF_TAPSCRIPT:
-            if on_step is not None:
-                on_step({
-                    "phase": "taproot",
-                    "step": "leaf_version",
-                    "leaf_version": leaf_version,
-                    "policy": ("reject"
-                               if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION in flags
-                               else "skip"),
-                })
-            if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION in flags:
+            reject_unknown_leaf = (
+                SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION in flags
+            )
+            _emit_trace(on_step, 'taproot', lambda: {
+                "pc": -1,
+                "kind": "validator",
+                "opcode_name": "taproot_leaf_version",
+                "step": "leaf_version",
+                "phase": "taproot",
+                "leaf_version": leaf_version,
+                "policy": "reject" if reject_unknown_leaf else "skip",
+                "stack_before": [x.hex() for x in stack],
+                "stack_after": [x.hex() for x in stack],
+                **({
+                    "failed": True,
+                    "error": "taproot leaf version not supported",
+                } if reject_unknown_leaf else {}),
+            })
+            if reject_unknown_leaf:
                 raise VerifyScriptError("taproot leaf version not supported")
             return
 
@@ -1268,6 +1278,127 @@ class TraceStep(TypedDict, total=False):
 # --- RAWBIT PATCH END ---------------------------------------------------
 
 
+class _BoundedTraceRecorder:
+    def __init__(
+        self, steps: List[TraceStep], *,
+        max_trace_steps: Optional[int], max_trace_bytes: Optional[int]
+    ) -> None:
+        for name, value in (
+            ('max_trace_steps', max_trace_steps),
+            ('max_trace_bytes', max_trace_bytes),
+        ):
+            if value is not None:
+                if not isinstance(value, int):
+                    raise TypeError(f'{name} must be an int or None')
+                if value < 0:
+                    raise ValueError(f'{name} must not be negative')
+
+        self._steps = steps
+        self._max_trace_steps = max_trace_steps
+        self._max_trace_bytes = max_trace_bytes
+        self._trace_bytes = 0
+        self._active = True
+
+    @staticmethod
+    def _normalized_phase(phase: str) -> str:
+        if phase == 'witness':
+            return 'scriptPubKey'
+        return phase
+
+    def _truncate(self, phase: str, cap_description: str) -> None:
+        if not self._active:
+            return
+        recorded_steps = len(self._steps)
+        self._steps.append({
+            'pc': -1,
+            'kind': 'validator',
+            'opcode_name': 'trace_truncated',
+            'step': 'trace_truncated',
+            'phase': self._normalized_phase(phase),
+            'stack_before': [],
+            'stack_after': [],
+            'error': (
+                f'trace truncated: {cap_description} reached after '
+                f'{recorded_steps} recorded steps'
+            ),
+        })
+        self._active = False
+
+    def _trace_is_active(self) -> bool:
+        if not self._active:
+            return False
+        if (self._max_trace_steps is not None
+                and len(self._steps) >= self._max_trace_steps):
+            return False
+        if (self._max_trace_bytes is not None
+                and self._trace_bytes >= self._max_trace_bytes):
+            return False
+        return True
+
+    def _trace_wants_step(self, phase: str) -> bool:
+        if not self._active:
+            return False
+        if (self._max_trace_steps is not None
+                and len(self._steps) >= self._max_trace_steps):
+            self._truncate(
+                phase, f'max_trace_steps={self._max_trace_steps}')
+            return False
+        if (self._max_trace_bytes is not None
+                and self._trace_bytes >= self._max_trace_bytes):
+            self._truncate(
+                phase, f'max_trace_bytes={self._max_trace_bytes}')
+            return False
+        return True
+
+    def __call__(self, step: TraceStep) -> None:
+        if not self._active:
+            return
+
+        phase = step.get('phase', 'scriptPubKey')
+        if not self._trace_wants_step(phase):
+            return
+
+        step_size = len(json.dumps(
+            step, ensure_ascii=False, separators=(',', ':')
+        ).encode('utf-8'))
+        if (self._max_trace_bytes is not None
+                and self._trace_bytes + step_size > self._max_trace_bytes):
+            self._truncate(
+                phase, f'max_trace_bytes={self._max_trace_bytes}')
+            return
+
+        self._steps.append(step)
+        self._trace_bytes += step_size
+
+
+def _trace_is_active(
+    on_step: Optional[Callable[[TraceStep], None]]
+) -> bool:
+    if on_step is None:
+        return False
+    if isinstance(on_step, _BoundedTraceRecorder):
+        return on_step._trace_is_active()
+    return True
+
+
+def _trace_wants_step(
+    on_step: Optional[Callable[[TraceStep], None]], phase: str
+) -> bool:
+    if on_step is None:
+        return False
+    if isinstance(on_step, _BoundedTraceRecorder):
+        return on_step._trace_wants_step(phase)
+    return True
+
+
+def _emit_trace(
+    on_step: Optional[Callable[[TraceStep], None]], phase: str,
+    step_factory: Callable[[], TraceStep]
+) -> None:
+    if on_step is not None and _trace_wants_step(on_step, phase):
+        on_step(step_factory())
+
+
 def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 txTo: 'bitcointx.core.CTransaction',
                 inIdx: int, flags: Set[ScriptVerifyFlag_Type] = set(),
@@ -1318,9 +1449,9 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 nOpCount=nOpCount[0])
 
         # --- RAWBIT PATCH: capture stack_before only if tracing
-        stack_before: Optional[List[str]] = None
-        if on_step is not None:
-            stack_before = [x.hex() for x in stack]
+        stack_before: Optional[List[bytes]] = None
+        if _trace_is_active(on_step):
+            stack_before = list(stack)
 
         try:
             if sigversion == SIGVERSION_TAPSCRIPT and _is_op_success(int(sop)):
@@ -1360,15 +1491,16 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                         raise EvalScriptError('max stack items limit reached',
                                               get_eval_state())
                     # --- RAWBIT: record step before continue (to preserve original flow)
-                    if on_step is not None:
-                        on_step({
-                            "pc": sop_pc,
-                            "opcode": int(sop),
-                            "opcode_name": _opcode_name(sop),
-                            "stack_before": stack_before or [],
-                            "stack_after": [x.hex() for x in stack],
-                            "phase": phase,
-                        })
+                    _emit_trace(on_step, phase, lambda: {
+                        "pc": sop_pc,
+                        "opcode": int(sop),
+                        "opcode_name": _opcode_name(sop),
+                        "stack_before": [
+                            x.hex() for x in stack_before or []
+                        ],
+                        "stack_after": [x.hex() for x in stack],
+                        "phase": phase,
+                    })
                     opcode_pos += 1
                     continue
 
@@ -1770,24 +1902,23 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                                       get_eval_state())
 
             # --- RAWBIT PATCH: record successful step
-            if on_step is not None:
-                on_step({
-                    "pc": sop_pc,
-                    "opcode": int(sop),
-                    "opcode_name": _opcode_name(sop),
-                    "stack_before": stack_before or [],
-                    "stack_after": [x.hex() for x in stack],
-                    "phase": phase,
-                })
+            _emit_trace(on_step, phase, lambda: {
+                "pc": sop_pc,
+                "opcode": int(sop),
+                "opcode_name": _opcode_name(sop),
+                "stack_before": [x.hex() for x in stack_before or []],
+                "stack_after": [x.hex() for x in stack],
+                "phase": phase,
+            })
 
         except Exception as e:
             # --- RAWBIT PATCH: record failing step before re-raising
-            if on_step is not None:
+            if on_step is not None and _trace_wants_step(on_step, phase):
                 on_step({
                     "pc": sop_pc,
                     "opcode": int(sop),
                     "opcode_name": _opcode_name(sop),
-                    "stack_before": stack_before or [],
+                    "stack_before": [x.hex() for x in stack_before or []],
                     "stack_after": [x.hex() for x in stack],
                     "phase": phase,
                     "failed": True,
@@ -2037,7 +2168,10 @@ def VerifyScriptWithTrace(
                           Set[ScriptVerifyFlag_Type]]] = None,
     amount: int = 0,
     witness: Optional[CScriptWitness] = None,
-    spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None
+    spent_outputs: Optional[Sequence['bitcointx.core.CTxOut']] = None,
+    *,
+    max_trace_steps: Optional[int] = 20_000,
+    max_trace_bytes: Optional[int] = 25_000_000
 ) -> Tuple[bool, List[TraceStep], Optional[str]]:
     """
     Verify like VerifyScript, but collect per-opcode trace steps.
@@ -2045,9 +2179,11 @@ def VerifyScriptWithTrace(
     Returns: (is_valid: bool, steps: List[TraceStep], error_message: Optional[str])
     """
     steps: List[TraceStep] = []
-
-    def _record(step: TraceStep) -> None:
-        steps.append(step)
+    recorder = _BoundedTraceRecorder(
+        steps,
+        max_trace_steps=max_trace_steps,
+        max_trace_bytes=max_trace_bytes,
+    )
 
     try:
         # Argument checks mirror VerifyScript
@@ -2076,9 +2212,9 @@ def VerifyScriptWithTrace(
         stack: List[bytes] = []
         execdata = ScriptExecutionData()
         try:
-            EvalScript(stack, scriptSig, txTo, inIdx, flags=flags, on_step=_record,
+            EvalScript(stack, scriptSig, txTo, inIdx, flags=flags, on_step=recorder,
                        phase="scriptSig", execdata=execdata, spent_outputs=spent_outputs)
-        except Exception as e:
+        except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
             return False, steps, str(e)
 
         # P2SH stack copy
@@ -2087,9 +2223,9 @@ def VerifyScriptWithTrace(
 
         # Execute scriptPubKey
         try:
-            EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, on_step=_record,
+            EvalScript(stack, scriptPubKey, txTo, inIdx, flags=flags, on_step=recorder,
                        phase="scriptPubKey", execdata=execdata, spent_outputs=spent_outputs)
-        except Exception as e:
+        except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
             return False, steps, str(e)
 
         if not stack:
@@ -2112,10 +2248,10 @@ def VerifyScriptWithTrace(
                                      scriptPubKey.witness_program(),
                                      txTo, inIdx, flags=flags, amount=amount,
                                      script_class=script_class,
-                                     on_step=_record,
+                                     on_step=recorder,
                                      spent_outputs=spent_outputs,
                                      execdata=execdata)
-            except Exception as e:
+            except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
                 return False, steps, str(e)
             # Bypass cleanstack after witness
             stack = stack[:1]
@@ -2131,9 +2267,9 @@ def VerifyScriptWithTrace(
 
             pubKey2 = script_class(stack.pop())
             try:
-                EvalScript(stack, pubKey2, txTo, inIdx, flags=flags, on_step=_record,
+                EvalScript(stack, pubKey2, txTo, inIdx, flags=flags, on_step=recorder,
                            phase="redeemScript", execdata=execdata, spent_outputs=spent_outputs)
-            except Exception as e:
+            except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
                 return False, steps, str(e)
 
             if not stack:
@@ -2152,11 +2288,12 @@ def VerifyScriptWithTrace(
                                          pubKey2.witness_program(),
                                          txTo, inIdx, flags=flags, amount=amount,
                                          script_class=script_class,
-                                         on_step=_record,
+                                         on_step=recorder,
                                          spent_outputs=spent_outputs,
                                          execdata=execdata,
                                          is_p2sh_wrapped=True)
-                except Exception as e:
+                except (bitcointx.core.ValidationError,
+                        CScriptInvalidError) as e:
                     return False, steps, str(e)
                 stack = stack[:1]
 
@@ -2179,8 +2316,7 @@ def VerifyScriptWithTrace(
 
         return True, steps, None
 
-    except Exception as e:
-        # Any uncaught exception
+    except (bitcointx.core.ValidationError, CScriptInvalidError) as e:
         return False, steps, str(e)
 # --- RAWBIT PATCH END ---------------------------------------------------
 
