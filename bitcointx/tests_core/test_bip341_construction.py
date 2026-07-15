@@ -63,7 +63,8 @@ def _load_scriptpubkey_cases() -> List[Dict[str, Any]]:
     path = Path(__file__).with_name("data") / "wallet-test-vectors.json"
     data = json.loads(path.read_text())
     assert data["version"] == 1
-    return data["scriptPubKey"]
+    cases: List[Dict[str, Any]] = data["scriptPubKey"]
+    return cases
 
 
 _SCRIPT_PUBKEY_CASES = _load_scriptpubkey_cases()

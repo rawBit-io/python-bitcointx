@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import pytest
 
@@ -17,7 +17,13 @@ from bitcointx.core import (
     coins_to_satoshi,
     x,
 )
-from bitcointx.core.script import CScript, CScriptWitness, OPCODES_BY_NAME, OP_0
+from bitcointx.core.script import (
+    CScript,
+    CScriptOp,
+    CScriptWitness,
+    OPCODES_BY_NAME,
+    OP_0,
+)
 from bitcointx.core.scripteval import (
     ArgumentsInvalidError,
     EvalScriptError,
@@ -45,14 +51,14 @@ class ScriptVector:
     comment: str
     witness: CScriptWitness
     amount: int
-    raw: list
+    raw: List[Any]
     section: Optional[str]
-    marks: Tuple[pytest.Mark, ...] = ()
+    marks: Tuple[Union[pytest.Mark, pytest.MarkDecorator], ...] = ()
 
 
-def _opcode_lookup() -> dict:
+def _opcode_lookup() -> Dict[str, CScriptOp]:
     # Both with and without OP_ prefix.
-    table = {}
+    table: Dict[str, CScriptOp] = {}
     for name, code in OPCODES_BY_NAME.items():
         table[name] = code
         if name.startswith("OP_"):
@@ -70,7 +76,7 @@ def parse_script(script: str) -> CScript:
     def is_hex(s: str) -> bool:
         return set(s).issubset(set("0123456789abcdefABCDEF"))
 
-    parts = []
+    parts: List[bytes] = []
     for token in script.split():
         if token.isdigit() or (token.startswith("-") and token[1:].isdigit()):
             parts.append(CScript([int(token)]))
@@ -92,19 +98,20 @@ def _decode_witness_item(item: str) -> bytes:
         return b""
     return x(item)
 
+
 def _classify_exception(exc: Exception) -> str:
     msg = str(exc)
     low = msg.lower()
 
     if isinstance(exc, MaxOpCountError) or "opcode count exceeded" in low:
         return "OP_COUNT"
-    
+
     # PUSH_SIZE - pushdata length exceeds limit
     if "pushdata of length" in low and "maximum allowed is 520" in low:
         return "PUSH_SIZE"
     if "maximum push size exceeded" in low:
         return "PUSH_SIZE"
-    
+
     if "script too large" in low:
         return "SCRIPT_SIZE"
     if "stack exceeds maximum items" in low or "max stack items limit" in low:
@@ -125,29 +132,29 @@ def _classify_exception(exc: Exception) -> str:
         return "PUBKEYTYPE"
     if "non-minimal data push" in low or "non-minimally encoded" in low:
         return "MINIMALDATA"
-    
+
     # SIG_PUSHONLY - P2SH scriptSig push-only check (must come before generic)
     if "p2sh scriptsig not is_push_only" in low:
         return "SIG_PUSHONLY"
     if "not push-only" in low:
         return "SIG_PUSHONLY"
-    
+
     if "not exactly a single push of the redeemscript" in low:
         return "WITNESS_MALLEATED_P2SH"
     if "dummy value not op_0" in low:
         return "SIG_NULLDUMMY"
-    
+
     # NULLFAIL - signature check failed with non-empty signature(s)
     if "signature check failed" in low and "not empty" in low:
         return "NULLFAIL"
-    
+
     if "keys count invalid" in low:
         return "PUBKEY_COUNT"
     if "sigs count invalid" in low:
         return "SIG_COUNT"
     if "op_return called" in low:
         return "OP_RETURN"
-    
+
     # BAD_OPCODE - VERIF/VERNOTIF (must come before generic "is disabled")
     if "op_verif is disabled" in low or "op_vernotif is disabled" in low:
         return "BAD_OPCODE"
@@ -157,19 +164,19 @@ def _classify_exception(exc: Exception) -> str:
     # Truncated PUSHDATA is BAD_OPCODE
     if "cscripttruncatedpushdataerror" in low or "truncated data" in low:
         return "BAD_OPCODE"
-    
+
     if "is disabled" in low:
         return "DISABLED_OPCODE"
     if "unsupported opcode" in low or "reserved" in low:
         return "BAD_OPCODE"
-    
+
     if "unexpected witness" in low:
         return "WITNESS_UNEXPECTED"
-    
+
     # WITNESS_MALLEATED - scriptSig not empty for witness spend
     if "scriptsig is not empty" in low:
         return "WITNESS_MALLEATED"
-    
+
     if "witness program mismatch" in low:
         return "WITNESS_PROGRAM_MISMATCH"
     if "wrong length for witness program" in low or "control block has wrong size" in low:
@@ -178,7 +185,7 @@ def _classify_exception(exc: Exception) -> str:
         return "WITNESS_PROGRAM_WITNESS_EMPTY"
     if "upgradeable witness program is not accepted" in low:
         return "DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM"
-    
+
     # UNBALANCED_CONDITIONAL - various IF/ELSE/ENDIF errors
     if "unterminated if/else block" in low:
         return "UNBALANCED_CONDITIONAL"
@@ -186,13 +193,13 @@ def _classify_exception(exc: Exception) -> str:
         return "UNBALANCED_CONDITIONAL"
     if "else found without prior if" in low:
         return "UNBALANCED_CONDITIONAL"
-    
+
     # Empty stack is EVAL_FALSE in Bitcoin Core, not CLEANSTACK
     if "left an empty stack" in low:
         return "EVAL_FALSE"
     if "left extra items on stack" in low:
         return "CLEANSTACK"
-    
+
     if "negative lock-time" in low or "negative sequence" in low:
         return "NEGATIVE_LOCKTIME"
     if (
@@ -205,19 +212,19 @@ def _classify_exception(exc: Exception) -> str:
         or "csv lock not yet satisfied" in low
     ):
         return "UNSATISFIED_LOCKTIME"
-    
+
     if "returned false" in low:
         return "EVAL_FALSE"
-    
+
     if "verify failed" in low or isinstance(exc, VerifyOpFailedError):
         if "equalverify" in low:
             return "EQUALVERIFY"
         return "VERIFY"
-    
+
     # PICK/ROLL out of bounds
     if "out of bounds" in low and ("op_pick" in low or "op_roll" in low):
         return "INVALID_STACK_OPERATION"
-    
+
     # Handle MissingOpArgumentsError specially
     if isinstance(exc, MissingOpArgumentsError):
         # FROMALTSTACK with empty altstack
@@ -228,7 +235,7 @@ def _classify_exception(exc: Exception) -> str:
         if ("op_if" in low or "op_notif" in low) and "op_ifdup" not in low:
             return "UNBALANCED_CONDITIONAL"
         return "INVALID_STACK_OPERATION"
-    
+
     if isinstance(exc, ArgumentsInvalidError):
         return "INVALID_STACK_OPERATION"
     if isinstance(exc, EvalScriptError) or isinstance(exc, VerifyScriptError):
@@ -253,7 +260,7 @@ def _load_vectors() -> List[ScriptVector]:
             continue
 
         row = list(raw)
-        marks: List[pytest.Mark] = []
+        marks: List[Union[pytest.Mark, pytest.MarkDecorator]] = []
         witness = CScriptWitness()
         amount_sat = 0
 

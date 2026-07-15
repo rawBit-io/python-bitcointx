@@ -184,12 +184,7 @@ class CoreCoinClass(ImmutableSerializable, metaclass=CoreCoinClassDispatcher):
         if cls.is_immutable() and other_inst.is_immutable():
             return cast(T_CoreCoinClass, other_inst)
 
-        # CoreCoinClass() does not have arguments, but subclasses might have.
-        # mypy complains here that there's too many arguments to CoreCoinClass.
-        # We can define a dummy __init__(self, *args) with args ignored,
-        # but that potentially means we could miss an erroneous arguments at
-        # runtime. Better just ignore this typing check.
-        return cls(*args, **kwargs)  # type: ignore
+        return cls(*args, **kwargs)
 
     @classmethod
     @abstractmethod
@@ -221,10 +216,10 @@ class CoreCoinParams(CoreCoinClass, next_dispatch_final=True):
         return 21000000 * cls.COIN
 
     TAPROOT_LEAF_TAPSCRIPT: int
-    taptweak_hasher: Callable[[bytes], bytes]
-    tapleaf_hasher: Callable[[bytes], bytes]
-    tapbranch_hasher: Callable[[bytes], bytes]
-    tap_sighash_hasher: Callable[[bytes], bytes]
+    taptweak_hasher: ClassVar[Callable[[bytes], bytes]]
+    tapleaf_hasher: ClassVar[Callable[[bytes], bytes]]
+    tapbranch_hasher: ClassVar[Callable[[bytes], bytes]]
+    tap_sighash_hasher: ClassVar[Callable[[bytes], bytes]]
 
 
 class CoreBitcoinParams(CoreCoinParams, CoreBitcoinClass):
@@ -696,7 +691,7 @@ class CTxIn(CoreCoinClass, next_dispatch_final=True):
 
 
 class CMutableTxIn(CTxIn, mutable_of=CTxIn, next_dispatch_final=True):
-    prevout: WriteableField[CMutableOutPoint]  # type: ignore
+    prevout: WriteableField[CMutableOutPoint]
     scriptSig: WriteableField[script.CScript]
     nSequence: WriteableField[int]
 
@@ -705,8 +700,8 @@ class CBitcoinTxIn(CTxIn, CoreBitcoinClass):
     """An immutable Bitcoin TxIn"""
     __slots_: List[str] = []
 
-    prevout: ReadOnlyField[CBitcoinOutPoint]  # type: ignore
-    scriptSig: ReadOnlyField[script.CBitcoinScript]  # type: ignore
+    prevout: ReadOnlyField[CBitcoinOutPoint]
+    scriptSig: ReadOnlyField[script.CBitcoinScript]
 
     to_mutable: ClassVar[Callable[['CBitcoinTxIn'], 'CBitcoinMutableTxIn']]
     to_immutable: ClassVar[Callable[['CBitcoinTxIn'], 'CBitcoinTxIn']]
@@ -717,7 +712,7 @@ class CBitcoinMutableTxIn(CBitcoinTxIn,  # type: ignore
     """A mutable Bitcoin TxIn"""
     __slots_: List[str] = []
 
-    prevout: WriteableField[CBitcoinMutableOutPoint]  # type: ignore
+    prevout: WriteableField[CBitcoinMutableOutPoint]
 
 
 T_CTxOut = TypeVar('T_CTxOut', bound='CTxOut')
@@ -797,7 +792,7 @@ class CBitcoinTxOut(CTxOut, CoreBitcoinClass):
     """A immutable Bitcoin TxOut"""
     __slots_: List[str] = []
 
-    scriptPubKey: ReadOnlyField[script.CBitcoinScript]  # type: ignore
+    scriptPubKey: ReadOnlyField[script.CBitcoinScript]
 
     to_mutable: ClassVar[Callable[['CBitcoinTxOut'], 'CBitcoinMutableTxOut']]
     to_immutable: ClassVar[Callable[['CBitcoinTxOut'], 'CBitcoinTxOut']]
@@ -808,7 +803,7 @@ class CBitcoinMutableTxOut(CBitcoinTxOut, CMutableTxOut,
     """A mutable Bitcoin CTxOut"""
     __slots_: List[str] = []
 
-    scriptPubKey: WriteableField[script.CBitcoinScript]  # type: ignore
+    scriptPubKey: WriteableField[script.CBitcoinScript]
 
 
 T_CTxInWitness = TypeVar('T_CTxInWitness', bound='CTxInWitness')
@@ -986,7 +981,7 @@ class CBitcoinTxWitness(CTxWitness, CoreBitcoinClass):
     """Immutable witness data for all inputs to a transaction"""
     __slots_: List[str] = []
 
-    vtxinwit: ReadOnlyField[Tuple[CBitcoinTxInWitness, ...]]  # type: ignore
+    vtxinwit: ReadOnlyField[Tuple[CBitcoinTxInWitness, ...]]
 
     to_mutable: ClassVar[Callable[['CBitcoinTxWitness'],
                                   'CBitcoinMutableTxWitness']]
@@ -1228,16 +1223,16 @@ class CMutableTransaction(CTransaction, mutable_of=CTransaction,
     vin: WriteableField[List[CMutableTxIn]]  # type: ignore
     vout: WriteableField[List[CMutableTxOut]]  # type: ignore
     nLockTime: WriteableField[int]
-    wit: WriteableField[CMutableTxWitness]  # type: ignore
+    wit: WriteableField[CMutableTxWitness]
 
 
 class CBitcoinTransaction(CTransaction, CoreBitcoinClass):
     """Bitcoin transaction"""
     __slots_: List[str] = []
 
-    vin: ReadOnlyField[Tuple[CBitcoinTxIn, ...]]  # type: ignore
-    vout: ReadOnlyField[Tuple[CBitcoinTxOut, ...]]  # type: ignore
-    wit: ReadOnlyField[CBitcoinTxWitness]  # type: ignore
+    vin: ReadOnlyField[Tuple[CBitcoinTxIn, ...]]
+    vout: ReadOnlyField[Tuple[CBitcoinTxOut, ...]]
+    wit: ReadOnlyField[CBitcoinTxWitness]
 
     to_mutable: ClassVar[Callable[['CBitcoinTransaction'],
                                   'CBitcoinMutableTransaction']]
@@ -1253,7 +1248,7 @@ class CBitcoinMutableTransaction(CBitcoinTransaction,
 
     vin: WriteableField[List[CBitcoinMutableTxIn]]  # type: ignore
     vout: WriteableField[List[CBitcoinMutableTxOut]]  # type: ignore
-    wit: WriteableField[CBitcoinMutableTxWitness]  # type: ignore
+    wit: WriteableField[CBitcoinMutableTxWitness]
 
 
 class CheckTransactionError(ValidationError):

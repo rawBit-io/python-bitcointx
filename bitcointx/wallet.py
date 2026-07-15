@@ -360,7 +360,7 @@ class P2PKHCoinAddress(CBase58CoinAddress, next_dispatch_final=True):
 
         if not accept_invalid:
             if not isinstance(pubkey, CPubKey):
-                pubkey = CPubKey(pubkey)
+                pubkey = CPubKey(cast(bytes, pubkey))
             if not pubkey.is_fullyvalid():
                 raise P2PKHCoinAddressError('invalid pubkey')
             if (not pubkey.is_compressed()) and (not accept_uncompressed):
@@ -462,7 +462,7 @@ class P2WPKHCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
 
         if not accept_invalid:
             if not isinstance(pubkey, CPubKey):
-                pubkey = CPubKey(pubkey)
+                pubkey = CPubKey(cast(bytes, pubkey))
             if not pubkey.is_fullyvalid():
                 raise P2PKHCoinAddressError('invalid pubkey')
             if not pubkey.is_compressed():
@@ -524,13 +524,13 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
         if not accept_invalid:
             if not isinstance(pubkey, XOnlyPubKey):
                 try:
-                    pubkey = XOnlyPubKey(pubkey)
+                    pubkey = XOnlyPubKey(cast(bytes, pubkey))
                 except ValueError as e:
                     raise P2TRCoinAddressError(f'problem with pubkey: {e}')
             if not pubkey.is_fullyvalid():
                 raise P2TRCoinAddressError('invalid x-only pubkey')
 
-        return cls.from_bytes(pubkey)
+        return cls.from_bytes(cast(bytes, pubkey))
 
     @classmethod
     def from_xonly_pubkey(
@@ -547,7 +547,7 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
         ensure_isinstance(pubkey, (XOnlyPubKey, bytes, bytearray), 'pubkey')
 
         if not isinstance(pubkey, XOnlyPubKey):
-            pubkey = XOnlyPubKey(pubkey)
+            pubkey = XOnlyPubKey(cast(bytes, pubkey))
 
         if not pubkey.is_fullyvalid():
             raise P2TRCoinAddressError('invalid pubkey')
@@ -582,7 +582,7 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
 
         if not accept_invalid:
             if not isinstance(pubkey, CPubKey):
-                pubkey = CPubKey(pubkey)
+                pubkey = CPubKey(cast(bytes, pubkey))
             if not pubkey.is_fullyvalid():
                 raise P2TRCoinAddressError('invalid pubkey')
             if not pubkey.is_compressed():
@@ -594,7 +594,7 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
             # checking validity, becasue accept_invalid is True
             pubkey = pubkey[1:33]
 
-        return cls.from_xonly_output_pubkey(XOnlyPubKey(pubkey),
+        return cls.from_xonly_output_pubkey(XOnlyPubKey(cast(bytes, pubkey)),
                                             accept_invalid=accept_invalid)
 
     @classmethod
@@ -613,7 +613,7 @@ class P2TRCoinAddress(CBech32CoinAddress, next_dispatch_final=True):
             if len(pubkey) == 32:
                 return cls.from_xonly_pubkey(pubkey)
 
-            pubkey = CPubKey(pubkey)
+            pubkey = CPubKey(cast(bytes, pubkey))
 
         if not pubkey.is_fullyvalid():
             raise P2TRCoinAddressError('invalid pubkey')
@@ -916,13 +916,11 @@ class CCoinExtKey(CBase58DataDispatched, CExtKeyBase,
 
     @property
     def _xpub_class(self) -> Type[CCoinExtPubKey]:
-        return cast(Type[CCoinExtPubKey],
-                    dispatcher_mapped_list(CCoinExtPubKey)[0])
+        return dispatcher_mapped_list(CCoinExtPubKey)[0]
 
     @property
     def _key_class(self) -> Type[CCoinKey]:
-        return cast(Type[CCoinKey],
-                    dispatcher_mapped_list(CCoinKey)[0])
+        return dispatcher_mapped_list(CCoinKey)[0]
 
 
 class CBitcoinExtPubKey(CCoinExtPubKey, WalletBitcoinClass):

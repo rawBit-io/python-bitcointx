@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, List, Set
 
 import pytest
 
@@ -10,10 +10,10 @@ from bitcointx.core.script import (
     CScriptInvalidError,
     CScriptTruncatedPushDataError,
     CScriptWitness,
-    SignatureHashSchnorr,
 )
 from bitcointx.core.scripteval import (
     SCRIPT_VERIFY_FLAGS_BY_NAME,
+    ScriptVerifyFlag_Type,
     VerifyScript,
     VerifyScriptError,
 )
@@ -37,7 +37,10 @@ PHASE4_PREFIXES = (
 SKIP_CONTAINS = ("undecodable",)
 
 
-def _flags_from_names(flags: str) -> Set:
+JsonObject = Dict[str, Any]
+
+
+def _flags_from_names(flags: str) -> Set[ScriptVerifyFlag_Type]:
     if not flags:
         return set()
     return {SCRIPT_VERIFY_FLAGS_BY_NAME[name] for name in flags.split(",")}
@@ -51,10 +54,10 @@ def _ctouts_from_prevouts(prevouts: List[str]) -> List[CTxOut]:
     return [CTxOut.deserialize(x(po)) for po in prevouts]
 
 
-def _load_phase4_vectors() -> List[Dict]:
+def _load_phase4_vectors() -> List[JsonObject]:
     data = json.loads(SCRIPT_ASSETS_PATH.read_text())
-    selected: List[Dict] = []
-    seen = set()
+    selected: List[JsonObject] = []
+    seen: Set[str] = set()
     for entry in data:
         name = entry.get("name") or entry.get("comment", "")
         if any(skip in name for skip in SKIP_CONTAINS):
@@ -67,7 +70,9 @@ def _load_phase4_vectors() -> List[Dict]:
     return selected
 
 
-def _run_vector(vec: Dict, case: Dict, should_pass: bool) -> None:
+def _run_vector(
+    vec: JsonObject, case: JsonObject, should_pass: bool
+) -> None:
     flags = _flags_from_names(vec.get("flags", ""))
     spent_outputs = _ctouts_from_prevouts(vec["prevouts"])
     in_idx = vec["index"]
@@ -77,22 +82,23 @@ def _run_vector(vec: Dict, case: Dict, should_pass: bool) -> None:
     wit = _witness_from_hex(case.get("witness", []))
     tx.wit.vtxinwit[in_idx].scriptWitness = wit
 
-    verify = lambda: VerifyScript(
-        txin.scriptSig,
-        spent_outputs[in_idx].scriptPubKey,
-        tx,
-        in_idx,
-        flags=flags,
-        amount=spent_outputs[in_idx].nValue,
-        witness=wit,
-        spent_outputs=spent_outputs,
-    )
+    def verify() -> None:
+        VerifyScript(
+            txin.scriptSig,
+            spent_outputs[in_idx].scriptPubKey,
+            tx,
+            in_idx,
+            flags=flags,
+            amount=spent_outputs[in_idx].nValue,
+            witness=wit,
+            spent_outputs=spent_outputs,
+        )
 
     if should_pass:
         try:
             verify()
         except Exception as exc:  # pragma: no cover
-            pytest.xfail(f"{vec.get('comment','')} expected success: {exc}")
+            pytest.xfail(f"{vec.get('comment', '')} expected success: {exc}")
     else:
         try:
             with pytest.raises(
@@ -107,11 +113,13 @@ def _run_vector(vec: Dict, case: Dict, should_pass: bool) -> None:
             ):
                 verify()
         except AssertionError as exc:  # pragma: no cover
-            pytest.xfail(f"{vec.get('comment','')} expected failure but passed: {exc}")
+            pytest.xfail(
+                f"{vec.get('comment', '')} expected failure but passed: {exc}"
+            )
 
 
 @pytest.mark.parametrize("vec", _load_phase4_vectors(), ids=lambda v: v.get("comment", ""))
-def test_script_assets_tapscript(vec: Dict) -> None:
+def test_script_assets_tapscript(vec: JsonObject) -> None:
     _run_vector(vec, vec["success"], True)
     failure = vec.get("failure")
     if failure:

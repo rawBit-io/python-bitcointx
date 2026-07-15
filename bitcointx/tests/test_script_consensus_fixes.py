@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Tuple, cast
 
 import pytest
 
@@ -23,6 +23,7 @@ from bitcointx.core.script import (
     OP_ENDIF,
     OP_IF,
     SIGHASH_ALL,
+    SIGVERSION_Type,
     SIGVERSION_TAPSCRIPT,
     SIGVERSION_WITNESS_V0,
     TaprootScriptTree,
@@ -210,13 +211,15 @@ def test_bip143_codeseparator_in_unexecuted_branch_does_not_change_scriptcode() 
 @pytest.mark.parametrize(
     "sigversion", [SIGVERSION_WITNESS_V0, SIGVERSION_TAPSCRIPT]
 )
-def test_csv_treats_transaction_version_as_unsigned(sigversion: int) -> None:
+def test_csv_treats_transaction_version_as_unsigned(
+    sigversion: SIGVERSION_Type,
+) -> None:
     tx = CTransaction(
         [CTxIn(COutPoint(), CScript(), 0)],
         [CTxOut(1, CScript([OP_1]))],
         nVersion=-1,
     )
-    stack = []
+    stack: List[bytes] = []
     EvalScript(
         stack,
         CScript([OP_0, OP_CHECKSEQUENCEVERIFY, OP_DROP, OP_1]),
@@ -258,7 +261,9 @@ def _taproot_scriptpath_spend(
     script: CScript,
 ) -> Tuple[CScript, bytes, CScript, CTransaction, Tuple[CTxOut, ...]]:
     tree = TaprootScriptTree([script], internal_pubkey=TAPROOT_KEY.xonly_pub)
-    script_and_control = tree.get_script_with_control_block(script.name)
+    script_and_control = tree.get_script_with_control_block(
+        cast(str, script.name)
+    )
     assert script_and_control is not None
     leaf_script, control = script_and_control
     script_pubkey = P2TRCoinAddress.from_script_tree(tree).to_scriptPubKey()

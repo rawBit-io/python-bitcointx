@@ -14,7 +14,6 @@
 import os
 import csv
 import unittest
-import warnings
 import hashlib
 
 from bitcointx.core.key import CKey, CPubKey, XOnlyPubKey

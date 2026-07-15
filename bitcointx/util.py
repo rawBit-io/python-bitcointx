@@ -25,7 +25,7 @@ from types import FunctionType
 from abc import ABCMeta, ABC, abstractmethod
 from typing import (
     Type, Set, Tuple, List, Dict, Union, Any, Callable, Iterable, Optional,
-    TypeVar, Generic, cast, NoReturn, Mapping
+    TypeVar, Generic, cast, NoReturn, Mapping, Sequence
 )
 
 _secp256k1_library_path: Optional[str] = None
@@ -249,7 +249,9 @@ class ClassMappingDispatcher(ABCMeta):
         mcs._class_dispatcher__clsmap = {}
 
         if depends:
-            parent_depends = mcs._class_dispatcher__depends
+            parent_depends = cast(
+                Sequence[Type[ClassMappingDispatcher]],
+                mcs._class_dispatcher__depends)
             combined_depends = list(mcs._class_dispatcher__depends)
             for ddisp in depends:
                 replaced_index = None

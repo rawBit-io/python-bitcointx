@@ -7,7 +7,7 @@ import pytest
 
 from bitcointx.core import x
 from bitcointx.core.key import CKey, XOnlyPubKey
-from bitcointx.core.secp256k1 import get_secp256k1
+from bitcointx.core.secp256k1 import Secp256k1, get_secp256k1
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class BIP340Vector:
     comment: str
 
 
-def _require_schnorr_support():
+def _require_schnorr_support() -> Secp256k1:
     secp = get_secp256k1()
     if not secp.cap.has_schnorrsig:
         pytest.skip("libsecp256k1 built without schnorrsig support")

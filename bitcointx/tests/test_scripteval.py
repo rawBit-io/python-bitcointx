@@ -30,7 +30,7 @@ from bitcointx.core import (
 from bitcointx.core.key import CKey, tap_tweak_pubkey
 from bitcointx.core.script import (
     OPCODES_BY_NAME, CScript, CScriptWitness,
-    OP_0, OP_1, OP_EQUAL, OP_EQUALVERIFY, OP_DROP, OP_CHECKSIG,
+    OP_0, OP_1, OP_EQUALVERIFY, OP_DROP, OP_CHECKSIG,
     OP_CHECKSIGADD, OP_SIZE,
     SIGHASH_ALL, SIGVERSION_BASE, SIGVERSION_WITNESS_V0,
     standard_multisig_redeem_script, standard_multisig_witness_stack,
@@ -457,8 +457,10 @@ class Test_EvalScript(unittest.TestCase):
                                             amount=amount,
                                             sigversion=SIGVERSION_BASE)
 
-            sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
-                    for k in keys[:required]]
+            sigs: List[Union[bytes, bytearray]] = [
+                k.sign(sighash) + bytes([SIGHASH_ALL])
+                for k in keys[:required]
+            ]
 
             tx.vin[0].scriptSig = CScript(
                 standard_multisig_witness_stack(sigs, redeem_script))
@@ -479,8 +481,10 @@ class Test_EvalScript(unittest.TestCase):
                                             amount=amount,
                                             sigversion=SIGVERSION_WITNESS_V0)
 
-            sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
-                    for k in keys[:required]]
+            sigs = [
+                k.sign(sighash) + bytes([SIGHASH_ALL])
+                for k in keys[:required]
+            ]
 
             witness_stack = standard_multisig_witness_stack(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([])
@@ -504,8 +508,10 @@ class Test_EvalScript(unittest.TestCase):
                                             amount=amount,
                                             sigversion=SIGVERSION_WITNESS_V0)
 
-            sigs = [k.sign(sighash) + bytes([SIGHASH_ALL])
-                    for k in keys[:required]]
+            sigs = [
+                k.sign(sighash) + bytes([SIGHASH_ALL])
+                for k in keys[:required]
+            ]
 
             witness_stack = standard_multisig_witness_stack(sigs, redeem_script)
             tx.vin[0].scriptSig = CScript([scriptPubKey])

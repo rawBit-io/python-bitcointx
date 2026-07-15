@@ -8,7 +8,7 @@
 import hashlib
 import unittest
 
-from typing import List, Tuple
+from typing import Callable, List, Set, Tuple
 
 from bitcointx.core import (
     COutPoint,
@@ -58,6 +58,7 @@ from bitcointx.core.scripteval import (
     SCRIPT_VERIFY_TAPROOT,
     SCRIPT_VERIFY_WITNESS,
     SCRIPT_VERIFY_WITNESS_PUBKEYTYPE,
+    ScriptVerifyFlag_Type,
     VerifyScript,
     VerifyScriptWithTrace,
 )
@@ -121,7 +122,7 @@ def _verify_witness_program(
     witness_program: CScript,
     *,
     wrapped: bool,
-    flags: set,
+    flags: Set[ScriptVerifyFlag_Type],
 ) -> None:
     witness = CScriptWitness()
     if wrapped:
@@ -225,7 +226,9 @@ class TestScriptEvalPolicyFixes(unittest.TestCase):
 
     def test_empty_tapscript_signatures_do_not_require_prevouts(self) -> None:
         pubkey = CCoinKey.from_secret_bytes(b"\x12" * 32).xonly_pub
-        cases = (
+        cases: Tuple[
+            Tuple[str, CScript, str, List[bytes]], ...
+        ] = (
             (
                 "checksig",
                 CScript(
@@ -262,7 +265,9 @@ class TestScriptEvalPolicyFixes(unittest.TestCase):
 
     def test_tapscript_requests_prevouts_only_at_a_real_sighash(self) -> None:
         pubkey = CCoinKey.from_secret_bytes(b"\x13" * 32).xonly_pub
-        cases = (
+        cases: Tuple[
+            Tuple[str, Callable[[bytes], List[bytes]], CScript, str], ...
+        ] = (
             (
                 "checksig",
                 lambda sig: [sig],

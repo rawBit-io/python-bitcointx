@@ -1665,7 +1665,7 @@ def parse_standard_multisig_redeem_script(script: CScript
                                       pubkeys=tuple(pubkeys))
 
 
-def standard_multisig_witness_stack(sigs: List[Union[bytes, bytearray]],
+def standard_multisig_witness_stack(sigs: Sequence[Union[bytes, bytearray]],
                                     redeem_script: CScript
                                     ) -> List[ScriptElement_Type]:
 

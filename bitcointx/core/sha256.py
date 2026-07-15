@@ -66,7 +66,7 @@ def Round(a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int,
     x[h] = uint32(t1 + t2)
 
 
-def ReadBE32(buf: bytes) -> int:
+def ReadBE32(buf: Union[bytes, bytearray]) -> int:
     return int(struct.unpack(b">I", buf[:4])[0])
 
 

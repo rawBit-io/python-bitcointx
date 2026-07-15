@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set
 
 import pytest
 
@@ -13,6 +13,7 @@ from bitcointx.core.script import (
 )
 from bitcointx.core.scripteval import (
     SCRIPT_VERIFY_FLAGS_BY_NAME,
+    ScriptVerifyFlag_Type,
     VerifyScript,
     VerifyScriptError,
 )
@@ -48,7 +49,10 @@ PHASE6_PREFIXES = (
 )
 
 
-def _flags_from_names(flags: str) -> Set:
+JsonObject = Dict[str, Any]
+
+
+def _flags_from_names(flags: str) -> Set[ScriptVerifyFlag_Type]:
     if not flags:
         return set()
     return {SCRIPT_VERIFY_FLAGS_BY_NAME[name] for name in flags.split(",")}
@@ -62,10 +66,10 @@ def _ctouts_from_prevouts(prevouts: List[str]) -> List[CTxOut]:
     return [CTxOut.deserialize(x(po)) for po in prevouts]
 
 
-def _load_phase6_vectors() -> List[Dict]:
+def _load_phase6_vectors() -> List[JsonObject]:
     data = json.loads(SCRIPT_ASSETS_PATH.read_text())
-    selected: List[Dict] = []
-    seen = set()
+    selected: List[JsonObject] = []
+    seen: Set[str] = set()
     for entry in data:
         name = entry.get("name") or entry.get("comment", "")
         if any(name.startswith(pfx) for pfx in PHASE6_PREFIXES):
@@ -76,7 +80,9 @@ def _load_phase6_vectors() -> List[Dict]:
     return selected
 
 
-def _run_vector(vec: Dict, case: Dict, should_pass: bool) -> None:
+def _run_vector(
+    vec: JsonObject, case: JsonObject, should_pass: bool
+) -> None:
     flags = _flags_from_names(vec.get("flags", ""))
     spent_outputs = _ctouts_from_prevouts(vec["prevouts"])
     in_idx = vec["index"]
@@ -86,16 +92,17 @@ def _run_vector(vec: Dict, case: Dict, should_pass: bool) -> None:
     wit = _witness_from_hex(case.get("witness", []))
     tx.wit.vtxinwit[in_idx].scriptWitness = wit
 
-    verify = lambda: VerifyScript(
-        txin.scriptSig,
-        spent_outputs[in_idx].scriptPubKey,
-        tx,
-        in_idx,
-        flags=flags,
-        amount=spent_outputs[in_idx].nValue,
-        witness=wit,
-        spent_outputs=spent_outputs,
-    )
+    def verify() -> None:
+        VerifyScript(
+            txin.scriptSig,
+            spent_outputs[in_idx].scriptPubKey,
+            tx,
+            in_idx,
+            flags=flags,
+            amount=spent_outputs[in_idx].nValue,
+            witness=wit,
+            spent_outputs=spent_outputs,
+        )
 
     if should_pass:
         verify()
@@ -114,7 +121,7 @@ def _run_vector(vec: Dict, case: Dict, should_pass: bool) -> None:
 
 
 @pytest.mark.parametrize("vec", _load_phase6_vectors(), ids=lambda v: v.get("comment", ""))
-def test_taproot_edge_cases(vec: Dict) -> None:
+def test_taproot_edge_cases(vec: JsonObject) -> None:
     _run_vector(vec, vec["success"], True)
     failure = vec.get("failure")
     if failure:

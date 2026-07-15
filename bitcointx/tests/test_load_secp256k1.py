@@ -13,6 +13,8 @@ import unittest
 
 import ctypes
 import binascii
+from typing import cast
+
 import bitcointx.core.secp256k1 as secp256k1_module
 from bitcointx.core.secp256k1 import (
     secp256k1_load_library, Secp256k1
@@ -61,8 +63,10 @@ class Test_Load_Secp256k1(unittest.TestCase):
                 old_func = getattr(lib, lib._OLD_NEGATE, None)
                 new_func = getattr(lib, lib._NEW_NEGATE, None)
 
-                cap = secp256k1_module._add_function_definitions(  # type: ignore[arg-type]
-                    lib)
+                # This deliberately duck-typed test double provides the CDLL
+                # attributes used by _add_function_definitions.
+                cap = secp256k1_module._add_function_definitions(
+                    cast(ctypes.CDLL, lib))
 
                 self.assertEqual(cap.has_privkey_negate, expected_cap)
                 if preferred == 'old':
