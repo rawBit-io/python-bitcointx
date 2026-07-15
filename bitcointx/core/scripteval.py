@@ -1013,7 +1013,35 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 )
 
         committed = control_size_valid and tweak_ok
-        executed = committed and leaf_version == TAPROOT_LEAF_TAPSCRIPT
+        executed = False
+        tapscript: Optional[CScript] = None
+        op_success_pos: Optional[int] = None
+        pre_scan_error: Optional[CScriptInvalidError] = None
+        oversized_item_index: Optional[int] = None
+
+        if committed and leaf_version == TAPROOT_LEAF_TAPSCRIPT:
+            tapscript = script_class(script_bytes)
+            try:
+                for opcode, _data, sop_idx in tapscript.raw_iter():
+                    if _is_op_success(int(opcode)):
+                        op_success_pos = sop_idx
+                        break
+            except CScriptInvalidError as err:
+                pre_scan_error = err
+
+            if op_success_pos is None and pre_scan_error is None:
+                for i, elt in enumerate(stack):
+                    elt_len = (
+                        len(script_class([elt]))
+                        if isinstance(elt, int) else len(elt)
+                    )
+                    if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
+                        oversized_item_index = i
+                        break
+                if (oversized_item_index is None
+                        and len(stack) <= MAX_STACK_ITEMS):
+                    executed = True
+
         _emit_trace(on_step, 'witnessScript', lambda: {
             "pc": -1,
             "opcode_name": "witness_script",
@@ -1124,59 +1152,56 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             return
 
         # OP_SUCCESSx pre-scan
-        try:
-            for (opcode, data, sop_idx) in script_class(script_bytes).raw_iter():
-                if _is_op_success(int(opcode)):
-                    discouraged = SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags
-                    _emit_trace(on_step, 'taproot', lambda: {
-                        "pc": sop_idx,
-                        "kind": "validator",
-                        "opcode_name": "op_success",
-                        "step": "op_success",
-                        "phase": "taproot",
-                        "stack_before": [x.hex() for x in stack],
-                        "stack_after": [x.hex() for x in stack],
-                        "policy": "discouraged" if discouraged else "ok",
-                    })
-                    if discouraged:
-                        message = "OP_SUCCESSx discouraged by policy"
-                        _emit_terminal_failure(
-                            on_step,
-                            machine_name='op_success_policy',
-                            phase='taproot',
-                            stack_before=stack,
-                            error=message,
-                            error_code='DISCOURAGE_OP_SUCCESS',
-                        )
-                        raise VerifyScriptError(message)
-                    return
-        except CScriptInvalidError as err:
+        if op_success_pos is not None:
+            discouraged = SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags
+            _emit_trace(on_step, 'taproot', lambda: {
+                "pc": op_success_pos,
+                "kind": "validator",
+                "opcode_name": "op_success",
+                "step": "op_success",
+                "phase": "taproot",
+                "stack_before": [x.hex() for x in stack],
+                "stack_after": [x.hex() for x in stack],
+                "policy": "discouraged" if discouraged else "ok",
+            })
+            if discouraged:
+                message = "OP_SUCCESSx discouraged by policy"
+                _emit_terminal_failure(
+                    on_step,
+                    machine_name='op_success_policy',
+                    phase='taproot',
+                    stack_before=stack,
+                    error=message,
+                    error_code='DISCOURAGE_OP_SUCCESS',
+                )
+                raise VerifyScriptError(message)
+            return
+
+        if pre_scan_error is not None:
             _emit_terminal_failure(
                 on_step,
                 machine_name='script_parse',
                 phase='witnessScript',
                 stack_before=stack,
-                error=repr(err),
+                error=repr(pre_scan_error),
                 error_code='BAD_OPCODE',
             )
-            raise VerifyScriptError(repr(err))
+            raise VerifyScriptError(repr(pre_scan_error))
 
-        for i, elt in enumerate(stack):
-            elt_len = len(script_class([elt])) if isinstance(elt, int) else len(elt)
-            if elt_len > MAX_SCRIPT_ELEMENT_SIZE:
-                message = (
-                    "maximum push size exceeded by an item at position {} "
-                    "on witness stack".format(i)
-                )
-                _emit_terminal_failure(
-                    on_step,
-                    machine_name='witness_element_size',
-                    phase='witnessScript',
-                    stack_before=stack,
-                    error=message,
-                    error_code='PUSH_SIZE',
-                )
-                raise VerifyScriptError(message)
+        if oversized_item_index is not None:
+            message = (
+                "maximum push size exceeded by an item at position {} "
+                "on witness stack".format(oversized_item_index)
+            )
+            _emit_terminal_failure(
+                on_step,
+                machine_name='witness_element_size',
+                phase='witnessScript',
+                stack_before=stack,
+                error=message,
+                error_code='PUSH_SIZE',
+            )
+            raise VerifyScriptError(message)
         if len(stack) > MAX_STACK_ITEMS:
             message = "witness stack exceeds maximum items"
             _emit_terminal_failure(
@@ -1192,7 +1217,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
         execdata.validation_weight_left = _serialize_witness_stack_size(witness.stack) + VALIDATION_WEIGHT_OFFSET
         execdata.validation_weight_left_init = True
 
-        exec_script = script_class(script_bytes)
+        assert tapscript is not None
+        exec_script = tapscript
         try:
             EvalScript(stack, exec_script, txTo, inIdx, flags=flags,
                        amount=amount, sigversion=SIGVERSION_TAPSCRIPT,
@@ -2382,6 +2408,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                     "stack_before": [x.hex() for x in stack_before or []],
                     "stack_after": [x.hex() for x in stack],
                     "phase": phase,
+                    "branch_active": fExec,
                     "failed": True,
                     "error": str(e),
                 })

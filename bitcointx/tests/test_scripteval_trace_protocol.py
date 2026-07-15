@@ -22,16 +22,19 @@ from bitcointx.core.script import (
     CScriptWitness,
     OP_0,
     OP_1,
+    OP_CAT,
     OP_DROP,
     OP_ELSE,
     OP_ENDIF,
     OP_IF,
+    OP_PUSHDATA1,
     OP_RESERVED,
     SIGVERSION_TAPROOT,
     SignatureHashSchnorr,
     TaprootScriptTree,
 )
 from bitcointx.core.scripteval import (
+    MAX_STACK_ITEMS,
     SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS,
     SCRIPT_VERIFY_P2SH,
     SCRIPT_VERIFY_TAPROOT,
@@ -249,6 +252,31 @@ class TestTraceProtocol(unittest.TestCase):
             for step in steps
         ))
 
+    def test_failed_opcode_records_inactive_branch_state(self) -> None:
+        script_pubkey = CScript([
+            OP_0,
+            OP_IF,
+            OP_CAT,
+            OP_ENDIF,
+            OP_1,
+        ])
+
+        valid, typed_steps, error = VerifyScriptWithTrace(
+            CScript(), script_pubkey, self._dummy_transaction(), 0
+        )
+        failures = [
+            dict(step) for step in typed_steps
+            if step.get('failed') is True
+        ]
+
+        self.assertFalse(valid)
+        self.assertIn('OP_CAT is disabled', error or '')
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0]['opcode_name'], 'OP_CAT')
+        self.assertEqual(failures[0]['phase'], 'scriptPubKey')
+        self.assertIs(failures[0]['branch_active'], False)
+        self.assertNotIn('error_code', failures[0])
+
     def test_key_path_full_event_sequence_is_frozen(self) -> None:
         trace = _key_path_trace()
         sig_hex = trace.signature.hex()
@@ -444,7 +472,13 @@ class TestTraceProtocol(unittest.TestCase):
                     dict(step) for step in typed_steps
                     if step.get('step') == 'op_success'
                 ]
+                witness_script_event = next(
+                    dict(step) for step in typed_steps
+                    if step.get('step') == 'witness_script'
+                )
 
+                self.assertTrue(witness_script_event['committed'])
+                self.assertFalse(witness_script_event['executed'])
                 self.assertEqual(
                     op_success_events,
                     [{
@@ -474,6 +508,8 @@ class TestTraceProtocol(unittest.TestCase):
         valid, typed_steps, _ = _trace_script_path(case)
 
         self.assertFalse(valid)
+        self.assertEqual(typed_steps[-1].get('error_code'),
+                         'TWEAK_MISMATCH')
         self.assertEqual(
             [
                 dict(step) for step in typed_steps
@@ -491,6 +527,46 @@ class TestTraceProtocol(unittest.TestCase):
                 'executed': False,
             }],
         )
+
+    def test_witness_script_marks_pre_execution_rejections_unexecuted(
+        self,
+    ) -> None:
+        cases = (
+            (
+                'parse',
+                _script_path_case(
+                    CScript(
+                        bytes([int(OP_PUSHDATA1)]), name='malformed'
+                    )
+                ),
+            ),
+            (
+                'element-size',
+                _script_path_case(
+                    CScript([OP_1], name='large_element'),
+                    stack=[b'\x01' * 521],
+                ),
+            ),
+            (
+                'stack-size',
+                _script_path_case(
+                    CScript([OP_1], name='large_stack'),
+                    stack=[b''] * (MAX_STACK_ITEMS + 1),
+                ),
+            ),
+        )
+
+        for name, case in cases:
+            with self.subTest(name=name):
+                valid, typed_steps, _ = _trace_script_path(case)
+                witness_script_event = next(
+                    dict(step) for step in typed_steps
+                    if step.get('step') == 'witness_script'
+                )
+
+                self.assertFalse(valid)
+                self.assertTrue(witness_script_event['committed'])
+                self.assertFalse(witness_script_event['executed'])
 
     def test_witness_script_marks_unknown_leaf_committed_unexecuted(
         self,

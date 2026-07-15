@@ -668,6 +668,7 @@ def test_opcode_failure_is_the_only_terminal_and_has_no_error_code() -> None:
     assert failures[0]['pc'] == 0
     assert failures[0]['opcode_name'] == 'OP_DROP'
     assert failures[0]['error'] == error
+    assert failures[0]['branch_active'] is True
     assert 'kind' not in failures[0]
     assert 'error_code' not in failures[0]
 
@@ -692,6 +693,7 @@ def test_direct_witness_callback_does_not_duplicate_opcode_failure() -> None:
     failures = [item for item in steps if item.get('failed') is True]
     assert failures == [steps[-1]]
     assert failures[0]['opcode_name'] == 'OP_DROP'
+    assert failures[0]['branch_active'] is True
     assert 'kind' not in failures[0]
     assert 'error_code' not in failures[0]
 
