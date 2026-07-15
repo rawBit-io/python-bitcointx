@@ -2,10 +2,13 @@ name: Python-bitcointx
 
 on:
   push:
-    branches: [ $default-branch ]
+    branches: [master]
   pull_request:
-    branches: [ $default-branch ]
+    branches: [master]
   workflow_dispatch:
+
+env:
+  LIBSECP256K1_VERSION: v0.4.0
 
 
 jobs:
@@ -31,8 +34,11 @@ jobs:
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install automake libtool boost pkg-config libevent
         fi
-        SECP256K1_VERSION=$(grep -A1 '!LIBSECP256K1_VERSION_MARKER_DO_NOT_MOVE_OR_EDIT!' README.md |tail -n 1|sed -E 's/`(v[0-9\.]+)`/\1/g')
-        sh -c "git clone https://github.com/bitcoin/secp256k1.git /tmp/libsecp256k1 && cd /tmp/libsecp256k1 && git checkout $SECP256K1_VERSION && ./autogen.sh && ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests --enable-module-recovery --enable-module-ecdh --enable-module-schnorrsig && make && sudo make install"
+        if [ -z "${LIBSECP256K1_VERSION:-}" ]; then
+          echo "LIBSECP256K1_VERSION must not be empty" >&2
+          exit 1
+        fi
+        sh -c "git clone https://github.com/bitcoin/secp256k1.git /tmp/libsecp256k1 && cd /tmp/libsecp256k1 && git checkout $LIBSECP256K1_VERSION && ./autogen.sh && ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests --enable-module-recovery --enable-module-ecdh --enable-module-schnorrsig && make && sudo make install"
         sh -c "git clone https://github.com/bitcoin/bitcoin.git /tmp/bitcoin && cd /tmp/bitcoin && git checkout v25.0 && ./autogen.sh && ./configure --without-qtdbus --without-qrencode --without-miniupnpc --disable-tests --disable-wallet --disable-zmq --with-libs --disable-util-cli --disable-util-tx --disable-util-wallet --disable-bench --without-daemon --without-gui --disable-fuzz --disable-ccache --disable-static --with-system-libsecp256k1 && make && sudo make install"
         python -m pip install flake8 pytest coverage mypy typing-extensions types-contextvars
     - name: Lint with flake8
@@ -45,3 +51,41 @@ jobs:
       env:
         LD_LIBRARY_PATH: /usr/local/lib
       run: pytest
+
+  downstream:
+
+    name: rawBit backend
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.12"
+    - name: Install libsecp256k1
+      run: |
+        if [ -z "${LIBSECP256K1_VERSION:-}" ]; then
+          echo "LIBSECP256K1_VERSION must not be empty" >&2
+          exit 1
+        fi
+        sudo apt-get update
+        sudo apt-get install -y autoconf automake build-essential libtool pkg-config
+        git clone --depth 1 --branch "$LIBSECP256K1_VERSION" https://github.com/bitcoin/secp256k1.git /tmp/libsecp256k1
+        cd /tmp/libsecp256k1
+        ./autogen.sh
+        ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests --enable-module-recovery --enable-module-ecdh --enable-module-schnorrsig
+        make -j"$(nproc)"
+        sudo make install
+    - name: Clone rawBit
+      run: git clone https://github.com/rawBit-io/rawbit.git rawbit
+    - name: Install rawBit with this python-bitcointx checkout
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r rawbit/requirements.txt -r rawbit/requirements-special.txt
+        python -m pip install --force-reinstall --no-deps "$GITHUB_WORKSPACE"
+    - name: Test rawBit backend
+      working-directory: rawbit
+      env:
+        LD_LIBRARY_PATH: /usr/local/lib
+      run: python -m pytest backend/tests
