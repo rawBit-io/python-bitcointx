@@ -268,7 +268,7 @@ def test_sighash_single_without_output_fails() -> None:
     outputs: List[Tuple[int, CScript]] = []
     spends = [TaprootSpend(SK1, SIGHASH_Type(SIGHASH_SINGLE))]
     tx, spent_outputs, _ = _build_tx(spends, outputs)
-    with pytest.raises((ValueError, IndexError)):
+    with pytest.raises(ValidationError):
         _sign_input(tx, 0, spends[0], spent_outputs)
 
 

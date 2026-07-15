@@ -37,8 +37,8 @@ from bitcointx.core.script import (
     TaprootScriptTree, TaprootScriptTreeLeaf_Type, SignatureHashSchnorr
 )
 from bitcointx.core.scripteval import (
-    VerifyScript, SCRIPT_VERIFY_FLAGS_BY_NAME, SCRIPT_VERIFY_P2SH,
-    SCRIPT_VERIFY_WITNESS, ScriptVerifyFlag_Type
+    VerifyScript, SCRIPT_VERIFY_CLEANSTACK, SCRIPT_VERIFY_FLAGS_BY_NAME,
+    SCRIPT_VERIFY_P2SH, SCRIPT_VERIFY_WITNESS, ScriptVerifyFlag_Type
 )
 from bitcointx.core.bitcoinconsensus import (
     ConsensusVerifyScript, BITCOINCONSENSUS_ACCEPTED_FLAGS,
@@ -146,6 +146,9 @@ def load_test_vectors(name: str, skip_fixme: bool = True) -> TestDataIterator:
                         raise Exception('Unknown script verify flag %r' % flag)
 
                     flag_set.add(flag)
+
+            if SCRIPT_VERIFY_CLEANSTACK in flag_set:
+                flag_set.update((SCRIPT_VERIFY_P2SH, SCRIPT_VERIFY_WITNESS))
 
             yield (scriptSig, scriptPubKey, CScript(), witness, nValue, None,
                    flag_set, expected_result, comment, test_case)

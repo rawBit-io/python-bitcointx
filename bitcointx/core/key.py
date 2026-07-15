@@ -434,8 +434,7 @@ class CKeyBase:
         secp256k1 = get_secp256k1()
         if not secp256k1.cap.has_privkey_negate:
             raise RuntimeError(
-                'secp256k1 does not export privkey negation function. '
-                'You should use newer version of secp256k1 library')
+                'secp256k1 does not export a privkey negation function')
         key_buf = ctypes.create_string_buffer(self.secret_bytes)
         ret = secp256k1.lib.secp256k1_ec_privkey_negate(secp256k1.ctx.sign, key_buf)
         if 1 != ret:

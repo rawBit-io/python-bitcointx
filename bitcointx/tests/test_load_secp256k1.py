@@ -13,12 +13,65 @@ import unittest
 
 import ctypes
 import binascii
+import bitcointx.core.secp256k1 as secp256k1_module
 from bitcointx.core.secp256k1 import (
     secp256k1_load_library, Secp256k1
 )
 
 
+class _FakeFunction:
+    pass
+
+
+class _FakeCDLL:
+    _OLD_NEGATE = 'secp256k1_ec_privkey_negate'
+    _NEW_NEGATE = 'secp256k1_ec_seckey_negate'
+
+    def __init__(self, *, old_negate: bool, new_negate: bool) -> None:
+        self._missing = set()
+        if old_negate:
+            setattr(self, self._OLD_NEGATE, _FakeFunction())
+        else:
+            self._missing.add(self._OLD_NEGATE)
+        if new_negate:
+            setattr(self, self._NEW_NEGATE, _FakeFunction())
+        else:
+            self._missing.add(self._NEW_NEGATE)
+
+    def __getattr__(self, name: str) -> object:
+        if name in self._missing:
+            return None
+        func = _FakeFunction()
+        setattr(self, name, func)
+        return func
+
+
 class Test_Load_Secp256k1(unittest.TestCase):
+    def test_privkey_negate_symbol_compatibility(self) -> None:
+        cases = (
+            ('old-only', True, False, True, 'old'),
+            ('new-only', False, True, True, 'new'),
+            ('both', True, True, True, 'old'),
+            ('neither', False, False, False, None),
+        )
+
+        for name, has_old, has_new, expected_cap, preferred in cases:
+            with self.subTest(name=name):
+                lib = _FakeCDLL(old_negate=has_old, new_negate=has_new)
+                old_func = getattr(lib, lib._OLD_NEGATE, None)
+                new_func = getattr(lib, lib._NEW_NEGATE, None)
+
+                cap = secp256k1_module._add_function_definitions(  # type: ignore[arg-type]
+                    lib)
+
+                self.assertEqual(cap.has_privkey_negate, expected_cap)
+                if preferred == 'old':
+                    self.assertIs(getattr(lib, lib._OLD_NEGATE), old_func)
+                elif preferred == 'new':
+                    self.assertIs(getattr(lib, lib._OLD_NEGATE), new_func)
+                else:
+                    self.assertIsNone(getattr(lib, lib._OLD_NEGATE, None))
+
     def test(self) -> None:
 
         def check_pub_parse(secp256k1: Secp256k1) -> None:

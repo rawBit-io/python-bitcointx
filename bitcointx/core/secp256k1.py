@@ -93,14 +93,21 @@ def _check_ressecp256k1_void_p(val: int, _func: FunctionType,
     return ctypes.c_void_p(val)
 
 
-def _bind(lib: ctypes.CDLL, func_name: str, fallback: Optional[str] = None) -> Any:
-    """Return a callable from lib, aliasing fallback names when required."""
+def _bind_optional(lib: ctypes.CDLL, func_name: str,
+                   fallback: Optional[str] = None) -> Optional[Any]:
+    """Return an optional callable, aliasing fallback names when required."""
     func = getattr(lib, func_name, None)
     if func is None and fallback is not None:
         alt = getattr(lib, fallback, None)
         if alt is not None:
             setattr(lib, func_name, alt)
             func = alt
+    return func
+
+
+def _bind(lib: ctypes.CDLL, func_name: str, fallback: Optional[str] = None) -> Any:
+    """Return a required callable, aliasing fallback names when required."""
+    func = _bind_optional(lib, func_name, fallback)
     if func is None:
         raise Libsecp256k1Exception(
             -1, f"libsecp256k1 missing required symbol '{func_name}'"
@@ -225,10 +232,13 @@ def _add_function_definitions(lib: ctypes.CDLL) -> Secp256k1_Capabilities:
         lib.secp256k1_ec_pubkey_negate.restype = ctypes.c_int
         lib.secp256k1_ec_pubkey_negate.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 
-    if getattr(lib, 'secp256k1_ec_privkey_negate', None):
+    privkey_negate = _bind_optional(
+        lib, 'secp256k1_ec_privkey_negate',
+        'secp256k1_ec_seckey_negate')
+    if privkey_negate is not None:
         has_privkey_negate = True
-        lib.secp256k1_ec_privkey_negate.restype = ctypes.c_int
-        lib.secp256k1_ec_privkey_negate.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        privkey_negate.restype = ctypes.c_int
+        privkey_negate.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 
     lib.secp256k1_ec_pubkey_combine.restype = ctypes.c_int
     lib.secp256k1_ec_pubkey_combine.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.c_int]

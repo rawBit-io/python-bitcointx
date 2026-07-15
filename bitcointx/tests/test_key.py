@@ -99,6 +99,15 @@ class Test_CKey(unittest.TestCase):
                          CPubKey.combine(k1.pub, k2.pub, k_sum.pub,
                                          k2.pub.negated(),
                                          k_sum.pub.negated()))
+        with self.assertRaises(ValueError):
+            CKey.sub(k1, k1)
+        with self.assertRaises(ValueError):
+            CKey.combine(k1, k2, k1.negated(), k2.negated())
+        with self.assertRaises(ValueError):
+            CPubKey.sub(k1.pub, k1.pub)
+        with self.assertRaises(ValueError):
+            CPubKey.combine(k1.pub, k2.pub,
+                            k1.pub.negated(), k2.pub.negated())
 
     def test_invalid_key(self) -> None:
         with self.assertRaises(ValueError):

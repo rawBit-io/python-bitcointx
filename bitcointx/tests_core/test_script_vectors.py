@@ -24,8 +24,11 @@ from bitcointx.core.scripteval import (
     MaxOpCountError,
     MissingOpArgumentsError,
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY,
+    SCRIPT_VERIFY_CLEANSTACK,
     SCRIPT_VERIFY_FLAGS_BY_NAME,
+    SCRIPT_VERIFY_P2SH,
     SCRIPT_VERIFY_TAPROOT,
+    SCRIPT_VERIFY_WITNESS,
     ScriptVerifyFlag_Type,
     VerifyOpFailedError,
     VerifyScript,
@@ -293,6 +296,8 @@ def _load_vectors() -> List[ScriptVector]:
                 unknown_flag = True
                 break
             flag_set.add(mapped)
+        if SCRIPT_VERIFY_CLEANSTACK in flag_set:
+            flag_set.update((SCRIPT_VERIFY_P2SH, SCRIPT_VERIFY_WITNESS))
         if unknown_flag:
             marks.append(pytest.mark.xfail(reason=f"Unknown flag {flags_str}"))
 

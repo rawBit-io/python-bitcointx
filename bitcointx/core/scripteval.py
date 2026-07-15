@@ -537,7 +537,7 @@ def _CheckSequenceVerify(
     if nSequence & SEQUENCE_LOCKTIME_DISABLE_FLAG:
         return
 
-    if txTo.nVersion < 2:
+    if (txTo.nVersion & 0xFFFFFFFF) < 2:
         raise EvalScriptError("CSV requires transaction version >= 2", get_eval_state())
 
     txSequence = txTo.vin[inIdx].nSequence
@@ -709,6 +709,9 @@ def VerifyWitnessProgram(witness: CScriptWitness,
 
     # --- Taproot (BIP341/342) ------------------------------------------
     if witversion == 1 and len(program) == WITNESS_V1_TAPROOT_SIZE:
+        if (not is_p2sh_wrapped
+                and SCRIPT_VERIFY_TAPROOT not in flags):
+            return
         if SCRIPT_VERIFY_TAPROOT not in flags:
             if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
                 raise VerifyScriptError("upgradeable witness program is not accepted")
@@ -735,13 +738,13 @@ def VerifyWitnessProgram(witness: CScriptWitness,
 
         # Key-path (only signature left)
         if len(stack) == 1:
-            if spent_outputs is None:
-                raise VerifyScriptError("spent_outputs are required for taproot key path verification")
             sig = stack[0]
             if len(sig) not in (64, 65):
                 raise VerifyScriptError("invalid schnorr signature size")
             if len(sig) == 65 and (sig[-1] == 0 or sig[-1] not in VALID_SCHNORR_HASHTYPES):
                 raise VerifyScriptError("invalid schnorr hashtype")
+            if spent_outputs is None:
+                raise VerifyScriptError("spent_outputs are required for taproot key path verification")
 
             hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
             hashtype_int = int(hashtype) if hashtype is not None else 0
@@ -832,6 +835,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
 
         merkle_root = _taproot_merkle_root(control, tapleaf_hash)
         internal_pub = bitcointx.core.key.XOnlyPubKey(control[1:33])
+        if not internal_pub.is_fullyvalid():
+            raise VerifyScriptError("witness program mismatch")
         tweaked = bitcointx.core.key.XOnlyPubKey(program)
         parity = bool(control[0] & 1)
         tweak_ok = bitcointx.core.key.check_tap_tweak(
@@ -867,15 +872,15 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 raise VerifyScriptError("taproot leaf version not supported")
             return
 
-        if spent_outputs is None:
-            raise VerifyScriptError("spent_outputs are required for tapscript verification")
-
         # OP_SUCCESSx pre-scan
-        for (opcode, data, sop_idx) in script_class(script_bytes).raw_iter():
-            if _is_op_success(int(opcode)):
-                if SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags:
-                    raise VerifyScriptError("OP_SUCCESSx discouraged by policy")
-                return
+        try:
+            for (opcode, data, sop_idx) in script_class(script_bytes).raw_iter():
+                if _is_op_success(int(opcode)):
+                    if SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS in flags:
+                        raise VerifyScriptError("OP_SUCCESSx discouraged by policy")
+                    return
+        except CScriptInvalidError as err:
+            raise VerifyScriptError(repr(err))
 
         for i, elt in enumerate(stack):
             elt_len = len(script_class([elt])) if isinstance(elt, int) else len(elt)
@@ -901,6 +906,10 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             raise VerifyScriptError("scriptPubKey left extra items on stack")
         if not _CastToBool(stack[-1]):
             raise VerifyScriptError("scriptPubKey returned false")
+        return
+
+    if (not is_p2sh_wrapped
+            and witversion == 1 and program == b'\x4e\x73'):
         return
 
     if SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM in flags:
@@ -949,23 +958,10 @@ def _CheckSig(sig: bytes, pubkey: bytes, script: CScript,
               sigversion: SIGVERSION_Type = SIGVERSION_BASE) -> bool:
     key = bitcointx.core.key.CPubKey(pubkey)
 
-    if len(sig) == 0:
-        return False
-
-    hashtype = sig[-1]
-
     if flags & _STRICT_ENCODING_FLAGS:
         verify_fn = key.verify
 
-        if not _IsValidSignatureEncoding(sig):
-            raise VerifyScriptError(
-                "signature DER encoding is not strictly valid")
-
         if SCRIPT_VERIFY_STRICTENC in flags:
-            low_hashtype = hashtype & (~SIGHASH_ANYONECANPAY)
-            if low_hashtype < SIGHASH_ALL or low_hashtype > SIGHASH_SINGLE:
-                raise VerifyScriptError("unknown hashtype in signature")
-
             if not _IsCompressedOrUncompressedPubKey(pubkey):
                 raise VerifyScriptError("unknown pubkey type")
     else:
@@ -974,6 +970,21 @@ def _CheckSig(sig: bytes, pubkey: bytes, script: CScript,
     if SCRIPT_VERIFY_WITNESS_PUBKEYTYPE in flags and sigversion == SIGVERSION_WITNESS_V0:
         if not _IsCompressedPubKey(pubkey):
             raise VerifyScriptError("witness pubkey is not compressed")
+
+    if len(sig) == 0:
+        return False
+
+    hashtype = sig[-1]
+
+    if flags & _STRICT_ENCODING_FLAGS:
+        if not _IsValidSignatureEncoding(sig):
+            raise VerifyScriptError(
+                "signature DER encoding is not strictly valid")
+
+        if SCRIPT_VERIFY_STRICTENC in flags:
+            low_hashtype = hashtype & (~SIGHASH_ANYONECANPAY)
+            if low_hashtype < SIGHASH_ALL or low_hashtype > SIGHASH_SINGLE:
+                raise VerifyScriptError("unknown hashtype in signature")
 
     if SCRIPT_VERIFY_LOW_S in flags and not IsLowDERSignature(sig):
         raise VerifyScriptError("signature is not low-S")
@@ -1446,12 +1457,12 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                             raise VerifyScriptError("pubkey is empty")
                         elif len(vchPubKey) == 32:
                             if success:
-                                if spent_outputs is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
-                                    raise EvalScriptError("missing taproot context for sighash", get_eval_state())
                                 if len(vchSig) not in (64, 65):
                                     raise VerifyScriptError("invalid schnorr signature size")
                                 if len(vchSig) == 65 and (vchSig[-1] == 0 or vchSig[-1] not in VALID_SCHNORR_HASHTYPES):
                                     raise VerifyScriptError("invalid schnorr hashtype")
+                                if spent_outputs is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
+                                    raise EvalScriptError("missing taproot context for sighash", get_eval_state())
                                 hashtype = None if len(vchSig) == 64 else SIGHASH_Type(vchSig[-1])
                                 sh = SignatureHashSchnorr(
                                     txTo, inIdx, spent_outputs,
@@ -1544,7 +1555,7 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                     stack.append(bitcointx.core._bignum.bn2vch(num + (1 if success else 0)))
 
                 elif sop == OP_CODESEPARATOR:
-                    pbegincodehash = sop_pc
+                    pbegincodehash = sop_pc + 1
                     if sigversion == SIGVERSION_TAPSCRIPT:
                         execdata.codeseparator_pos = opcode_pos
                         execdata.codeseparator_pos_init = True
@@ -1649,21 +1660,11 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 elif sop == OP_CHECKLOCKTIMEVERIFY:
                     if SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY in flags:
                         _CheckLockTimeVerify(stack, txTo, inIdx, flags, get_eval_state)
-                    elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
-                        raise EvalScriptError(
-                            f"{_opcode_name(sop)} reserved for soft-fork upgrades",
-                            get_eval_state()
-                        )
                     # else: treat as NOP
 
                 elif sop == OP_CHECKSEQUENCEVERIFY:
                     if SCRIPT_VERIFY_CHECKSEQUENCEVERIFY in flags:
                         _CheckSequenceVerify(stack, txTo, inIdx, flags, get_eval_state)
-                    elif SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS in flags:
-                        raise EvalScriptError(
-                            f"{_opcode_name(sop)} reserved for soft-fork upgrades",
-                            get_eval_state()
-                        )
                     # else: treat as NOP
 
                 elif sop >= OP_NOP1 and sop <= OP_NOP10:
@@ -1969,6 +1970,9 @@ def VerifyScript(scriptSig: CScript, scriptPubKey: CScript,
         if SCRIPT_VERIFY_P2SH not in flags:
             raise ValueError(
                 'SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH')
+        if SCRIPT_VERIFY_WITNESS not in flags:
+            raise ValueError(
+                'SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_WITNESS')
 
         if len(stack) == 0:
             raise VerifyScriptError("scriptPubKey left an empty stack")
@@ -2160,13 +2164,18 @@ def VerifyScriptWithTrace(
         if SCRIPT_VERIFY_CLEANSTACK in flags:
             if SCRIPT_VERIFY_P2SH not in flags:
                 return False, steps, "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_P2SH"
+            if SCRIPT_VERIFY_WITNESS not in flags:
+                return False, steps, "SCRIPT_VERIFY_CLEANSTACK requires SCRIPT_VERIFY_WITNESS"
             if len(stack) != 1:
                 return (False, steps,
                         f"scriptPubKey left {len(stack)} items on stack (cleanstack requires exactly 1)")
 
         # Unexpected witness data
-        if SCRIPT_VERIFY_WITNESS in flags and not hadWitness and witness:
-            return False, steps, "Unexpected witness"
+        if SCRIPT_VERIFY_WITNESS in flags:
+            if SCRIPT_VERIFY_P2SH not in flags:
+                return False, steps, "SCRIPT_VERIFY_WITNESS requires SCRIPT_VERIFY_P2SH"
+            if not hadWitness and witness:
+                return False, steps, "Unexpected witness"
 
         return True, steps, None
 

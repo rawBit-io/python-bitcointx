@@ -478,6 +478,7 @@ OPCODE_NAMES.update({
     OP_CODESEPARATOR: 'OP_CODESEPARATOR',
     OP_CHECKSIG: 'OP_CHECKSIG',
     OP_CHECKSIGVERIFY: 'OP_CHECKSIGVERIFY',
+    OP_CHECKSIGADD: 'OP_CHECKSIGADD',
     OP_CHECKMULTISIG: 'OP_CHECKMULTISIG',
     OP_CHECKMULTISIGVERIFY: 'OP_CHECKMULTISIGVERIFY',
     OP_NOP1: 'OP_NOP1',
@@ -1350,7 +1351,7 @@ def RawBitcoinSignatureHash(script: CScript, txTo: 'bitcointx.core.CTransaction'
         f.write(struct.pack("<q", amount))
         f.write(struct.pack("<I", txTo.vin[inIdx].nSequence))
         f.write(hashOutputs)
-        f.write(struct.pack("<i", txTo.nLockTime))
+        f.write(struct.pack("<I", txTo.nLockTime))
         f.write(struct.pack("<i", hashtype))
 
         hash = bitcointx.core.Hash(f.getvalue())
@@ -1548,7 +1549,8 @@ def SignatureHashSchnorr(
     if output_type == SIGHASH_SINGLE:
         outIdx = inIdx
         if outIdx >= len(txTo.vout):
-            raise ValueError(f'outIdx {outIdx} out of range ({len(txTo.vout)})')
+            raise bitcointx.core.ValidationError(
+                f'outIdx {outIdx} out of range ({len(txTo.vout)})')
         f.write(hashlib.sha256(txTo.vout[outIdx].serialize()).digest())
 
     if sigversion == SIGVERSION_TAPSCRIPT:
