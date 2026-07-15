@@ -840,6 +840,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
         if not internal_pub.is_fullyvalid():
             raise VerifyScriptError("witness program mismatch")
         tweaked = bitcointx.core.key.XOnlyPubKey(program)
+        if not tweaked.is_fullyvalid():
+            raise VerifyScriptError("witness program mismatch")
         parity = bool(control[0] & 1)
         tweak_ok = bitcointx.core.key.check_tap_tweak(
             tweaked, internal_pub, merkle_root=merkle_root, parity=parity)
