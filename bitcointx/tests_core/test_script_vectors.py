@@ -263,13 +263,14 @@ def _load_vectors() -> List[ScriptVector]:
         marks: List[Union[pytest.Mark, pytest.MarkDecorator]] = []
         witness = CScriptWitness()
         amount_sat = 0
+        has_taproot_template = False
 
         if row and isinstance(row[0], list):
             wdata = row.pop(0)
             witness_items = wdata[:-1]
             amount_sat = coins_to_satoshi(Decimal(str(wdata[-1])))
             if any(isinstance(x, str) and x.startswith("#") for x in witness_items):
-                marks.append(pytest.mark.xfail(reason="Taproot template placeholders are not expanded"))
+                has_taproot_template = True
                 witness = CScriptWitness()
             else:
                 witness = CScriptWitness([_decode_witness_item(item) for item in witness_items])
@@ -283,13 +284,19 @@ def _load_vectors() -> List[ScriptVector]:
         script_sig_str, script_pubkey_str, flags_str, expected, comment = row
 
         if "#" in script_sig_str or "#" in script_pubkey_str:
+            has_taproot_template = True
+
+        # Placeholder success vectors cannot run without template expansion,
+        # but placeholder failure vectors still protect against wrong accepts.
+        if has_taproot_template and expected == "OK":
             marks.append(pytest.mark.xfail(reason="Taproot template placeholders are not expanded"))
 
         try:
             script_sig = parse_script(script_sig_str)
             script_pubkey = parse_script(script_pubkey_str)
         except Exception as exc:  # pragma: no cover - guard rails
-            marks.append(pytest.mark.xfail(reason=f"Failed to parse script: {exc}"))
+            if not has_taproot_template:
+                marks.append(pytest.mark.xfail(reason=f"Failed to parse script: {exc}"))
             script_sig = CScript()
             script_pubkey = CScript()
 
@@ -307,10 +314,6 @@ def _load_vectors() -> List[ScriptVector]:
             flag_set.update((SCRIPT_VERIFY_P2SH, SCRIPT_VERIFY_WITNESS))
         if unknown_flag:
             marks.append(pytest.mark.xfail(reason=f"Unknown flag {flags_str}"))
-
-        # We don't have a direct match for UNKNOWN_ERROR; accept any failure.
-        if expected == "UNKNOWN_ERROR":
-            marks.append(pytest.mark.xfail(reason="Upstream expects UNKNOWN_ERROR"))
 
         vectors.append(
             ScriptVector(

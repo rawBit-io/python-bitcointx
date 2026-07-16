@@ -236,22 +236,10 @@ def test_script_asset_keypath_vectors(vec: JsonObject) -> None:
             )
 
         if should_pass:
-            try:
-                verify()
-            except Exception as exc:  # pragma: no cover - unexpected, mark xfail for now
-                pytest.xfail(
-                    f"script_assets '{vec.get('comment', '')}' "
-                    f"expected success: {exc}"
-                )
+            verify()
         else:
-            try:
-                with pytest.raises((ValidationError, VerifyScriptError, ValueError, IndexError)):
-                    verify()
-            except AssertionError as exc:  # it passed unexpectedly
-                pytest.xfail(
-                    f"script_assets '{vec.get('comment', '')}' "
-                    f"expected failure but passed: {exc}"
-                )
+            with pytest.raises((ValidationError, VerifyScriptError, ValueError, IndexError)):
+                verify()
 
     run_case(vec["success"], True)
     failure_case = vec.get("failure")

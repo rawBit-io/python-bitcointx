@@ -75,27 +75,19 @@ def _run_vector(
         )
 
     if should_pass:
-        try:
-            verify()
-        except Exception as exc:  # pragma: no cover
-            pytest.xfail(f"{vec.get('comment', '')} expected success: {exc}")
+        verify()
     else:
-        try:
-            with pytest.raises(
-                (
-                    ValidationError,
-                    VerifyScriptError,
-                    ValueError,
-                    IndexError,
-                    CScriptInvalidError,
-                    CScriptTruncatedPushDataError,
-                )
-            ):
-                verify()
-        except AssertionError as exc:  # pragma: no cover
-            pytest.xfail(
-                f"{vec.get('comment', '')} expected failure but passed: {exc}"
+        with pytest.raises(
+            (
+                ValidationError,
+                VerifyScriptError,
+                ValueError,
+                IndexError,
+                CScriptInvalidError,
+                CScriptTruncatedPushDataError,
             )
+        ):
+            verify()
 
 
 @pytest.mark.parametrize("vec", _load_sigops_vectors(), ids=lambda v: v.get("comment", ""))
