@@ -23,8 +23,8 @@ import hashlib
 import json
 from io import BytesIO
 from typing import (
-    Iterable, Optional, List, Tuple, Set, Sequence, Type, TypeVar, Union,
-    Callable, TypedDict
+    Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type,
+    TypedDict, TypeVar, Union
 )
 
 import bitcointx.core
@@ -276,9 +276,13 @@ class EvalScriptError(bitcointx.core.ValidationError):
     available)
     """
 
-    def __init__(self, msg: str, state: ScriptEvalState) -> None:
+    def __init__(
+        self, msg: str, state: ScriptEvalState, *,
+        error_code: Optional[str] = None,
+    ) -> None:
         super().__init__('EvalScript: %s' % msg)
         self.state = state
+        self.error_code = error_code
 
 
 class MaxOpCountError(EvalScriptError):
@@ -1042,6 +1046,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                         and len(stack) <= MAX_STACK_ITEMS):
                     executed = True
 
+        # Omit kind: the event shape is frozen by downstream trace goldens.
         _emit_trace(on_step, 'witnessScript', lambda: {
             "pc": -1,
             "opcode_name": "witness_script",
@@ -1822,6 +1827,43 @@ def _visible_trace_phase(phase: str) -> str:
     return phase
 
 
+# Frozen downstream vocabulary. Values are the canonical machine/step names
+# used when an exception is classified structurally rather than at its emitter.
+_TRACE_ERROR_CODE_MACHINE_NAMES: Dict[str, str] = {
+    'BAD_OPCODE': 'script_parse',
+    'CLEANSTACK': 'final_stack',
+    'CLEANSTACK_REQUIRES_P2SH': 'verify_flags',
+    'CLEANSTACK_REQUIRES_WITNESS': 'verify_flags',
+    'DISCOURAGE_OP_SUCCESS': 'op_success_policy',
+    'DISCOURAGE_UPGRADABLE_TAPROOT_VERSION': 'leaf_version',
+    'DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM': 'witness_program',
+    'EVAL_FALSE': 'final_stack',
+    'INVALID_SCRIPT_TYPE': 'script_type',
+    'MISSING_SPENT_OUTPUTS': 'taproot_context',
+    'PUSH_SIZE': 'witness_element_size',
+    'SCHNORR_SIG': 'schnorr_verify',
+    'SCHNORR_SIG_HASHTYPE': 'schnorr_signature',
+    'SCHNORR_SIG_SIZE': 'schnorr_signature',
+    'SCRIPT_CLASS_MISMATCH': 'script_type',
+    'SCRIPT_SIZE': 'script_size',
+    'SIGHASH_ERROR': 'sighash',
+    'SIG_PUSHONLY': 'script_push_only',
+    'STACK_SIZE': 'witness_stack_size',
+    'TAPROOT_WRONG_CONTROL_SIZE': 'control_block',
+    'TWEAK_MISMATCH': 'control_block',
+    'UNBALANCED_CONDITIONAL': 'conditional_balance',
+    'UNHANDLED_SCRIPT_VERIFY_FLAGS': 'verify_flags',
+    'VALIDATION_ERROR': 'verification',
+    'WITNESS_MALLEATED': 'witness_program',
+    'WITNESS_MALLEATED_P2SH': 'witness_program',
+    'WITNESS_PROGRAM_MISMATCH': 'witness_program',
+    'WITNESS_PROGRAM_WITNESS_EMPTY': 'witness_stack',
+    'WITNESS_PROGRAM_WRONG_LENGTH': 'witness_program',
+    'WITNESS_REQUIRES_P2SH': 'verify_flags',
+    'WITNESS_UNEXPECTED': 'witness_program',
+}
+
+
 def _emit_terminal_failure(
     on_step: Optional[Callable[[TraceStep], None]], *,
     machine_name: str,
@@ -1858,6 +1900,12 @@ def _emit_terminal_failure(
 def _trace_validation_error_identity(
     error: BaseException,
 ) -> Tuple[str, str]:
+    structural_code = getattr(error, 'error_code', None)
+    if isinstance(structural_code, str):
+        machine_name = _TRACE_ERROR_CODE_MACHINE_NAMES.get(structural_code)
+        if machine_name is not None:
+            return machine_name, structural_code
+
     message = str(error).lower()
     if 'script too large' in message:
         return 'script_size', 'SCRIPT_SIZE'
@@ -1890,7 +1938,8 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                                f'maximum {MAX_SCRIPT_SIZE} bytes'),
                               ScriptEvalState(stack=stack, scriptIn=scriptIn,
                                               txTo=txTo, inIdx=inIdx,
-                                              flags=flags))
+                                              flags=flags),
+                              error_code='SCRIPT_SIZE')
 
     altstack: List[bytes] = []
     vfExec: List[bool] = []
@@ -2421,7 +2470,8 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
         raise EvalScriptError(
             'Unterminated IF/ELSE block',
             ScriptEvalState(stack=stack, scriptIn=scriptIn,
-                            txTo=txTo, inIdx=inIdx, flags=flags))
+                            txTo=txTo, inIdx=inIdx, flags=flags),
+            error_code='UNBALANCED_CONDITIONAL')
 
 
 def EvalScript(stack: List[bytes], scriptIn: CScript,
@@ -2457,7 +2507,8 @@ def EvalScript(stack: List[bytes], scriptIn: CScript,
     except CScriptInvalidError as err:
         raise EvalScriptError(
             repr(err), ScriptEvalState(stack=stack, scriptIn=scriptIn,
-                                       txTo=txTo, inIdx=inIdx, flags=flags))
+                                       txTo=txTo, inIdx=inIdx, flags=flags),
+            error_code=err.error_code)
 
 
 class VerifyScriptError(bitcointx.core.ValidationError):
@@ -2665,6 +2716,17 @@ def VerifyScriptWithTrace(
     Verify like VerifyScript, but collect per-opcode trace steps.
 
     Returns: (is_valid: bool, steps: List[TraceStep], error_message: Optional[str])
+
+    Terminal-failure invariant: at most one failed:true step per trace, and it
+    is always the last step; validator-level failures carry error_code,
+    opcode-level failures do not; truncated traces carry none. The single
+    sanctioned phase-"witness" failure event is witness_script_check.
+
+    The witness_script event intentionally omits kind because its shape is
+    frozen for downstream golden compatibility. Adding kind requires a
+    coordinated fork bump and rawBit golden refresh.
+
+    max_trace_bytes defaults to 25,000,000 bytes (25 MB decimal).
     """
     steps: List[TraceStep] = []
     recorder = _BoundedTraceRecorder(

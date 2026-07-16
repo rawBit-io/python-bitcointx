@@ -687,7 +687,7 @@ def OPCODE(op: CScriptOp) -> CScriptOp:
 
 class CScriptInvalidError(Exception):
     """Base class for CScript exceptions"""
-    pass
+    error_code: str = 'BAD_OPCODE'
 
 
 class CScriptTruncatedPushDataError(CScriptInvalidError):

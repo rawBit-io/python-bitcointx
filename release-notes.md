@@ -38,6 +38,14 @@ key-path and script-path spends are now evaluated with Schnorr signatures, OP_CH
 Taproot control block/merkle checks, and tapscript resource limits. libbitcoinconsensus still
 does not expose Taproot verification, so this path is implemented in pure Python.
 
+Terminal-failure invariant: at most one failed:true step per trace, and it is always the last
+step; validator-level failures carry error_code, opcode-level failures do not; truncated traces
+carry none. The single sanctioned phase-"witness" failure event is witness_script_check.
+
+The `witness_script` event intentionally omits `kind` because its shape is frozen for downstream
+golden compatibility. Adding `kind` requires a coordinated fork bump and rawBit golden refresh.
+`max_trace_bytes` defaults to 25,000,000 bytes (25 MB decimal).
+
 ## v1.1.4
 
 Marked bitcointx package as typed (added bitcointx/py.typed)
