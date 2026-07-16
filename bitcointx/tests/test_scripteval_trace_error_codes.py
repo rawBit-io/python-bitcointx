@@ -169,3 +169,36 @@ def test_structural_error_identities_are_emitted_end_to_end(
     assert failures[0]['step'] == machine_name
     assert failures[0]['opcode_name'] == machine_name
     assert failures[0]['error_code'] == error_code
+
+
+def test_tapscript_missing_spent_outputs_emits_structural_code() -> None:
+    # A well-formed signature inside a tapscript forces the sighash path,
+    # which requires spent_outputs; without them the failing OP_CHECKSIG
+    # step must carry the structural MISSING_SPENT_OUTPUTS code (this is
+    # the sanctioned exception to "opcode failures have no error_code").
+    from bitcointx.core.script import OP_CHECKSIG
+    from bitcointx.tests.test_scripteval_policy_fixes import (
+        TAPROOT_FLAGS,
+        _make_tapscript_spend,
+    )
+
+    script = CScript(
+        [b'\x22' * 32, OP_CHECKSIG], name='missing_prevouts_leaf'
+    )
+    script_pubkey, witness, _, spend = _make_tapscript_spend(
+        script, 'missing_prevouts_leaf', [b'\x00' * 64]
+    )
+
+    ok, steps, error = VerifyScriptWithTrace(
+        CScript(), script_pubkey, spend, 0,
+        flags=TAPROOT_FLAGS, witness=witness, spent_outputs=None,
+    )
+    failures = [step for step in steps if step.get('failed') is True]
+
+    assert ok is False
+    assert error is not None
+    assert 'spent_outputs are required' in error
+    assert len(failures) == 1
+    assert failures[0] == steps[-1]
+    assert failures[0]['opcode_name'] == 'OP_CHECKSIG'
+    assert failures[0]['error_code'] == 'MISSING_SPENT_OUTPUTS'

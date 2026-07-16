@@ -53,7 +53,7 @@ the library and v1.0.0 release in particular, and also has some code examples.
 
 ## Requirements
 
-- Python >= 3.7
+- Python >= 3.9
 - [libsecp256k1](https://github.com/bitcoin-core/secp256k1)
 - [libbitcoinconsensus](https://github.com/bitcoin/bitcoin/blob/master/doc/shared-libraries.md) (optional, for consensus-compatible script verification)
 

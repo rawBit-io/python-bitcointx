@@ -307,7 +307,9 @@ class TestScriptEvalPolicyFixes(unittest.TestCase):
                     script, leaf_name, stack_for_sig(b"\x00" * 64)
                 )
                 with self.assertRaisesRegex(
-                    ValidationError, "missing taproot context for sighash"
+                    ValidationError,
+                    "spent_outputs are required for tapscript signature "
+                    "verification",
                 ):
                     VerifyScript(
                         CScript(),
@@ -623,6 +625,14 @@ class TestScriptEvalPolicyFixes(unittest.TestCase):
     def test_checksigadd_has_a_canonical_opcode_name(self) -> None:
         self.assertEqual(OPCODE_NAMES[OP_CHECKSIGADD], "OP_CHECKSIGADD")
         self.assertEqual(str(OP_CHECKSIGADD), "OP_CHECKSIGADD")
+
+    def test_checksigadd_name_round_trips_through_parser_map(self) -> None:
+        from bitcointx.core.script import OPCODES_BY_NAME
+        self.assertEqual(OPCODES_BY_NAME["OP_CHECKSIGADD"], OP_CHECKSIGADD)
+        self.assertEqual(
+            OPCODE_NAMES[OPCODES_BY_NAME["OP_CHECKSIGADD"]],
+            "OP_CHECKSIGADD",
+        )
 
 
 if __name__ == "__main__":

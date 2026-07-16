@@ -39,12 +39,23 @@ Taproot control block/merkle checks, and tapscript resource limits. libbitcoinco
 does not expose Taproot verification, so this path is implemented in pure Python.
 
 Terminal-failure invariant: at most one failed:true step per trace, and it is always the last
-step; validator-level failures carry error_code, opcode-level failures do not; truncated traces
-carry none. The single sanctioned phase-"witness" failure event is witness_script_check.
+step; validator-level failures carry error_code, opcode-level failures carry it only when the
+underlying exception was raised with a structural code (e.g. MISSING_SPENT_OUTPUTS when a
+tapscript signature check runs without spent_outputs); truncated traces carry none. The single
+sanctioned phase-"witness" failure event is witness_script_check.
 
 The `witness_script` event intentionally omits `kind` because its shape is frozen for downstream
 golden compatibility. Adding `kind` requires a coordinated fork bump and rawBit golden refresh.
 `max_trace_bytes` defaults to 25,000,000 bytes (25 MB decimal).
+
+Trace recording bounds memory amplification, not just retained output: the recorder estimates
+step sizes without serializing them, and emission sites reject oversized steps from raw element
+lengths before hexifying stacks. Recording is still not an absolute process-memory cap.
+
+Requires Python >= 3.9 (scripteval uses typing.TypedDict). OP_CHECKSIGADD is now present in
+OPCODES_BY_NAME (the textual parser map), matching OPCODE_NAMES. The complete Bitcoin Core
+script_assets_test.json corpus runs as a committed per-push gate (tests_core/
+test_script_assets_full.py); template-placeholder script vectors are strict xfails.
 
 ## v1.1.4
 

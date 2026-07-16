@@ -19,12 +19,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macOS-latest]
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
@@ -50,7 +50,41 @@ jobs:
     - name: Test with pytest
       env:
         LD_LIBRARY_PATH: /usr/local/lib
-      run: pytest
+      # The full script_assets corpus runs once in its own job below, not
+      # in every OS/Python cell.
+      run: pytest --ignore=bitcointx/tests_core/test_script_assets_full.py
+
+  script-assets-full:
+
+    name: full script_assets corpus
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install libsecp256k1
+      run: |
+        if [ -z "${LIBSECP256K1_VERSION:-}" ]; then
+          echo "LIBSECP256K1_VERSION must not be empty" >&2
+          exit 1
+        fi
+        sudo apt-get update
+        sudo apt-get install -y autoconf automake build-essential libtool pkg-config
+        git clone --depth 1 --branch "$LIBSECP256K1_VERSION" https://github.com/bitcoin/secp256k1.git /tmp/libsecp256k1
+        cd /tmp/libsecp256k1
+        ./autogen.sh
+        ./configure --disable-coverage --disable-benchmark --disable-tests --disable-exhaustive-tests --enable-module-recovery --enable-module-ecdh --enable-module-schnorrsig
+        make -j"$(nproc)"
+        sudo make install
+    - name: Run full corpus
+      env:
+        LD_LIBRARY_PATH: /usr/local/lib
+      run: |
+        python -m pip install pytest typing-extensions
+        pytest bitcointx/tests_core/test_script_assets_full.py
 
   downstream:
 
@@ -58,9 +92,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up Python 3.12
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: "3.12"
     - name: Install libsecp256k1

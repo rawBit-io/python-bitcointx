@@ -288,8 +288,13 @@ def _load_vectors() -> List[ScriptVector]:
 
         # Placeholder success vectors cannot run without template expansion,
         # but placeholder failure vectors still protect against wrong accepts.
+        # strict: if template expansion ever lands (or a vector accidentally
+        # starts passing), the xpass must fail loudly instead of hiding.
         if has_taproot_template and expected == "OK":
-            marks.append(pytest.mark.xfail(reason="Taproot template placeholders are not expanded"))
+            marks.append(pytest.mark.xfail(
+                reason="Taproot template placeholders are not expanded",
+                strict=True,
+            ))
 
         try:
             script_sig = parse_script(script_sig_str)

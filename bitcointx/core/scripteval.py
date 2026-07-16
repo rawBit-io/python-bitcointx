@@ -20,7 +20,6 @@ module.
 """
 
 import hashlib
-import json
 from io import BytesIO
 from typing import (
     Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type,
@@ -622,6 +621,9 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             for wit_idx, elt in enumerate(stack):
                 if not _trace_wants_step(on_step, 'witness'):
                     break
+                elt_size = 4 if isinstance(elt, int) else len(elt)
+                if not _trace_admits_bytes(on_step, 2 * elt_size, 'witness'):
+                    break
                 item_hex = (script_class([elt]) if isinstance(elt, int)
                             else bytes(elt)).hex()
                 on_step({
@@ -657,6 +659,10 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 stack_before_check = list(stack)
             scriptPubKey = script_class(stack.pop())
             hashScriptPubKey = hashlib.sha256(scriptPubKey).digest()
+            check_size_hint = (lambda: 2 * (
+                len(scriptPubKey)
+                + sum(len(x) for x in stack_before_check or [])
+                + sum(len(x) for x in stack)))
             if hashScriptPubKey != program:
                 _emit_trace(on_step, 'witness', lambda: {
                     "pc": -1,
@@ -674,7 +680,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                     "failed": True,
                     "error": "witness program mismatch",
                     "error_code": "WITNESS_PROGRAM_MISMATCH",
-                })
+                }, size_hint=check_size_hint)
                 raise VerifyScriptError("witness program mismatch")
             # 3a. The last witness item hash-checked against the
             #     program and becomes the executable witnessScript.
@@ -691,7 +697,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                     bytes(x).hex() for x in stack_before_check or []
                 ],
                 "stack_after": [bytes(x).hex() for x in stack],
-            })
+            }, size_hint=check_size_hint)
         elif len(program) == 20:
             if len(stack) != 2:
                 _emit_terminal_failure(
@@ -864,7 +870,7 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             "step": "witness_stack",
             "stack_before": [x.hex() for x in original_stack],
             "stack_after": [x.hex() for x in original_stack],
-        })
+        }, size_hint=lambda: 4 * sum(len(x) for x in original_stack))
         if annex is not None:
             annex_hash = execdata.annex_hash
             assert annex_hash is not None
@@ -878,7 +884,9 @@ def VerifyWitnessProgram(witness: CScriptWitness,
                 "annex_hash": annex_hash.hex(),
                 "stack_before": [x.hex() for x in original_stack],
                 "stack_after": [x.hex() for x in stack],
-            })
+            }, size_hint=lambda: 2 * (
+                sum(len(x) for x in original_stack)
+                + sum(len(x) for x in stack)))
 
         # Key-path (only signature left)
         if len(stack) == 1:
@@ -1057,7 +1065,8 @@ def VerifyWitnessProgram(witness: CScriptWitness,
             "stack_after": [x.hex() for x in stack],
             "committed": committed,
             "executed": executed,
-        })
+        }, size_hint=lambda: 2 * (
+            len(script_bytes) + 2 * sum(len(x) for x in stack)))
         if not control_size_valid:
             _emit_terminal_failure(
                 on_step,
@@ -1746,6 +1755,49 @@ class _BoundedTraceRecorder:
             return False
         return True
 
+    def _trace_admits_bytes(self, lower_bound: int, phase: str) -> bool:
+        """Truncate (and refuse) if even ``lower_bound`` more bytes cannot
+        fit. Lets emission sites reject a step from raw input sizes BEFORE
+        hexifying large stacks into the step dict."""
+        if not self._active:
+            return False
+        if (self._max_trace_bytes is not None
+                and self._trace_bytes + lower_bound > self._max_trace_bytes):
+            self._truncate(
+                phase, f'max_trace_bytes={self._max_trace_bytes}')
+            return False
+        return True
+
+    @classmethod
+    def _estimate_step_size(cls, value: object) -> int:
+        """Close lower bound of the compact-JSON UTF-8 size of ``value``.
+
+        Avoids json.dumps + encode, which would transiently duplicate the
+        whole step (large hexified stacks included) just to measure it.
+        JSON string escaping is ignored, so this can undercount by a few
+        bytes per error message — acceptable for a size cap.
+        """
+        if isinstance(value, bool) or value is None:
+            return 4
+        if isinstance(value, str):
+            size = len(value) if value.isascii() \
+                else len(value.encode('utf-8'))
+            # JSON escaping: quotes and backslashes serialize as two bytes.
+            # Control characters would take more, but they never occur in
+            # trace payloads (hex strings and fixed error messages only).
+            return size + value.count('"') + value.count('\\') + 2
+        if isinstance(value, (int, float)):
+            return len(str(value))
+        if isinstance(value, dict):
+            return (2 + max(0, len(value) - 1)
+                    + sum(cls._estimate_step_size(k) + 1
+                          + cls._estimate_step_size(v)
+                          for k, v in value.items()))
+        if isinstance(value, (list, tuple)):
+            return (2 + max(0, len(value) - 1)
+                    + sum(cls._estimate_step_size(v) for v in value))
+        return len(str(value))
+
     def __call__(self, step: TraceStep) -> None:
         if not self._active:
             return
@@ -1754,9 +1806,7 @@ class _BoundedTraceRecorder:
         if not self._trace_wants_step(phase):
             return
 
-        step_size = len(json.dumps(
-            step, ensure_ascii=False, separators=(',', ':')
-        ).encode('utf-8'))
+        step_size = self._estimate_step_size(step)
         if (self._max_trace_bytes is not None
                 and self._trace_bytes + step_size > self._max_trace_bytes):
             self._truncate(
@@ -1805,6 +1855,15 @@ def _trace_failure_recorded(
     return False
 
 
+def _trace_admits_bytes(
+    on_step: Optional[Callable[[TraceStep], None]],
+    lower_bound: int, phase: str,
+) -> bool:
+    if isinstance(on_step, _BoundedTraceRecorder):
+        return on_step._trace_admits_bytes(lower_bound, phase)
+    return True
+
+
 def _trace_was_truncated(
     on_step: Optional[Callable[[TraceStep], None]]
 ) -> bool:
@@ -1815,10 +1874,18 @@ def _trace_was_truncated(
 
 def _emit_trace(
     on_step: Optional[Callable[[TraceStep], None]], phase: str,
-    step_factory: Callable[[], TraceStep]
+    step_factory: Callable[[], TraceStep],
+    size_hint: Optional[Callable[[], int]] = None,
 ) -> None:
-    if on_step is not None and _trace_wants_step(on_step, phase):
-        on_step(step_factory())
+    if on_step is None or not _trace_wants_step(on_step, phase):
+        return
+    # A cheap lower bound of the step's serialized size, computed from raw
+    # element lengths, lets the recorder truncate BEFORE the factory
+    # hexifies large stacks into the step dict (amplification hardening).
+    if size_hint is not None and not _trace_admits_bytes(
+            on_step, size_hint(), phase):
+        return
+    on_step(step_factory())
 
 
 def _visible_trace_phase(phase: str) -> str:
@@ -2029,7 +2096,9 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                         "stack_after": [x.hex() for x in stack],
                         "phase": phase,
                         "branch_active": fExec,
-                    })
+                    }, size_hint=lambda: 2 * (
+                        sum(len(x) for x in stack_before or [])
+                        + sum(len(x) for x in stack)))
                     opcode_pos += 1
                     continue
 
@@ -2122,7 +2191,13 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                                     raise VerifyScriptError("invalid schnorr signature size")
                                 if len(vchSig) == 65 and (vchSig[-1] == 0 or vchSig[-1] not in VALID_SCHNORR_HASHTYPES):
                                     raise VerifyScriptError("invalid schnorr hashtype")
-                                if spent_outputs is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
+                                if spent_outputs is None:
+                                    raise EvalScriptError(
+                                        "spent_outputs are required for "
+                                        "tapscript signature verification",
+                                        get_eval_state(),
+                                        error_code='MISSING_SPENT_OUTPUTS')
+                                if not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
                                     raise EvalScriptError("missing taproot context for sighash", get_eval_state())
                                 hashtype = None if len(vchSig) == 64 else SIGHASH_Type(vchSig[-1])
                                 sh = SignatureHashSchnorr(
@@ -2200,7 +2275,13 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                                 raise VerifyScriptError("invalid schnorr signature size")
                             if len(sig) == 65 and (sig[-1] == 0 or sig[-1] not in VALID_SCHNORR_HASHTYPES):
                                 raise VerifyScriptError("invalid schnorr hashtype")
-                            if spent_outputs is None or execdata is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
+                            if spent_outputs is None:
+                                raise EvalScriptError(
+                                    "spent_outputs are required for "
+                                    "tapscript signature verification",
+                                    get_eval_state(),
+                                    error_code='MISSING_SPENT_OUTPUTS')
+                            if execdata is None or not execdata.tapleaf_hash_init or not execdata.codeseparator_pos_init:
                                 raise EvalScriptError("missing taproot context for sighash", get_eval_state())
                             hashtype = None if len(sig) == 64 else SIGHASH_Type(sig[-1])
                             sh = SignatureHashSchnorr(
@@ -2445,12 +2526,20 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                 "stack_after": [x.hex() for x in stack],
                 "phase": phase,
                 "branch_active": fExec,
-            })
+            }, size_hint=lambda: 2 * (
+                sum(len(x) for x in stack_before or [])
+                + sum(len(x) for x in stack)))
 
         except Exception as e:
             # --- RAWBIT PATCH: record failing step before re-raising
-            if on_step is not None and _trace_wants_step(on_step, phase):
-                on_step({
+            if (on_step is not None
+                    and _trace_wants_step(on_step, phase)
+                    and _trace_admits_bytes(
+                        on_step,
+                        2 * (sum(len(x) for x in stack_before or [])
+                             + sum(len(x) for x in stack)),
+                        phase)):
+                failing_step: TraceStep = {
                     "pc": sop_pc,
                     "opcode": int(sop),
                     "opcode_name": _opcode_name(sop),
@@ -2460,7 +2549,17 @@ def _EvalScript(stack: List[bytes], scriptIn: CScript,
                     "branch_active": fExec,
                     "failed": True,
                     "error": str(e),
-                })
+                }
+                # Opcode failures normally carry no error_code; when the
+                # exception was raised with a structural code from the
+                # frozen vocabulary, surface it so consumers never have to
+                # match error message text.
+                structural_code = getattr(e, 'error_code', None)
+                if (isinstance(structural_code, str)
+                        and structural_code
+                        in _TRACE_ERROR_CODE_MACHINE_NAMES):
+                    failing_step["error_code"] = structural_code
+                on_step(failing_step)
             raise
 
         opcode_pos += 1
@@ -2719,8 +2818,10 @@ def VerifyScriptWithTrace(
 
     Terminal-failure invariant: at most one failed:true step per trace, and it
     is always the last step; validator-level failures carry error_code,
-    opcode-level failures do not; truncated traces carry none. The single
-    sanctioned phase-"witness" failure event is witness_script_check.
+    opcode-level failures carry it only when the underlying exception was
+    raised with a structural code (e.g. MISSING_SPENT_OUTPUTS); truncated
+    traces carry none. The single sanctioned phase-"witness" failure event is
+    witness_script_check.
 
     The witness_script event intentionally omits kind because its shape is
     frozen for downstream golden compatibility. Adding kind requires a

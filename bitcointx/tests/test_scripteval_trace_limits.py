@@ -7,6 +7,7 @@
 
 import hashlib
 import json
+import tracemalloc
 import unittest
 
 from typing import Any, List, Mapping, Sequence, Tuple
@@ -296,6 +297,70 @@ class TestScriptEvaluationTraceLimits(unittest.TestCase):
                     steps, ensure_ascii=False, separators=(',', ':')
                 )
                 self.assertEqual(serialized, expected)
+
+
+class Test_TraceMemoryAmplification(unittest.TestCase):
+    """Regression guard for trace-recording memory amplification.
+
+    Recording is not an absolute process-memory cap, but the recorder must
+    not multiply a large witness element into transient whole-document
+    copies (it previously json-serialized every step just to measure it),
+    and the byte cap must reject a step from raw element lengths BEFORE
+    hexifying it into the step dict.
+    """
+
+    @staticmethod
+    def _big_element_spend(
+        element_size: int,
+    ) -> Tuple[bytes, CScript, CScriptWitness, CTransaction]:
+        big = b'\xab' * element_size
+        witness_script = CScript([OP_DROP, OP_1])
+        program = hashlib.sha256(bytes(witness_script)).digest()
+        script_pubkey = CScript([OP_0, program])
+        witness = CScriptWitness([big, bytes(witness_script)])
+        transaction = CTransaction(
+            [CTxIn(COutPoint(b'\x11' * 32, 0), CScript())],
+            [CTxOut(1, CScript())],
+            witness=CTxWitness([CTxInWitness(witness)]),
+        )
+        return big, script_pubkey, witness, transaction
+
+    def test_default_caps_bound_amplification(self) -> None:
+        big, script_pubkey, witness, transaction = \
+            self._big_element_spend(2 * 1024 * 1024)
+
+        tracemalloc.start()
+        ok, steps, error = VerifyScriptWithTrace(
+            CScript(), script_pubkey, transaction, 0,
+            flags=SEGWIT_FLAGS, witness=witness)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        self.assertFalse(ok)
+        assert error is not None
+        self.assertIn('maximum push size exceeded', error)
+        self.assertTrue(any(s.get('step') == 'witness_load' for s in steps))
+        # Measured ~10x the element size (hex copies retained in the trace
+        # itself); was ~18x when the recorder serialized every step to
+        # measure it. Generous headroom to stay robust across platforms.
+        self.assertLessEqual(peak, 13 * len(big))
+
+    def test_byte_cap_rejects_step_before_hexification(self) -> None:
+        big, script_pubkey, witness, transaction = \
+            self._big_element_spend(2 * 1024 * 1024)
+
+        tracemalloc.start()
+        ok, steps, error = VerifyScriptWithTrace(
+            CScript(), script_pubkey, transaction, 0,
+            flags=SEGWIT_FLAGS, witness=witness, max_trace_bytes=1000)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        self.assertFalse(ok)
+        self.assertEqual(steps[-1]['step'], 'trace_truncated')
+        # The size-hint guard rejects the witness_load step from raw
+        # element lengths; the 2 MiB element must never be hexified.
+        self.assertLessEqual(peak, len(big) // 2)
 
 
 if __name__ == '__main__':

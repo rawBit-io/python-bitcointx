@@ -19,16 +19,16 @@ setup(
     long_description=README,
     long_description_content_type='text/markdown',
     classifiers=[
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
     ],
-    python_requires='>=3.7',
-    url='https://github.com/Simplexum/python-bitcointx',
+    # scripteval imports typing.TypedDict (3.8+); 3.9 is the oldest version
+    # current GitHub Actions runners can still install.
+    python_requires='>=3.9',
+    url='https://github.com/rawBit-io/python-bitcointx',
     keywords='bitcoin',
     packages=find_packages(),
     zip_safe=False,
